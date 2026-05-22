@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/01-shell`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -138,7 +138,59 @@ A reviewer running `pnpm dev` must be able to:
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Pinned versions (declared in `app/package.json`)
+
+| Library | Version |
+|---|---|
+| React | ^19.0.0 |
+| React DOM | ^19.0.0 |
+| React Router | ^7.1.1 |
+| TanStack Query | ^5.62.7 |
+| Zustand | ^5.0.2 |
+| Tailwind CSS | ^4.0.0-beta.7 |
+| @tailwindcss/vite | ^4.0.0-beta.7 |
+| Vite | ^6.0.5 |
+| TypeScript | ^5.7.2 |
+| typescript-eslint | ^8.18.2 |
+| ESLint | ^9.17.0 |
+| lucide-react | ^0.468.0 (icons only) |
+| clsx + tailwind-merge | ^2.1.1 / ^2.5.5 (for the `cn()` helper) |
+
+pnpm pinned via `packageManager: "pnpm@9.15.0"`.
+
+### Key implementation choices
+
+- **shadcn primitives copied in:** only a minimal `Button` lives under `src/components/ui/`. The inspector slide uses a Tailwind `transition-[width]` rather than a Radix `Sheet` — simpler, no overlay, and the shell doc explicitly allows the plain-transition path.
+- **Router**: declarative `createBrowserRouter` in `src/router.tsx`. `Root.tsx` is the layout route, renders `AppShell` which itself renders `<Outlet />`. `/` issues a `<Navigate to="/dag" replace />`.
+- **Inspector**: content is `ReactNode | null` in `useShellStore`. Any descendant can call `openInspector(<...>)`. `Esc`-to-close handler attached in `AppShell` only while the inspector is open. The inner panel keeps its full width during the width transition so contents don't reflow.
+- **Sidebar**: React Router `NavLink` for active-state styling; collapse persisted to `localStorage` via Zustand `persist` middleware with a `partialize` that strips `inspectorContent` (a `ReactNode` is not serializable).
+- **Cream theme tokens**: declared once in `:root` in `src/styles/globals.css` using `oklch()`. Mirrored into `@theme inline` so Tailwind v4 utilities like `text-[color:var(--color-fg)]` resolve against the same source of truth. No `data-theme` attribute, no dark-mode block.
+- **`src/lib/types.ts`** is intentionally empty (`export {}`) per shell-doc D5.
+- **Empty states** use a single reusable `EmptyState` component (D4). Each route renders it; `DagPanel` additionally renders an "Open inspector" debug button per the acceptance check.
+
+### Deviations from the spec
+
+- **`shadcn@latest init` was not run.** The init script targets dark-by-default tokens and pulls in a CSS variables registry the cream-only theme doesn't need. Cream tokens are hand-authored in `globals.css` and a minimal `Button` is copied into `src/components/ui/`. This matches the spec's intent ("pick the cream tokens manually rather than letting it install a dark token set") and avoids carrying unused infrastructure.
+- **`exactOptionalPropertyTypes`** is NOT enabled. The shell-doc constraint only requires `strict` + `noUncheckedIndexedAccess`. EOPT creates real friction with React-Router prop types that accept `string | undefined` for optional fields; deferring until a follow-up node decides whether it's worth the cost.
+- **Tailwind v4 beta** rather than v3. The parent doc says "Tailwind v4"; v4 stable was not yet released at scaffold time so the latest beta is pinned. Track upgrade once stable ships.
+
+### Open follow-ups
+
+- Replace `forwardRef` in `Button` with the React 19 ref-as-prop pattern once shadcn upstream migrates; keeping `forwardRef` now matches current shadcn templates.
+- Decide on Tailwind v4 stable upgrade once released.
+- Reassess `exactOptionalPropertyTypes` when API contracts arrive in subsequent nodes.
+
+### Verification status
+
+Automated gates run on 2026-05-22 — all clean:
+
+- `pnpm -C app install`: 198 packages resolved, no errors.
+- `pnpm -C app typecheck`: zero output.
+- `pnpm -C app lint`: zero output under `--max-warnings=0`.
+- `pnpm -C app build`: 1,659 modules transformed; bundle 354.60 kB JS / 14.06 kB CSS (gzip 112.23 / 3.65). No errors.
+- `pnpm -C app dev`: dev server serves HTTP 200 at `localhost:5173` with the expected HTML shell (title `Ledger`, `#root` mount point, Vite client + main entry).
+
+Status promoted to VERIFY pending manual browser walk-through of the acceptance-check list (§Design > Acceptance check). Once that passes, promote to COMPLETE.
 
 ---
 
