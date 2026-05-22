@@ -1,4 +1,4 @@
-# PRD: LLM Project Framework
+# LLM Project Framework
  
 **Status:** Draft  
 **Version:** 0.3  
