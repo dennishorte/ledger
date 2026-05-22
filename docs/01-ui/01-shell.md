@@ -165,7 +165,7 @@ pnpm pinned via `packageManager: "pnpm@9.15.0"`.
 - **Inspector**: content is `ReactNode | null` in `useShellStore`. Any descendant can call `openInspector(<...>)`. `Esc`-to-close handler attached in `AppShell` only while the inspector is open. The inner panel keeps its full width during the width transition so contents don't reflow.
 - **Sidebar**: React Router `NavLink` for active-state styling; collapse persisted to `localStorage` via Zustand `persist` middleware with a `partialize` that strips `inspectorContent` (a `ReactNode` is not serializable).
 - **Cream theme tokens**: declared once in `:root` in `src/styles/globals.css` using `oklch()`. Mirrored into `@theme inline` so Tailwind v4 utilities like `text-[color:var(--color-fg)]` resolve against the same source of truth. No `data-theme` attribute, no dark-mode block.
-- **`src/lib/types.ts`** is intentionally empty (`export {}`) per shell-doc D5.
+- **`src/lib/types.ts`** shipped as `export {}` per D5; first domain types (`NodeId`, `NodeStatus`, `DocNode`) arrived with `02-dag`.
 - **Empty states** use a single reusable `EmptyState` component (D4). Each route renders it; `DagPanel` additionally renders an "Open inspector" debug button per the acceptance check.
 
 ### Deviations from the spec
@@ -202,7 +202,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 2. The full acceptance-check list under Design passes.
 3. `pnpm typecheck` and `pnpm lint` exit zero with no warnings.
 4. No network calls leave the app at startup (DevTools Network tab is empty besides Vite dev-server traffic).
-5. `src/lib/types.ts` declares no domain types yet — the shell remains content-free, as required.
+5. `src/lib/types.ts` declared no domain types at shell verification — the shell shipped content-free, as required by D5. (Subsequent panels add types here; `02-dag` was the first.)
 6. The sidebar collapse preference survives a full page reload.
 
 ---

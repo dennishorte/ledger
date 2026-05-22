@@ -36,14 +36,14 @@ Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: 
 - **Single cream theme only** — no dark mode, no `data-theme` attribute, no alternate token block.
 - **React Router v7** (not TanStack Router — that was reversed for community depth; see `docs/01-ui/00-ui.md` D3).
 - **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`.
-- **No domain types in `src/lib/types.ts`** yet — the shell is intentionally content-free.
+- **Domain types in `src/lib/types.ts` arrive panel-by-panel.** First contributor was `02-dag` (`NodeId`, `NodeStatus`, `DocNode`). Add only what your panel needs; later panels refine.
 - **No mock data** at the shell level; each panel node defines its own data contract.
 
 ## Process notes
 
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header AND the parent's children manifest when transitioning.
 - Implementation Notes is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
-- Round-2 UI panels (`02-dag`, `03-docs`, `04-tasks`, `05-logs`, `06-health`, `07-replay`) are designed for parallel dispatch in isolated git worktrees once the shell is COMPLETE. See `docs/01-ui/00-ui.md` Children section.
+- Round-2 UI panels (`02-dag` done; `03-docs`, `04-tasks`, `05-logs`, `06-health`, `07-replay` planned) are designed for parallel dispatch in isolated git worktrees now that the shell is COMPLETE. See `docs/01-ui/00-ui.md` Children section.
 
 ## When in doubt
 
