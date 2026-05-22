@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -245,6 +245,12 @@ Re-run gates on 2026-05-22 after the F4 pivot — all clean:
 - `pnpm -C app build`: 1,833 modules transformed; bundle 652.50 kB JS / 32.62 kB CSS (gzip 211.95 / 6.51). +5 kB JS vs. the round-1 build, attributable to the new `DocSubtreeNode` component.
 
 Awaiting manual re-walk against the updated §Verification list.
+
+### v1 sign-off (2026-05-22)
+
+The operator signed off on the current rendering as **v1 ready**. Promoted VERIFY → COMPLETE.
+
+Explicitly a v1: more iteration is expected. Known follow-ups remain in §Open Issues (cross-subtree dep edges, large-tree layout, inspector contract), plus the eventual data-source swap when the API server lands. Future revisions reopen the node via the COMPLETE → ISSUE_OPEN → IN_PROGRESS → VERIFY → COMPLETE loop per PRD §6.2 rather than blocking v1.
 
 ### Open follow-ups
 

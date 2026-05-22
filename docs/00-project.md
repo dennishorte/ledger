@@ -281,6 +281,6 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell COMPLETE; 02-dag at VERIFY; round-2 siblings planned) |
+| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell + 02-dag COMPLETE v1; round-2 siblings planned) |
 
 Backend components named in §7 (API server, doc store, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.
