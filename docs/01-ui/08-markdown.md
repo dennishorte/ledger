@@ -72,16 +72,14 @@ No `remark-frontmatter` — project docs encode metadata in markdown body text (
 
 ### Component overrides
 
-`react-markdown` accepts a `components` map. The renderer overrides:
+`react-markdown` accepts a `components` map. We use it only for elements whose render shape depends on runtime conditions — link resolution, doc-path detection, lazy loading. Structural typography for everything else lives in `prose.module.css`, scoped under the root container class. The split: conditional logic needs JSX (it reads the `resolveDocLink` callback); pure typography is one rule per element and is more readable as CSS.
 
-- **`code`** (`inline === true`). If `resolveDocLink` is provided and the code text matches `/^docs\/[^\s`]+\.md$/`, call the resolver. On a non-null result, wrap in `<Link to={…}>`. On null or no resolver, render plain `<code>`. Block-level code (`pre > code`) is untouched.
+- **`code`** (inline). React-markdown v10 removed the `inline` prop; the override detects inline-vs-block by checking for `className.startsWith("language-")` or a trailing `\n` in children (remark appends `\n` to fenced content). On inline code, if `resolveDocLink` is provided and the text matches `/^docs\/[^\s`]+\.md$/`, call the resolver; non-null → `<Link to={…}>` wrapping a `<code>`, null → plain `<code>`. Block code passes through unchanged so the CSS `pre` rule styles the wrapper.
 - **`a`**. If the href is absolute (`http(s)://…` or `//…`), render `<a target="_blank" rel="noreferrer noopener">`. Otherwise call `resolveDocLink(href)` if provided; non-null → `<Link to={…}>`, null → plain `<a>`.
-- **`h2`** and **`h3`**. Pass-through; `rehype-slug` has already set the `id`, and `rehype-autolink-headings` has injected the anchor child. Class names applied here for typography spacing.
-- **`table`, `th`, `td`, `tr`, `thead`, `tbody`**. Tailwind classes for cream-theme borders, header background, cell padding.
-- **`blockquote`**. Left border + muted foreground.
-- **`pre`**. Background `--color-surface-sunken`, rounded, scroll-x, monospaced. No highlighter.
-- **`ul`, `ol`, `li`**. Standard prose spacing; nested-list indent.
-- **`img`**. Pass-through with `loading="lazy"`. No images in current docs; this is forward-looking.
+- **`pre`**. Pass-through. The `prose.module.css` `pre` rule handles background (`--color-surface-sunken`), border, padding, scroll-x, and monospace font.
+- **`img`**. Pass-through with `loading="lazy"`. No images in current docs; forward-looking.
+
+All other element styling — heading sizes/margins, the hover-reveal `#` anchor (`.anchor` rule), table chrome, blockquote rule, list spacing, inline-code chrome, horizontal rules, `scroll-margin-top` on `h2`/`h3` — lives in `prose.module.css`. The CSS module reads cream-theme tokens from `globals.css`. One new token was needed and added to `:root` in `globals.css`: `--prose-scroll-margin-top` (default 80px; consumers override per-instance via inline style).
 
 ### Components & files
 
@@ -154,7 +152,7 @@ A reviewer runs the existing dev server, navigates to a host page that renders `
 
 **Bundle delta:** +171.72 kB raw / +53.51 kB gzip (baseline 684/221 kB → 855/275 kB). Within spec estimate (+50–80 kB gzip). The pre-existing chunk size warning (>500 kB) was present before this node; no threshold bump required.
 
-**Deviations from spec:** One disclosed deviation. The Design > "Component overrides" section lists per-element TSX overrides for `h2`, `h3`, the `table` family, `blockquote`, `ul`, `ol`, `li`, applying Tailwind classes at the JSX level. The implementation instead routes all typography for these elements through `prose.module.css` global rules scoped under `.prose`. The `<a>`, `code`, `pre`, and `img` overrides — the ones with conditional behavior (link resolution, doc-path detection, lazy loading) — remain at the TSX level where the spec wants them. Functionally equivalent at our scale; rationale below.
+**Deviations from spec:** None. The Design > "Component overrides" section was rewritten post-Spec-Review (see R1 below) to match the as-built CSS-module-driven approach. The spec now describes what was built; the framework's "code and doc must agree" rule (CLAUDE.md) is honoured by updating the doc rather than rewriting the code, since the difference was purely a choice of styling layer with no behavior change.
 
 **Scroll-margin token location:** `--prose-scroll-margin-top` lives in `:root` in `globals.css` (Requirement 6: new tokens go in `globals.css`, not in components). `prose.module.css` only reads it via `var()`. Consumers override per-instance with `style={{ "--prose-scroll-margin-top": "100px" }}`.
 
@@ -166,7 +164,7 @@ Independent review against the spec produced three Should-fix findings. All disc
 
 | # | Finding | Resolution |
 |---|---------|------------|
-| R1 | Missing TSX-level component overrides for `h2`/`h3`/`table` family/`blockquote`/`ul`/`ol`/`li` — handled via CSS module only, deviation undisclosed. | Disclosed as a deliberate deviation in "Deviations from spec" above. Functionally equivalent; the JSX rewrite would replace one styling layer with another at no behavior change. The `<a>`, `code`, `pre`, `img` overrides remain at TSX where conditional logic actually requires it. **Punted:** a follow-up rewrite to per-element JSX overrides if a future consumer needs to inject per-element class names from outside. |
+| R1 | Missing TSX-level component overrides for `h2`/`h3`/`table` family/`blockquote`/`ul`/`ol`/`li` — handled via CSS module only, deviation undisclosed. | Resolved by updating the spec to describe the implementation: Design > "Component overrides" rewritten in the same commit as this audit row to split overrides by purpose (conditional logic at TSX; pure typography in `prose.module.css`). Operator decided the implementation choice was correct; the spec drifted. No follow-up. |
 | R2 | `--prose-scroll-margin-top` declared in `prose.module.css` (component-scoped) instead of `globals.css` (per Requirement 6). | Fixed: token moved to `:root` in `globals.css`. `prose.module.css` references it via `var()`. Consumers can still override per-instance. |
 | R3 | Fixture (`/markdown-preview`) never rendered `<MarkdownBody>` without a resolver, so Verification #2 (no-resolver path) was not exercised by the fixture. | Fixed: a second `<MarkdownBody raw={…} />` instance (no resolver) was added to `MarkdownPreviewPanel.tsx` under a divider, exercising plain-anchor fallback, plain-code fallback, and the still-working external-link case. |
 
