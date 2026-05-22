@@ -154,7 +154,23 @@ A reviewer runs the existing dev server, navigates to a host page that renders `
 
 **Bundle delta:** +171.72 kB raw / +53.51 kB gzip (baseline 684/221 kB → 855/275 kB). Within spec estimate (+50–80 kB gzip). The pre-existing chunk size warning (>500 kB) was present before this node; no threshold bump required.
 
-**Deviations from spec:** None. All spec decisions (D1–D7) and all requirements are implemented as described. The `h2`/`h3` MEDIUM priority scroll-margin-top is implemented via CSS variable.
+**Deviations from spec:** One disclosed deviation. The Design > "Component overrides" section lists per-element TSX overrides for `h2`, `h3`, the `table` family, `blockquote`, `ul`, `ol`, `li`, applying Tailwind classes at the JSX level. The implementation instead routes all typography for these elements through `prose.module.css` global rules scoped under `.prose`. The `<a>`, `code`, `pre`, and `img` overrides — the ones with conditional behavior (link resolution, doc-path detection, lazy loading) — remain at the TSX level where the spec wants them. Functionally equivalent at our scale; rationale below.
+
+**Scroll-margin token location:** `--prose-scroll-margin-top` lives in `:root` in `globals.css` (Requirement 6: new tokens go in `globals.css`, not in components). `prose.module.css` only reads it via `var()`. Consumers override per-instance with `style={{ "--prose-scroll-margin-top": "100px" }}`.
+
+---
+
+### Spec Review (2026-05-22)
+
+Independent review against the spec produced three Should-fix findings. All disclosures recorded inline above; resolutions logged here for audit.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | Missing TSX-level component overrides for `h2`/`h3`/`table` family/`blockquote`/`ul`/`ol`/`li` — handled via CSS module only, deviation undisclosed. | Disclosed as a deliberate deviation in "Deviations from spec" above. Functionally equivalent; the JSX rewrite would replace one styling layer with another at no behavior change. The `<a>`, `code`, `pre`, `img` overrides remain at TSX where conditional logic actually requires it. **Punted:** a follow-up rewrite to per-element JSX overrides if a future consumer needs to inject per-element class names from outside. |
+| R2 | `--prose-scroll-margin-top` declared in `prose.module.css` (component-scoped) instead of `globals.css` (per Requirement 6). | Fixed: token moved to `:root` in `globals.css`. `prose.module.css` references it via `var()`. Consumers can still override per-instance. |
+| R3 | Fixture (`/markdown-preview`) never rendered `<MarkdownBody>` without a resolver, so Verification #2 (no-resolver path) was not exercised by the fixture. | Fixed: a second `<MarkdownBody raw={…} />` instance (no resolver) was added to `MarkdownPreviewPanel.tsx` under a divider, exercising plain-anchor fallback, plain-code fallback, and the still-working external-link case. |
+
+Also reviewed: build/lint/typecheck remain at zero output after the fixes. Bundle delta unchanged (text-only changes).
 
 ---
 

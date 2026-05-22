@@ -8,10 +8,12 @@
  * clean scoping without runtime overhead.
  */
 
-/* Scroll-margin token — consumers can override via CSS custom property. */
+/*
+ * Root prose container. `--prose-scroll-margin-top` lives in globals.css
+ * (the token home). Consumers can override per-instance with
+ * `style={{ "--prose-scroll-margin-top": "100px" }}`.
+ */
 .prose {
-  --prose-scroll-margin-top: 80px;
-
   color: var(--color-fg);
   line-height: 1.75;
   font-size: 0.9375rem; /* 15px */
