@@ -137,15 +137,20 @@ function parseOne(filePath: string, md: string): ParsedDoc | null {
     parentId = null;
   } else {
     const parentField = field(md, "Parent");
-    const parentBacktick = backtickedId(parentField);
-    if (parentBacktick) {
-      parentId = parentBacktick;
-    } else if (parentField && /project root/i.test(parentField)) {
+    // "project root" must win before backtick extraction — the canonical
+    // top-level parent line reads `**Parent:** project root (`docs/00-project.md`)`,
+    // whose backtick captures the doc path, not the node id `root` (see D8).
+    if (parentField && /project root/i.test(parentField)) {
       parentId = "root";
     } else {
-      // Fallback: derive parent from absId path.
-      const segments = absId.split("/");
-      parentId = segments.length > 1 ? segments.slice(0, -1).join("/") : "root";
+      const parentBacktick = backtickedId(parentField);
+      if (parentBacktick) {
+        parentId = parentBacktick;
+      } else {
+        // Fallback: derive parent from absId path.
+        const segments = absId.split("/");
+        parentId = segments.length > 1 ? segments.slice(0, -1).join("/") : "root";
+      }
     }
   }
 

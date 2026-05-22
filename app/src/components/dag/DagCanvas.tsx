@@ -12,12 +12,13 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { DocDagNode } from "@/components/dag/DocDagNode";
+import { DocSubtreeNode } from "@/components/dag/DocSubtreeNode";
 import { NodeInspector } from "@/components/dag/NodeInspector";
 import { useDagLayout, type DocNodeData } from "@/components/dag/useDagLayout";
 import { useDocGraph } from "@/components/dag/useDocGraph";
 import { useShellStore } from "@/stores/shell";
 
-const nodeTypes: NodeTypes = { doc: DocDagNode };
+const nodeTypes: NodeTypes = { doc: DocDagNode, subtree: DocSubtreeNode };
 
 const proOptions = { hideAttribution: true } as const;
 
@@ -28,6 +29,8 @@ function DagCanvasInner(): JSX.Element {
 
   const onNodeClick = useCallback<NodeMouseHandler>(
     (_, node) => {
+      // Subtree group rects are non-interactive; ignore clicks on them.
+      if (node.type !== "doc") return;
       const data = node.data as DocNodeData;
       openInspector(<NodeInspector node={data.node} allNodes={docs} />);
     },

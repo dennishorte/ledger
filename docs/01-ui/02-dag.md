@@ -46,10 +46,10 @@ Vite `import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eage
 
 Children rows whose `id` does not correspond to an authored doc are surfaced as **manifest-only** nodes with `status: PLANNED` (or whatever the manifest declares). They render with a dashed border and muted fill.
 
-Edges:
+Edges and hierarchy (post-D11):
 
-- **Parent → child** edges, from authored docs and from manifest-only children alike.
-- **Dependency** edges from the manifest's `dependsOn` column (id-resolved within the same parent's children for now). Rendered as dashed arrows distinct from the parent-child solid arrows.
+- **No parent → child lines are drawn.** Parent relations still feed dagre's rank assignment, but the hierarchy is conveyed *spatially* via a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). The parent's own doc tile sits separately above its subtree rect.
+- **Dependency** edges from the manifest's `dependsOn` column are the only edges drawn — dashed bezier arrows in `--color-accent` with a "depends on" label. All dep edges render, including sibling-on-sibling ones (e.g., `02-dag → 01-shell`).
 
 Why build-time parse instead of a hand-authored TS fixture: the manifests in `00-project.md` §14 and `01-ui/00-ui.md` Children are already canonical. Duplicating them into TS guarantees drift. The parser is ~80 lines and the docs schema is already regular enough to make it tractable.
 
@@ -100,9 +100,10 @@ dagre is chosen over `elkjs` because the graph is small (≤ 30 nodes for the fo
 src/components/dag/
   DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, minimap, controls
   DocDagNode.tsx         // custom node renderer (title, id, status chip)
+  DocSubtreeNode.tsx     // non-interactive background rect framing a parent's children (D11)
   StatusChip.tsx         // small colored pill, one per NodeStatus
   NodeInspector.tsx      // content shown in the shell inspector on click
-  useDagLayout.ts        // dagre layout hook
+  useDagLayout.ts        // dagre layout hook + subtree-rect emission
   useDocGraph.ts         // returns DocNode[] from the build-time parse
 src/lib/
   parseDocs.ts           // pure parser: raw markdown text → DocNode[]
@@ -130,12 +131,13 @@ All colors flow through the existing CSS variables in `src/styles/globals.css`. 
 A reviewer running `pnpm dev` and visiting `/dag` must see:
 
 1. A graph with **all current docs/ nodes**: `root` (00-project), `01-ui`, `01-ui/01-shell`, plus the six **planned** siblings under `01-ui` (`02-dag` … `07-replay`).
-2. Parent → child edges drawn from root down.
+2. Hierarchy is shown spatially: a translucent dashed rounded-rect frames the seven `01-ui` children, labeled `01-ui` + title. No parent → child line edges are drawn (D11).
 3. Each node's status chip matches the doc's `**Status:**` line (e.g., `01-ui/01-shell` shows `VERIFY` now, `COMPLETE` after promotion).
 4. Planned-but-unauthored nodes (`03-docs`, `04-tasks`, `05-logs`, `06-health`, `07-replay`) render with a dashed border and `PLANNED` chip.
-5. Clicking any node opens the right-hand inspector with the node's details; clicking again or selecting a different node updates content. The inspector's existing `Esc`-to-close still works.
-6. Pan and zoom work; the minimap is visible.
-7. The graph layout looks reasonable without any manual coord tweaking — adding a new file under `docs/` and reloading repositions everything automatically.
+5. All `dependsOn` relations render as dashed bezier arrows with a "depends on" label.
+6. Clicking any doc tile opens the right-hand inspector with the node's details; clicking again or selecting a different node updates content. The inspector's existing `Esc`-to-close still works. Clicks on the subtree rect itself do nothing.
+7. Pan and zoom work; the minimap is visible.
+8. The graph layout looks reasonable without any manual coord tweaking — adding a new file under `docs/` and reloading repositions everything automatically.
 
 ---
 
@@ -149,7 +151,11 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 | D4 | `DocNode` shape introduced in `src/lib/types.ts` (was empty) | First domain types arrive with the first panel that needs them, per `01-ui` §Design conventions. |
 | D5 | Click → inspector, not click → navigate | Inspector keeps the operator's spatial context (graph still visible). A "View document" link inside the inspector handles the navigate case. |
 | D6 | No live updates / SSE in this node | No API exists. Static-per-load keeps the implementation honest about its data source; live updates land with the API. |
-| D7 | Dependency edges (`dependsOn`) drawn as dashed arrows, distinct from parent-child solid arrows | Two semantically different edge types must be visually separable; reuses React Flow's edge type system without custom edge components. |
+| D7 | Dependency edges (`dependsOn`) drawn as dashed bezier arrows in `--color-accent` with a "depends on" label | Reuses React Flow's edge type system without custom edge components. (Originally stated "distinct from parent-child solid arrows" — but D11 removes parent edges entirely, so deps are now the only drawn edges.) |
+| D8 | Parent-field parser: detect the "project root" sentinel text **before** backtick extraction | The PRD-mandated parent line for top-level subtrees reads `**Parent:** project root (\`docs/00-project.md\`)`. The backtick captures the doc path, not the node id `root`, so the original order silently produced an unresolvable parent. Project-root sentinel detection is the canonical case and must win. |
+| D9 | ~~Suppress visible `dependsOn` edges when source and target share a parent.~~ **Superseded by D11.** | Round-2 feedback (F4 below) clarified that sibling deps carry real information — `02-dag` "depends on `01-shell`" is a meaningfully different statement from "is parented by `01-ui`." Suppressing them lost that information. Replaced with D11 which removes parent edges instead. |
+| D10 | Bezier (`type: "default"`) for both parent and dep edges, replacing `smoothstep` orthogonal routing | At the current node density, orthogonal routing produces overlapping right-angle runs that read as a single line. Bezier curves separate visually even when they share rank-crossing geometry. After D11, parent edges no longer render; D10 now applies only to dep edges. Revisit if the graph grows past ~30 nodes and curves start to tangle. |
+| D11 | Parent edges are not drawn at all. Hierarchy is conveyed by a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). Parent relations are still passed to dagre for rank ordering | Parent-of is already encoded in the node id (`01-ui/02-dag` ⇒ parent is `01-ui`). Drawing it as an edge adds visual weight without adding information. The interesting edges in this view are **deps** — what blocks what. Spatial grouping is the standard idiom for "these nodes share a context" (cf. subway-map line shading) and degrades gracefully as the tree deepens. Long-term, when the panel renders the *task* DAG instead of the doc tree, there will be no parents to draw anyway — this pivot anticipates that. |
 
 ---
 
@@ -176,7 +182,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 - **dagre typing.** `dagre`'s `graphlib.Graph` defaults its three generic params to `any`. We instantiate with `Graph<GraphLabel, NodeLabel, EdgeLabel>` using dagre's own exported label types — `NodeLabel` already declares optional `x` and `y`, so no post-layout casts are needed.
 - **Parser scope.** The parser handles two doc-id patterns: `00-project.md → root`, and `<dir>/00-<slug>.md → <dir>`. All other paths map to `<dir>/<basename>`. The "## Children" manifest table is matched by a regex on rows of the form `` | `id` | title | deps | status | ``. `dependsOn` cell extraction also uses backtick capture, so plain `—` becomes an empty list.
 - **Manifest-only children.** Children listed in a parent's manifest but lacking an authored `.md` file are surfaced as `DocNode { authored: false, status: PLANNED }`. They render with a dashed border in `DocDagNode`.
-- **Dependency vs parent edges.** Both are passed to dagre so rank assignment respects either. They're visually distinguished: parent → child is a solid arrow in `--color-border-strong`; `dependsOn` is a dashed accent-colored arrow with a "depends on" label.
+- **Dependency vs parent edges.** Both are passed to `dagre.setEdge` so rank assignment respects either. Only deps are drawn as visible arrows (dashed bezier in `--color-accent` with a "depends on" label); parent relations are conveyed by spatial grouping per D11 — a translucent dashed rounded rect emitted as a `subtree`-typed React Flow node behind each parent's children. Subtree rects are non-interactive (`selectable: false`, `draggable: false`) and have `style.zIndex: -1` so they sit behind doc tiles even if a future reorder of the node array changes paint order.
 - **No drag.** `nodesDraggable={false}` — this is a read-only view of authored doc state. When task DAGs arrive, drag may still be off because dagre-laid-out graphs shouldn't be hand-tweaked.
 
 ### Deviations from the spec
@@ -195,6 +201,51 @@ Automated gates run on 2026-05-22 — all clean:
 
 Status set to VERIFY pending manual browser walk-through of the §Verification list. Once a reviewer confirms the graph renders, the node may be promoted to COMPLETE.
 
+### Round-1 verification feedback (2026-05-22)
+
+A manual walk-through of `/dag` surfaced three items. Findings + planned response captured here before re-implementation:
+
+| # | Finding | Severity | Planned response |
+|---|---|---|---|
+| F1 | `root` (LLM Project Framework) renders as a standalone box, not connected to `01-ui` | Bug | `parseDocs.ts` extracts the first backtick in `**Parent:** project root (\`docs/00-project.md\`)` and uses `docs/00-project.md` as the parent id. That id isn't in the node set, so `useDagLayout` drops the parent edge. Reorder the checks in `parseOne` to match "project root" text **before** the backtick. See D8. |
+| F2 | `dependsOn` dashed edges from `01-shell` to each round-2 panel feel duplicative — every visible dep is sibling-on-sibling under the same parent, and the parent fan from `01-ui` already covers the same targets | Design | Suppress same-parent dep edges from rendering, but keep them in dagre's graph so rank assignment still places dependents below dependencies. Cross-subtree deps remain rendered (none exist today, so this is a no-op in the current view). See D9. |
+| F3 | Orthogonal (`smoothstep`) routing produces overlapping right-angle runs that read as one line | Design | Switch both parent and dep edges to bezier (`type: "default"`). See D10. |
+
+After the fixes land, the node returns to VERIFY for a re-walk; the §Verification checklist gains an explicit "root box connects via solid parent edge to `01-ui`" item.
+
+Re-run gates on 2026-05-22 after the F1–F3 fixes — all clean:
+
+- `pnpm -C app typecheck`: zero output.
+- `pnpm -C app lint`: zero output under `--max-warnings=0`.
+- `pnpm -C app build`: 1,832 modules transformed; bundle 647.77 kB JS / 32.40 kB CSS (gzip 210.27 / 6.46). +7 kB JS vs. the pre-fix build, attributable to React Flow's bezier edge component pulling in on top of `smoothstep`.
+
+Awaiting manual re-walk against the updated §Verification list.
+
+### Round-2 verification feedback (2026-05-22)
+
+After the F1–F3 fixes shipped, a second walk-through raised a more fundamental question about edge semantics:
+
+| # | Finding | Severity | Planned response |
+|---|---|---|---|
+| F4 | Round-1's D9 suppressed sibling-on-sibling dep edges as "duplicative of parent edges." That was wrong: parent edges and dep edges encode different facts. `02-dag → 01-shell` (dep) says "blocked until shell is done." `01-ui → 02-dag` (parent) says "lives under the UI subtree." They happen to share a target but mean different things. The right question is which fact is worth drawing. | Design — D9 is wrong | Reverse: dep edges always render. The redundant-feeling thing is actually the **parent** edges — hierarchy is already in the node id (`01-ui/02-dag` ⇒ parent is `01-ui`). Drop visible parent edges; encode hierarchy spatially via a translucent rounded rect behind each parent's children. See D11. |
+
+This pivot also moves the panel closer to its long-term shape: the eventual *task* DAG view has no parents — only deps and grouping. Sticking with parent-as-edge now would be a habit to unlearn.
+
+Implementation:
+
+- `useDagLayout.ts` no longer pushes parent relations to the visible-edges array; they still go to `dagre.setEdge` so rank assignment is unchanged.
+- All `dependsOn` edges render (the round-1 same-parent skip is removed).
+- A new "subtree" node type per parent with ≥2 children frames its kids with a dashed rounded rect; the parent's own doc tile sits separately above. Subtree nodes are non-interactive (`selectable: false`, `draggable: false`, click handler ignores them).
+- Subtree nodes are emitted **first** in the `nodes` array so React Flow renders them behind the doc tiles, and they carry `style.zIndex: -1` as belt-and-suspenders.
+
+Re-run gates on 2026-05-22 after the F4 pivot — all clean:
+
+- `pnpm -C app typecheck`: zero output.
+- `pnpm -C app lint`: zero output under `--max-warnings=0`.
+- `pnpm -C app build`: 1,833 modules transformed; bundle 652.50 kB JS / 32.62 kB CSS (gzip 211.95 / 6.51). +5 kB JS vs. the round-1 build, attributable to the new `DocSubtreeNode` component.
+
+Awaiting manual re-walk against the updated §Verification list.
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
@@ -207,11 +258,16 @@ Status set to VERIFY pending manual browser walk-through of the §Verification l
 
 When this node moves to `VERIFY`, the verifier confirms:
 
-1. `/dag` renders the graph described in §Design > Acceptance check; all 9 current+planned nodes appear with correct status chips and edge directions.
-2. Clicking each node updates the inspector content; `Esc` still closes the inspector.
-3. Removing a `.md` file under `docs/` and reloading drops the corresponding node; adding one (with a valid `**Node ID:**` and `**Parent:**`) adds it.
-4. `pnpm typecheck`, `pnpm lint`, and `pnpm build` all exit zero.
-5. No new network requests beyond Vite dev-server traffic.
+1. `/dag` renders the graph described in §Design > Acceptance check; all 9 current+planned nodes appear with correct status chips.
+2. Parent edges are **not** drawn as lines (F4). The `root` and `01-ui` doc tiles sit above their respective subtrees without connecting arrows.
+3. A translucent dashed rounded rect frames the `01-ui` subtree (the seven `01-shell` … `07-replay` tiles), labeled with the parent id `01-ui` and title in the top-left corner. No subtree rect is drawn for `root` (only one child).
+4. Every `dependsOn` edge is rendered as a dashed accent-colored bezier arrow with a "depends on" label — including the six `01-shell ← {02-dag, 03-docs, 04-tasks, 05-logs, 06-health, 07-replay}` sibling deps that round-1 incorrectly suppressed.
+5. Edges are bezier curves, not orthogonal `smoothstep` routes (F3).
+6. Subtree rects sit behind the doc tiles; clicking on a rect does **not** open the inspector (only doc-tile clicks do).
+7. Clicking each doc tile updates the inspector content; `Esc` still closes the inspector.
+8. Removing a `.md` file under `docs/` and reloading drops the corresponding node; adding one (with a valid `**Node ID:**` and `**Parent:**`) adds it.
+9. `pnpm typecheck`, `pnpm lint`, and `pnpm build` all exit zero.
+10. No new network requests beyond Vite dev-server traffic.
 
 ---
 
