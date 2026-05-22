@@ -87,8 +87,9 @@ LLM Project Framework                        [DRAFT]
    ├─ 03-docs                                [DRAFT]            ← self
    ├─ 04-tasks                               [PLANNED]
    ├─ 05-logs                                [PLANNED]
-   ├─ 06-health                              [PLANNED]
-   └─ 07-replay                              [PLANNED]
+   ├─ 06-health                              [DRAFT]
+   ├─ 07-replay                              [PLANNED]
+   └─ 08-markdown                            [VERIFY]
 ```
 
 Each row: indent by depth, monospace id, plain title to its right, status chip on the far right. Each row is a `<Link to={`/docs/${encodeURIComponent(id)}`}>`. PLANNED rows are styled muted/dashed to match their DAG appearance.
