@@ -272,3 +272,15 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 - Integration with external issue trackers (GitHub Issues, Jira)
 - Cost budget enforcement (hard stop when token spend exceeds threshold)
 - Support for non-code project types (research, writing, data pipelines)
+
+---
+
+## 14. Children
+
+This document is the root of the project's implementation tree. Per §6.1, parents hold a manifest of their children with declared dependencies.
+
+| ID | Title | Depends on | Status |
+|----|-------|------------|--------|
+| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell at VERIFY; round-2 panels planned) |
+
+Backend components named in §7 (API server, doc store, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.
