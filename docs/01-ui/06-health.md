@@ -6,8 +6,8 @@
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
-**Dependencies:** `01-ui/01-shell`, `01-ui/08-markdown`
-**Optional reference:** `01-ui/02-dag` (dep-impact preview reuses `DocNode`/`NodeId` types)
+**Dependencies:** `01-ui/01-shell`
+**Optional reference:** `01-ui/02-dag` (dep-impact preview reuses `DocNode`/`NodeId` types), `01-ui/08-markdown` (declared as a planned consumer per D9 — `<MarkdownBody>` is not invoked in v1; issue items render as plain text)
 
 ---
 
@@ -44,6 +44,10 @@ Phase-1 data flows from two sources, both build-time:
 2. **Raw markdown bodies** — already globbed in the same pattern as `03-docs`'s `useDocSource`. The health panel uses the same hook (`useDocSource(id)`) to extract open-issue items from each authored doc. No new glob or parse infrastructure is needed; `useDocSource` is re-imported from `src/components/docs/useDocSource.ts` once `03-docs` ships it.
 
 If `03-docs` ships first, import `useDocSource` directly. If `06-health` ships first, implement a minimal local version of the hook (raw glob + text extraction only, no link resolution needed here) and note the duplication in Implementation Notes. The `03-docs` node already established this parallel-order approach (see `03-docs` D9).
+
+> **Hook-rules note.** `useHealthData` calls `useDocSource(id)` inside a loop over authored nodes. This is only safe because `useDocSource` is a thin lookup over an eager build-time map (Vite `import.meta.glob` with `{ eager: true }`) — it does not contain conditional hook calls, suspend, or trigger re-renders mid-loop. If the underlying implementation ever becomes async (TanStack Query, lazy glob, etc.), this loop must be replaced with a single batch query that returns `Map<NodeId, string>` in one call. Bake this assumption into a code comment at the call site and re-check during `03-docs` integration.
+
+> **`DocNode` field name.** The canonical raw-body lookup key on `DocNode` is `source` (as shipped in `src/lib/types.ts`), not `docPath` (as `02-dag.md` reads in places). `useHealthData` and `parseIssueItems` consume `node.source` directly.
 
 ### New types (`src/lib/types.ts`)
 
@@ -182,7 +186,10 @@ interface HealthData {
   issues: IssueItem[];           // flat list across all nodes, sorted HIGH→TRIVIAL
   staleness: StalenessSignal[];  // only nodes where isStale === true
   subtreeCosts: SubtreeCost[];   // Phase-1: placeholder array
-  nodes: DocNode[];              // full node set, for dep-impact queries + node labels
+  // Phase-1 convenience: full node set passed through for dep-impact queries
+  // and node-label lookups in widgets. Couples widgets to the parseDocs.ts
+  // shape; acceptable until a dedicated label/graph slice is warranted.
+  nodes: DocNode[];
 }
 
 function useHealthData(): HealthData;
@@ -222,7 +229,7 @@ Phase-1: renders a table with the doc tree's subtree roots (`root`, `01-ui`, and
 A reviewer running `pnpm dev` and visiting `/health` must see:
 
 1. A 2 × 2 grid of four widgets with consistent card chrome.
-2. **Open Issues widget** — lists all `IssueItem`s extracted from the current `docs/` tree. Each item shows the source node badge, a priority badge, and the issue text. At least the `01-ui/00-ui.md` open issues appear (that doc has four listed). Priority filter toggles work: hiding `LOW` removes those items.
+2. **Open Issues widget** — lists all `IssueItem`s extracted from the current `docs/` tree. Each item shows the source node badge, a priority badge, and the issue text. At least one `IssueItem` per authored doc with a populated `## Open Issues` section appears (do not anchor the check to a specific doc's current contents — those drift). Priority filter toggles work: hiding any populated priority removes its items from the list.
 3. **Staleness widget** — at least one stale node appears (e.g., any DRAFT node with a HIGH open issue). Clicking a stale-node row navigates to `/docs/<nodeId>` (or shows 404 empty-state if `03-docs` has not shipped).
 4. **Token Cost widget** — table renders with `—` values and the "not yet available" banner. No errors.
 5. **Dep-Impact widget** — selecting a node with known dependents (e.g., `01-ui/01-shell`, which `02-dag` depends on) shows `01-ui/02-dag` (and any other panel nodes) in the affected list. Selecting a leaf node with no dependents shows the "No downstream nodes" message.
@@ -239,7 +246,7 @@ A reviewer running `pnpm dev` and visiting `/health` must see:
 |---|----------|-----------|
 | D1 | Phase-1 data from `parseDocs.ts` + raw markdown glob — no API, no daemon | Consistent with `02-dag` and `03-docs` Phase-1 strategy. The panel is useful even without a backend; real signals swap in behind `useHealthData` without component changes. |
 | D2 | Issue extraction via plain string parsing, not `remark` | The issue section has a highly regular format (bullet lines, `(Priority: X)` tag). Pulling in remark just to parse one section is unjustified. A ~40-line pure function is faster, simpler, and independently testable. |
-| D3 | Staleness is a Phase-1 proxy (status + issue count), not mtime-based | The health daemon (PRD §6.4) drives real staleness detection via artifact-change events. Until it exists, status + open-issue severity is the best signal available and is still actionable. The proxy is clearly labeled in the UI. |
+| D3 | Staleness is a Phase-1 proxy (status + issue count), not mtime-based | The health daemon (PRD §6.4) drives real staleness detection via artifact-change events. Until it exists, status + open-issue severity is the best signal available and is still actionable. The proxy is clearly labeled in the UI. **Edge case (resolved):** a DRAFT node with a HIGH open issue is flagged stale even though "stale" doesn't literally apply pre-verification. We keep this behavior: a HIGH issue on a DRAFT spec is exactly the signal an operator needs to see, and filtering it out would hide blocking work behind a lifecycle technicality. The `reason` string makes the trigger transparent. |
 | D4 | Dep-impact preview is doc-tree-only in Phase-1, explicitly labeled as such | Task-level invalidation (PRD §8.7, "show which downstream tasks would be invalidated") requires the task runner's resource-claim model, which `04-tasks` will introduce. The doc-tree BFS is still genuinely useful: it answers "if I refactor this node's spec, which downstream specs might need updates?" |
 | D5 | Token Cost widget ships as a production-ready placeholder | Building the widget shell now prevents the panel from looking broken when the API lands. The wiring cost is minimal; the alternative (shipping without the widget) creates a deferred UX debt that's harder to retrofit. |
 | D6 | 2 × 2 CSS grid — no tabs | Four widgets of roughly equal visual weight; a grid gives an at-a-glance dashboard feel. Tabs would force serial scanning. The grid collapses to single-column on narrow viewports naturally via Tailwind breakpoints. |
@@ -248,18 +255,37 @@ A reviewer running `pnpm dev` and visiting `/health` must see:
 | D9 | `08-markdown` is a dependency but `<MarkdownBody>` is not used for issue text in v1 | Issue items are rendered as plain text (truncated, with full text on hover). Full markdown rendering of issue bodies is deferred because issue items are short, mixed-priority bullet lines — the overhead of spinning up a `<MarkdownBody>` per item is not warranted. If issue bodies grow complex (multi-paragraph, code blocks), revisit. |
 | D10 | Issue-to-doc navigation uses `/docs/:nodeId#open-issues`, gracefully degrading if `03-docs` has not shipped | The link is correct regardless of `03-docs` readiness. If the viewer is not yet live, the shell's 404 empty-state handles it. Avoids a conditional that would need to be cleaned up. |
 | D11 | `parseIssues.ts` and `deriveHealth.ts` are pure functions, no React imports | Pure functions are testable without a render environment and can be reused by the API server when it arrives. No framework coupling. |
+| D12 | Health-panel row clicks navigate directly to `/docs/:nodeId#…`; the shell inspector is not opened | `02-dag` uses the right-hand inspector for the graph-exploration flow because a DAG node has dense per-node metadata best read in a side panel. The health panel is an aggregation surface — each row already shows the structured signal (issue text, status, dep-impact result) in line. Routing to the source doc is the natural next step; opening the inspector first would be a one-extra-click detour for a richer view of the same data the row already shows. If a future "preview without leaving the page" need emerges (long issue bodies, multi-paragraph reasoning), revisit. |
 
 ---
 
 ## Open Issues
 
-- **`useDocSource` availability.** This panel needs `useDocSource(id)` from `03-docs`. If `06-health` ships before `03-docs`, a minimal local copy must be added and cleaned up on merge. Coordinate worktree ordering or accept the temporary duplication. *(Priority: MEDIUM — blocks issue extraction.)*
+- **`useDocSource` availability.** This panel needs `useDocSource(id)` from `03-docs`. If `06-health` ships before `03-docs`, a minimal local copy must be added and cleaned up on merge. The mitigation is pre-authorized — coordination overhead only, not a blocking unknown. *(Priority: LOW.)*
 - **Issue-extraction regex fragility.** The `(Priority: X)` pattern covers the current doc schema but is sensitive to formatting changes (spacing, capitalization). If future docs use a different tag format, items silently downgrade to `UNKNOWN`. Consider enforcing the tag format in a schema doc or linting rule. *(Priority: LOW.)*
 - **`StatusChip` move to `src/components/ui/`.** `06-health` is the likely third consumer (after `02-dag` and `03-docs`). If all three ship before this is resolved, move `StatusChip` to `src/components/ui/` at that point and update imports in all three panels. *(Priority: LOW — triggers on third confirmed consumer.)*
-- **Staleness proxy false positives.** A DRAFT node with one HIGH open issue is flagged stale under the Phase-1 heuristic, even though DRAFT nodes have never been verified and "stale" doesn't literally apply. Consider filtering the staleness heuristic to only nodes that have ever reached VERIFY or COMPLETE. *(Priority: MEDIUM — UX confusion risk.)*
 - **Dep-impact BFS performance at scale.** The BFS over `DocNode[]` is linear in node count and fine for the current tree (≤50 nodes). Revisit if the tree grows into the hundreds. *(Priority: LOW.)*
 - **Token cost widget real wiring.** When the API server's cost endpoint lands, `useHealthData` must be updated to fetch `SubtreeCost[]` from it. Track this as a follow-up task in the health daemon's spec, not here. *(Priority: LOW — deferred to health daemon node.)*
 - **Interaction with PRD §11 open issues.** PRD §11 lists three open issues (`LangGraph resource-locking compatibility`, `Self-audit problem`, `Decomposition termination criteria`) that live on the PRD root, not on any UI node. Those do not have authored `IssueItem`s under the UI tree's docs — they will appear once the PRD node is authored and the root doc is parsed. No action needed now; document the expectation. *(Priority: LOW.)*
+
+---
+
+## Spec Review (2026-05-22)
+
+Independent spec review was run against this DRAFT immediately after authoring. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Audit of findings and how each was handled:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | `08-markdown` listed as a hard dependency in the header, but D9 says `<MarkdownBody>` is not used in v1 — contradiction. | Demoted `08-markdown` to "Optional reference" with an explicit pointer to D9. The forward-looking dep is preserved as documentation, the v1 dep list is now accurate. |
+| R2 | `useHealthData` iterates nodes calling `useDocSource(id)` inside a loop — would violate Rules of Hooks unless the underlying hook is a static lookup. | Added a "Hook-rules note" callout under §Design > Data source documenting why the loop is safe (eager build-time map) and the upgrade trigger (if `useDocSource` ever becomes async, refactor to a batch query). |
+| R3 | No decision on whether health-panel rows open the shell inspector (as DAG nodes do) or navigate directly to the doc. | Added D12 explicitly choosing direct navigation, with rationale: health panel is an aggregation surface, not an exploration surface. Inspector-first would add a one-extra-click detour. |
+| R4 | `DocNode` field has drifted from `docPath` (in `02-dag.md`) to `source` (as shipped in `types.ts`). Implementer would hit this. | Added "`DocNode` field name" callout under §Design > Data source naming the canonical field. |
+| N1 | `useDocSource` open-issue priority was MEDIUM but the mitigation is pre-authorized (coordination overhead only). | Recalibrated to LOW. |
+| N2 | "Staleness proxy false positives" was an Open Issue but the spec author had a defensible answer. | Promoted into D3 with the chosen behavior (keep flagging DRAFT-with-HIGH-issue) and rationale (it's exactly what the operator should see). Open Issue removed. |
+| N3 | Acceptance check #2 named the current `01-ui/00-ui.md` open issues as a test anchor — non-deterministic as docs evolve. | Reworded to a structural property: at least one `IssueItem` per authored doc with a populated `## Open Issues` section. |
+| N4 | `HealthData.nodes: DocNode[]` is a leaky abstraction (couples widgets to `parseDocs.ts` shape). | Added an inline comment in the interface acknowledging the Phase-1 trade-off and the upgrade path (dedicated label/graph slice). |
+
+Nothing was punted in this review pass — all findings are minor, all applied. The audit table stays in the doc so a future implementing agent can see what was decided and why without re-deriving the conversation.
 
 ---
 
