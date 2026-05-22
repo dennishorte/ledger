@@ -16,6 +16,12 @@ export default defineConfig({
   server: {
     port: 4179,
     strictPort: true,
+    fs: {
+      // Allow reading files outside the app/ root so we can `?raw` import
+      // markdown from ../docs at module evaluation time. See 01-ui/02-dag.md
+      // Design > Data source.
+      allow: [path.resolve(__dirname, "..")],
+    },
   },
   preview: {
     port: 4179,

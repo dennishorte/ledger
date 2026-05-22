@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/01-shell`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -190,7 +190,7 @@ Automated gates run on 2026-05-22 — all clean:
 - `pnpm -C app build`: 1,659 modules transformed; bundle 354.60 kB JS / 14.06 kB CSS (gzip 112.23 / 3.65). No errors.
 - `pnpm -C app dev`: dev server serves HTTP 200 at `localhost:5173` with the expected HTML shell (title `Ledger`, `#root` mount point, Vite client + main entry).
 
-Status promoted to VERIFY pending manual browser walk-through of the acceptance-check list (§Design > Acceptance check). Once that passes, promote to COMPLETE.
+Status promoted to VERIFY on 2026-05-22 pending manual browser walk-through of the acceptance-check list (§Design > Acceptance check). Operator confirmed walk-through on 2026-05-22; status promoted to COMPLETE.
 
 ---
 
