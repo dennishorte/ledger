@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/08-markdown`
 **Parent:** `01-ui`
-**Status:** DRAFT
+**Status:** VERIFY
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -134,7 +134,27 @@ A reviewer runs the existing dev server, navigates to a host page that renders `
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Deps installed (pnpm, 2026-05-22):**
+- `react-markdown@10.1.0`
+- `remark-gfm@4.0.1`
+- `rehype-slug@6.0.0`
+- `rehype-autolink-headings@7.1.0`
+
+**Prose-styling decision:** CSS module (`prose.module.css`) — chosen over `@apply` because Tailwind v4's `@apply` is flagged as beta in the spec's Open Issues and behaves inconsistently. The module gives clean scoping with no runtime overhead and is consistent with the project's existing convention (no `@apply` anywhere in the codebase before this node).
+
+**Heading anchor implementation:** `rehype-autolink-headings` with `behavior: 'prepend'`, `className: ["anchor"]`. The `.anchor` rule in `prose.module.css` sets `opacity: 0` by default, revealing to `opacity: 1` on `h2:hover`/`h3:hover` via CSS. The anchor text is `#`.
+
+**`scroll-margin-top`:** Applied to `h2` and `h3` via CSS variable `--prose-scroll-margin-top` (default 80px). Consumers can override at any ancestor: `style={{ "--prose-scroll-margin-top": "100px" }}`.
+
+**Inline code block detection (D3):** In react-markdown v10 the `inline` prop was removed. Block code is detected in the `code` component override via: (a) `className.startsWith("language-")` for fenced code with a language tag, or (b) `children` being a string ending in `\n` (remark always appends `\n` to fenced code content). This heuristic is correct for all cases in the project docs. Block code renders as plain `<code>` inside `<pre>` (the `pre` CSS rule handles all styling); the doc-path resolver is skipped for block code.
+
+**PluggableList import:** `unified` is a transitive dep, not directly installed. Rather than adding it as a direct dep, the type is extracted from react-markdown's own `Options` type via: `type PluggableList = NonNullable<Parameters<typeof Markdown>[0]["remarkPlugins"]>`. This avoids a phantom import.
+
+**Temporary fixture route:** `/markdown-preview` → `src/routes/MarkdownPreviewPanel.tsx`. Exercises all acceptance criteria: GFM table, task list, strikethrough, fenced code, blockquote, headings with anchors, internal markdown link, inline-code doc path, external link, broken link with null resolver, malformed inline code. Marked TEMPORARY in both the route file and `router.tsx`. Remove when `01-ui/03-docs` ships `DocViewerPanel`.
+
+**Bundle delta:** +171.72 kB raw / +53.51 kB gzip (baseline 684/221 kB → 855/275 kB). Within spec estimate (+50–80 kB gzip). The pre-existing chunk size warning (>500 kB) was present before this node; no threshold bump required.
+
+**Deviations from spec:** None. All spec decisions (D1–D7) and all requirements are implemented as described. The `h2`/`h3` MEDIUM priority scroll-margin-top is implemented via CSS variable.
 
 ---
 
