@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/08-markdown`
 **Parent:** `01-ui`
-**Status:** DRAFT
+**Status:** VERIFY
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -72,16 +72,14 @@ No `remark-frontmatter` — project docs encode metadata in markdown body text (
 
 ### Component overrides
 
-`react-markdown` accepts a `components` map. The renderer overrides:
+`react-markdown` accepts a `components` map. We use it only for elements whose render shape depends on runtime conditions — link resolution, doc-path detection, lazy loading. Structural typography for everything else lives in `prose.module.css`, scoped under the root container class. The split: conditional logic needs JSX (it reads the `resolveDocLink` callback); pure typography is one rule per element and is more readable as CSS.
 
-- **`code`** (`inline === true`). If `resolveDocLink` is provided and the code text matches `/^docs\/[^\s`]+\.md$/`, call the resolver. On a non-null result, wrap in `<Link to={…}>`. On null or no resolver, render plain `<code>`. Block-level code (`pre > code`) is untouched.
+- **`code`** (inline). React-markdown v10 removed the `inline` prop; the override detects inline-vs-block by checking for `className.startsWith("language-")` or a trailing `\n` in children (remark appends `\n` to fenced content). On inline code, if `resolveDocLink` is provided and the text matches `/^docs\/[^\s`]+\.md$/`, call the resolver; non-null → `<Link to={…}>` wrapping a `<code>`, null → plain `<code>`. Block code passes through unchanged so the CSS `pre` rule styles the wrapper.
 - **`a`**. If the href is absolute (`http(s)://…` or `//…`), render `<a target="_blank" rel="noreferrer noopener">`. Otherwise call `resolveDocLink(href)` if provided; non-null → `<Link to={…}>`, null → plain `<a>`.
-- **`h2`** and **`h3`**. Pass-through; `rehype-slug` has already set the `id`, and `rehype-autolink-headings` has injected the anchor child. Class names applied here for typography spacing.
-- **`table`, `th`, `td`, `tr`, `thead`, `tbody`**. Tailwind classes for cream-theme borders, header background, cell padding.
-- **`blockquote`**. Left border + muted foreground.
-- **`pre`**. Background `--color-surface-sunken`, rounded, scroll-x, monospaced. No highlighter.
-- **`ul`, `ol`, `li`**. Standard prose spacing; nested-list indent.
-- **`img`**. Pass-through with `loading="lazy"`. No images in current docs; this is forward-looking.
+- **`pre`**. Pass-through. The `prose.module.css` `pre` rule handles background (`--color-surface-sunken`), border, padding, scroll-x, and monospace font.
+- **`img`**. Pass-through with `loading="lazy"`. No images in current docs; forward-looking.
+
+All other element styling — heading sizes/margins, the hover-reveal `#` anchor (`.anchor` rule), table chrome, blockquote rule, list spacing, inline-code chrome, horizontal rules, `scroll-margin-top` on `h2`/`h3` — lives in `prose.module.css`. The CSS module reads cream-theme tokens from `globals.css`. One new token was needed and added to `:root` in `globals.css`: `--prose-scroll-margin-top` (default 80px; consumers override per-instance via inline style).
 
 ### Components & files
 
@@ -134,7 +132,43 @@ A reviewer runs the existing dev server, navigates to a host page that renders `
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Deps installed (pnpm, 2026-05-22):**
+- `react-markdown@10.1.0`
+- `remark-gfm@4.0.1`
+- `rehype-slug@6.0.0`
+- `rehype-autolink-headings@7.1.0`
+
+**Prose-styling decision:** CSS module (`prose.module.css`) — chosen over `@apply` because Tailwind v4's `@apply` is flagged as beta in the spec's Open Issues and behaves inconsistently. The module gives clean scoping with no runtime overhead and is consistent with the project's existing convention (no `@apply` anywhere in the codebase before this node).
+
+**Heading anchor implementation:** `rehype-autolink-headings` with `behavior: 'prepend'`, `className: ["anchor"]`. The `.anchor` rule in `prose.module.css` sets `opacity: 0` by default, revealing to `opacity: 1` on `h2:hover`/`h3:hover` via CSS. The anchor text is `#`.
+
+**`scroll-margin-top`:** Applied to `h2` and `h3` via CSS variable `--prose-scroll-margin-top` (default 80px). Consumers can override at any ancestor: `style={{ "--prose-scroll-margin-top": "100px" }}`.
+
+**Inline code block detection (D3):** In react-markdown v10 the `inline` prop was removed. Block code is detected in the `code` component override via: (a) `className.startsWith("language-")` for fenced code with a language tag, or (b) `children` being a string ending in `\n` (remark always appends `\n` to fenced code content). This heuristic is correct for all cases in the project docs. Block code renders as plain `<code>` inside `<pre>` (the `pre` CSS rule handles all styling); the doc-path resolver is skipped for block code.
+
+**PluggableList import:** `unified` is a transitive dep, not directly installed. Rather than adding it as a direct dep, the type is extracted from react-markdown's own `Options` type via: `type PluggableList = NonNullable<Parameters<typeof Markdown>[0]["remarkPlugins"]>`. This avoids a phantom import.
+
+**Temporary fixture route:** `/markdown-preview` → `src/routes/MarkdownPreviewPanel.tsx`. Exercises all acceptance criteria: GFM table, task list, strikethrough, fenced code, blockquote, headings with anchors, internal markdown link, inline-code doc path, external link, broken link with null resolver, malformed inline code. Marked TEMPORARY in both the route file and `router.tsx`. Remove when `01-ui/03-docs` ships `DocViewerPanel`.
+
+**Bundle delta:** +171.72 kB raw / +53.51 kB gzip (baseline 684/221 kB → 855/275 kB). Within spec estimate (+50–80 kB gzip). The pre-existing chunk size warning (>500 kB) was present before this node; no threshold bump required.
+
+**Deviations from spec:** None. The Design > "Component overrides" section was rewritten post-Spec-Review (see R1 below) to match the as-built CSS-module-driven approach. The spec now describes what was built; the framework's "code and doc must agree" rule (CLAUDE.md) is honoured by updating the doc rather than rewriting the code, since the difference was purely a choice of styling layer with no behavior change.
+
+**Scroll-margin token location:** `--prose-scroll-margin-top` lives in `:root` in `globals.css` (Requirement 6: new tokens go in `globals.css`, not in components). `prose.module.css` only reads it via `var()`. Consumers override per-instance with `style={{ "--prose-scroll-margin-top": "100px" }}`.
+
+---
+
+### Spec Review (2026-05-22)
+
+Independent review against the spec produced three Should-fix findings. All disclosures recorded inline above; resolutions logged here for audit.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | Missing TSX-level component overrides for `h2`/`h3`/`table` family/`blockquote`/`ul`/`ol`/`li` — handled via CSS module only, deviation undisclosed. | Resolved by updating the spec to describe the implementation: Design > "Component overrides" rewritten in the same commit as this audit row to split overrides by purpose (conditional logic at TSX; pure typography in `prose.module.css`). Operator decided the implementation choice was correct; the spec drifted. No follow-up. |
+| R2 | `--prose-scroll-margin-top` declared in `prose.module.css` (component-scoped) instead of `globals.css` (per Requirement 6). | Fixed: token moved to `:root` in `globals.css`. `prose.module.css` references it via `var()`. Consumers can still override per-instance. |
+| R3 | Fixture (`/markdown-preview`) never rendered `<MarkdownBody>` without a resolver, so Verification #2 (no-resolver path) was not exercised by the fixture. | Fixed: a second `<MarkdownBody raw={…} />` instance (no resolver) was added to `MarkdownPreviewPanel.tsx` under a divider, exercising plain-anchor fallback, plain-code fallback, and the still-working external-link case. |
+
+Also reviewed: build/lint/typecheck remain at zero output after the fixes. Bundle delta unchanged (text-only changes).
 
 ---
 

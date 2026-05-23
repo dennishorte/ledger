@@ -28,6 +28,9 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
+
+  /* Markdown prose: anchor-jump offset under sticky headers (01-ui/08-markdown). */
+  --prose-scroll-margin-top: 80px;
 }
 
 @theme inline {
