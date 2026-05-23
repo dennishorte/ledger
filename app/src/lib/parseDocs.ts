@@ -172,6 +172,26 @@ const rawDocs = import.meta.glob<string>("../../../docs/**/*.md", {
   eager: true,
 });
 
+/**
+ * Map a *relative* author-written doc path (e.g. `docs/01-ui/02-dag.md`) to
+ * a NodeId.
+ *
+ * This is a *sibling* helper to `pathToNodeId`, not its strict inverse.
+ * `pathToNodeId` receives Vite's absolute glob keys (e.g.
+ * `/abs/…/docs/01-ui/02-dag.md`); this helper receives the relative form used
+ * in cross-doc references and strips the leading `docs/` before normalising.
+ * Both helpers normalise to the same id space (same rules, shared logic).
+ *
+ * Returns `null` for unrecognised or malformed inputs (no throw).
+ */
+export function idForPath(path: string): NodeId | null {
+  // Accept either `docs/foo.md` or `./docs/foo.md` (defensive).
+  const normalised = path.replace(/^\.\//, "");
+  if (!normalised.startsWith("docs/")) return null;
+  // Prefix with a slash so pathToNodeId's `/docs/` search works.
+  return pathToNodeId("/" + normalised);
+}
+
 /** Returns the full project node set: authored docs plus manifest-only children. */
 export function loadDocNodes(): DocNode[] {
   const parsed: ParsedDoc[] = [];

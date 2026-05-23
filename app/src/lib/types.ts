@@ -33,3 +33,16 @@ export interface DocNode {
   /** Glob key from `import.meta.glob`, kept for debugging/routing. */
   source?: string;
 }
+
+/**
+ * Raw markdown payload for a single authored doc node.
+ *
+ * Introduced by 01-ui/03-docs. Kept separate from DocNode so DAG consumers
+ * don't pay for the full markdown bytes. The source path is NOT duplicated
+ * here — read it from the matching DocNode.source (see spec S1 audit note).
+ */
+export interface DocSource {
+  id: NodeId;
+  /** Raw markdown body, with the metadata header preserved. */
+  raw: string;
+}
