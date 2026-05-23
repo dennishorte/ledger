@@ -1,13 +1,11 @@
 import type { JSX } from "react";
-import { FileText } from "lucide-react";
-import { EmptyState } from "@/components/layout/EmptyState";
+import { DocsTree } from "@/components/docs/DocsTree";
 
+/**
+ * /docs — hierarchical index of all project DocNodes.
+ *
+ * Spec: docs/01-ui/03-docs.md
+ */
 export default function DocsPanel(): JSX.Element {
-  return (
-    <EmptyState
-      icon={FileText}
-      title="No document nodes yet."
-      description="The document tree appears here."
-    />
-  );
+  return <DocsTree />;
 }

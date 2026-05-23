@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/03-docs`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-22)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -84,7 +84,7 @@ LLM Project Framework                        [DRAFT]
 └─ 01-ui                                     [APPROVED]
    ├─ 01-shell                               [COMPLETE]
    ├─ 02-dag                                 [COMPLETE]
-   ├─ 03-docs                                [APPROVED]         ← self
+   ├─ 03-docs                                [COMPLETE]         ← self
    ├─ 04-tasks                               [PLANNED]
    ├─ 05-logs                                [PLANNED]
    ├─ 06-health                              [DRAFT]
@@ -231,7 +231,47 @@ Nothing punted. All findings applied. Audit table retained so the implementing a
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implementation date:** 2026-05-22
+
+**New files created:**
+
+- `src/components/docs/useDocSource.ts` — build-time `import.meta.glob` hook returning `DocSource | undefined` by `NodeId`. Uses `idForPath` to normalise absolute Vite glob keys into the same id space as `parseDocs.ts`. Returns `undefined` (never throws) for unknown ids.
+- `src/components/docs/DocsTree.tsx` — hierarchical `/docs` index. Recursive `TreeRow` component; PLANNED rows rendered muted/italic. Depth-based `paddingLeft` for visual hierarchy; `└─` leader for child rows. EmptyState fallback if the doc tree is empty (edge case).
+- `src/components/docs/DocViewer.tsx` — sticky-header + body for a single node. Three render states: authored (sticky header + `<MarkdownBody>` with doc-aware resolver), manifest-only (sticky header + inline metadata table), 404 (EmptyState). `--prose-scroll-margin-top` overridden to `120px` on the `<MarkdownBody>` ancestor to accommodate the sticky header height (spec callout #4).
+
+**Modified files:**
+
+- `src/lib/types.ts` — added `DocSource { id: NodeId; raw: string }` (no `.path` field per spec S1).
+- `src/lib/parseDocs.ts` — added exported `idForPath(path: string): NodeId | null`. Accepts relative `docs/…` form used in author cross-doc references; normalises to same id space as `pathToNodeId` by prepending `/` and delegating.
+- `src/routes/DocsPanel.tsx` — replaced `<EmptyState>` placeholder with `<DocsTree />`.
+- `src/routes/DocViewerPanel.tsx` — replaced `<EmptyState>` placeholder with `<DocViewer node={…} source={…} />`. Resolves node + source from `loadDocNodes()` + `useDocSource(id)` at the route level.
+
+**Decisions made during implementation:**
+
+- `useDocSource` builds its internal `NodeId → raw` map by converting absolute Vite glob keys back to the `docs/…` relative form (via `indexOf("/docs/")`) and then calling `idForPath`. This mirrors `parseDocs.ts`'s own strategy rather than duplicating the stripping logic.
+- `DocsTree` calls `loadDocNodes()` at module scope (same pattern as `DagCanvas`). The tree map is also computed at module scope for zero-cost re-renders.
+- `DocViewerPanel` calls `loadDocNodes()` at module scope to avoid re-parsing on every render; `allNodes.find()` is called per render (array is small, no perf concern at current scale).
+- `resolveDocLink` is a **module-level function**, not a hooked callback (post-review fix; see Implementation Review R1). `idForPath` is pure and module-stable, so closing over component state isn't required; the module-level form gives a permanently stable reference for free without any hook ceremony.
+- `SCROLL_MARGIN = "120px"` is a named constant in `DocViewer.tsx` to make the sticky-header coupling explicit and easy to adjust if the header grows.
+- `DocsTree` row leaders use `├─` for non-last siblings and `└─` for the last, matching the spec's design diagram (post-review fix; see Implementation Review R2). Sibling index is threaded through `TreeRow` via an `isLastSibling` prop.
+
+**Bundle delta:** baseline 722.84 KB raw / 234.35 KB gzip → 899.71 KB raw / 289.11 KB gzip. Delta: **+176.87 KB raw / +54.76 KB gzip**. Within spec estimate (+170 KB / +55 KB). The four `react-markdown` deps (previously tree-shaken) are now live. Pre-existing >500 kB chunk warning unchanged; no threshold bump.
+
+**Deviations from spec:** None. All spec decisions (D1–D10, S1–S3) implemented as specified.
+
+---
+
+### Implementation Review (2026-05-22)
+
+Independent code review against the implementation produced one Should-fix and two Nits. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | `useCallback` for `resolveDocLink` was placed after a conditional early return on the 404 path, requiring an `eslint-disable-next-line react-hooks/rules-of-hooks` suppression to ship. | Hoisted out of the component entirely. `resolveDocLink` is now a module-level function — `idForPath` closes over nothing, so the hook ceremony was unnecessary. Removed the suppression comment. Reference identity is stable across renders automatically. |
+| R2 | `DocsTree` row leaders rendered `└─` for every non-root row, never `├─`. Cosmetic deviation from the spec's design diagram. | Threaded an `isLastSibling: boolean` prop through `TreeRow`; the iterator at every level passes `idx === lastIdx`. Rows now display `├─` for non-last siblings and `└─` for the last. |
+| N1 | `useDocSource.ts` introduces a second `import.meta.glob` call duplicating `parseDocs.ts`'s. Vite dedupes at build time. | Accepted as-is. The duplication is module-level but Vite resolves both to the same dependency graph; cleaning it up (export the glob from `parseDocs.ts`) saves no runtime cost and adds an entanglement. Revisit if a third consumer appears. |
+
+Build/lint/typecheck remain at zero after the fixes. Bundle numbers unchanged (no runtime code shift).
 
 ---
 
