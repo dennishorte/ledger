@@ -1,10 +1,11 @@
 # LLM Project Framework
  
 **Status:** Draft  
-**Version:** 0.3  
+**Version:** 0.4  
 **Last Updated:** 2026-05-22  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
-v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.
+v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
+v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).
  
 ---
  
@@ -79,9 +80,22 @@ As the framework grows toward a general orchestration substrate (Phase 2+), the 
  
 **Risk to validate early:** LangGraph's state model is graph-centric with typed state objects. Our resource-locking model (tasks declare read/write claims on arbitrary document nodes) needs to map cleanly onto this. Prototype required before committing to LangGraph as the substrate.
  
-### Document Store: Build from scratch
- 
-No existing tool has the document schema, version history, section structure, or health monitoring we need. This is core proprietary logic and should be built as an original component.
+### Document Store: The repo
+
+The document tree is the project's git repository — markdown files under `docs/`. No separate persistence layer.
+
+Git already provides the four capabilities a custom store would have to provide: durable storage, version history, attribution (via commit trailers — we already use `Co-Authored-By:` and can extend with `Task-Id:` / `Resource-Claims:` trailers), and rollback (`git revert`). Cross-tree structured queries — e.g. "all HIGH-priority open issues across the tree" — are pure-function passes over a parsed `DocNode[]` that run in milliseconds at our scale; index later if the tree grows past a few thousand nodes. The browser reaches the repo through the API server, which is a thin transport over git operations, not a separate store.
+
+What this leaves to be built fresh in the orchestration layer:
+
+- **Task runner state** — LangGraph checkpoints, queue position, resource claims, dependency edges between tasks.
+- **Live log stream** — append-only, time-series, ephemeral (flat file + tailer is sufficient; promote to a real time-series store if scale demands).
+- **Agent dispatch metadata** — which agent ran which task, exit status.
+- **Health daemon's queued tasks** — lives in the task queue, not separately.
+
+These are operational state for the orchestration substrate, not document storage. Conflating them under one "store" muddles the architecture; keeping each concern separate keeps each implementation simple.
+
+**v0.2 noted that no existing tool has our document schema, section structure, or health-monitoring story — true, but those properties are *parsed* from the markdown body at read time, not persisted in a store. The schema is a markdown convention enforced by the agent contract (PRD §6.1), not a database constraint.**
  
 ### Agent Dispatch: Integrate with Claude Code (or any MCP-capable agent)
  
@@ -158,11 +172,13 @@ Refactor tasks may not execute while any other task holds a resource claim on th
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │                   API Server                        │
+│       (thin transport over git + task runner        │
+│           + log stream + agent dispatch)            │
 └──────┬──────────────┬──────────────┬────────────────┘
        │              │              │
 ┌──────▼──────┐ ┌─────▼──────┐ ┌────▼───────────────┐
-│  Task Queue │ │  Doc Store  │ │  Agent Dispatcher  │
-│  + DAG mgr  │ │  + History  │ │  (MCP interface)   │
+│  Task Queue │ │  Git Repo   │ │  Agent Dispatcher  │
+│  + DAG mgr  │ │  (docs/)    │ │  (MCP interface)   │
 └──────┬──────┘ └─────────────┘ └────────────────────┘
        │
 ┌──────▼──────────────────────────────────────────────┐
@@ -176,6 +192,8 @@ Refactor tasks may not execute while any other task holds a resource claim on th
 │  Size monitor │ Staleness │ Issue aging             │
 └─────────────────────────────────────────────────────┘
 ```
+
+The Git Repo box is not a service — it is the working tree itself. The API server reads/writes via git plumbing (or `simple-git` / equivalent) and exposes JSON over HTTP to the UI. Document version history is `git log`. Rollback is `git revert`. Replay-mode walks commit history.
  
 ---
  
@@ -283,4 +301,4 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 |----|-------|------------|--------|
 | `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell + 02-dag COMPLETE v1; 08-markdown VERIFY; 03-docs + 06-health DRAFT; others planned) |
 
-Backend components named in §7 (API server, doc store, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.
+Backend components named in §7 (API server, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.

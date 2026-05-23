@@ -8,8 +8,8 @@ export default function DocViewerPanel(): JSX.Element {
   return (
     <EmptyState
       icon={FileSearch}
-      title={`Document \`${nodeId ?? "?"}\` not found.`}
-      description="Documents will render here once the document store is online."
+      title="Document viewer not yet shipped"
+      description={`\`${nodeId ?? "?"}\` will render here once \`01-ui/03-docs\` lands.`}
     />
   );
 }
