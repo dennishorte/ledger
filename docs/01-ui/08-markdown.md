@@ -148,7 +148,7 @@ A reviewer runs the existing dev server, navigates to a host page that renders `
 
 **PluggableList import:** `unified` is a transitive dep, not directly installed. Rather than adding it as a direct dep, the type is extracted from react-markdown's own `Options` type via: `type PluggableList = NonNullable<Parameters<typeof Markdown>[0]["remarkPlugins"]>`. This avoids a phantom import.
 
-**Temporary fixture route:** `/markdown-preview` → `src/routes/MarkdownPreviewPanel.tsx`. Exercises all acceptance criteria: GFM table, task list, strikethrough, fenced code, blockquote, headings with anchors, internal markdown link, inline-code doc path, external link, broken link with null resolver, malformed inline code. Marked TEMPORARY in both the route file and `router.tsx`. Remove when `01-ui/03-docs` ships `DocViewerPanel`.
+**Fixture route (removed):** `/markdown-preview` → `src/routes/MarkdownPreviewPanel.tsx` exercised all acceptance criteria during the VERIFY pass (GFM table, task list, strikethrough, fenced code, blockquote, headings with anchors, internal markdown link, inline-code doc path, external link, broken link with null resolver, malformed inline code, plus a no-resolver second instance for Verification #2). **Removed 2026-05-22** after operator manual verification — `03-docs` will provide the real `DocViewerPanel` consumer.
 
 **Bundle delta:** +171.72 kB raw / +53.51 kB gzip (baseline 684/221 kB → 855/275 kB). Within spec estimate (+50–80 kB gzip). The pre-existing chunk size warning (>500 kB) was present before this node; no threshold bump required.
 

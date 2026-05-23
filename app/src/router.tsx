@@ -8,9 +8,6 @@ import LogStreamPanel from "@/routes/LogStreamPanel";
 import HealthDashboardPanel from "@/routes/HealthDashboardPanel";
 import ReplayPanel from "@/routes/ReplayPanel";
 import NotFoundPanel from "@/routes/NotFoundPanel";
-// TEMPORARY — fixture route for 01-ui/08-markdown acceptance verification.
-// Remove when 01-ui/03-docs ships DocViewerPanel as the real consumer.
-import MarkdownPreviewPanel from "@/routes/MarkdownPreviewPanel";
 
 export const router = createBrowserRouter([
   {
@@ -25,8 +22,6 @@ export const router = createBrowserRouter([
       { path: "logs/:taskId", element: <LogStreamPanel /> },
       { path: "health", element: <HealthDashboardPanel /> },
       { path: "replay/:subtree", element: <ReplayPanel /> },
-      // TEMPORARY — remove with 01-ui/03-docs
-      { path: "markdown-preview", element: <MarkdownPreviewPanel /> },
       { path: "*", element: <NotFoundPanel /> },
     ],
   },
