@@ -57,14 +57,14 @@ export interface DocSource {
   id: NodeId;
   /** Raw markdown body, with the metadata header preserved. */
   raw: string;
-  /** Source path relative to repo root, e.g. `docs/01-ui/02-dag.md`. */
-  path: string;
 }
 ```
 
-And a new hook `src/components/docs/useDocSource.ts` that reuses the same `import.meta.glob("../../../docs/**/*.md", { query: "?raw", import: "default", eager: true })` pattern as `parseDocs.ts`, returning `DocSource | undefined` keyed by `NodeId`. The hook does not re-parse; it surfaces the raw text and lets the renderer handle it.
+`DocSource` carries the payload only. The source-path field is **not** duplicated — `DocNode.source` (already shipped by `02-dag` in `src/lib/types.ts`) is the canonical path key. Call sites that need both fields read `DocNode.source` from the matching node, not from `DocSource`. This avoids a drift bug `06-health` already flags (`06-health.md` §Design > Data source explicitly names `node.source` as the lookup key).
 
-`parseDocs.ts` gains a small helper `idForPath(path: string): NodeId` (the inverse of its current id-extraction logic) so both the source hook and the cross-doc link rewriter can resolve `docs/path/to/file.md` → `NodeId` consistently. This is a pure refactor — extract a helper from the existing path-parsing logic; no behavior change for the DAG.
+A new hook `src/components/docs/useDocSource.ts` reuses the same `import.meta.glob("../../../docs/**/*.md", { query: "?raw", import: "default", eager: true })` pattern as `parseDocs.ts`, returning `DocSource | undefined` keyed by `NodeId`. The hook does not re-parse; it surfaces the raw text and lets the renderer handle it.
+
+`parseDocs.ts` gains a small helper `idForPath(path: string): NodeId | null`. It is a **sibling** of the existing extractor, not a strict inverse — the existing extractor takes Vite's absolute glob key (something like `/abs/path/to/app/.../docs/01-ui/02-dag.md`) and strips everything up to `docs/`. `idForPath` takes the *relative* form used in author-written cross-doc references (`docs/01-ui/02-dag.md`) and returns the same `NodeId`. Both helpers normalise to the same id space; the wrapping logic is shared. This is a pure refactor — no behavior change for the DAG.
 
 ### Routes & layout
 
@@ -127,6 +127,8 @@ The markdown rendering pipeline (plugin set, component overrides, typography, an
 - Construct a doc-tree-aware **link resolver**: `resolveDocLink(href: string): string | null` uses `parseDocs.ts`'s new `idForPath` helper to map paths like `docs/01-ui/02-dag.md` → `NodeId`, returning the route `/docs/${encodeURIComponent(id)}` on a hit, `null` on a miss. Pass to `<MarkdownBody resolveDocLink={…} />`.
 - The resolver also handles the inline-code idiom (`` `docs/foo.md` ``) — `<MarkdownBody>` calls the same callback for inline code that matches the docs-path shape (see `08-markdown` D3).
 
+**Anchor contract with `06-health`.** `rehype-slug` produces lowercase-hyphenated slugs from heading text (`## Open Issues` → `open-issues`). `06-health` emits cross-doc links of shape `/docs/${id}#open-issues` for issue-row click-throughs. The slug is therefore part of the cross-panel contract — **renaming the `## Open Issues` heading in any spec doc, or changing `rehype-slug`'s configuration, would silently break `06-health`'s deep links**. If either changes, audit `06-health` consumers.
+
 If `08-markdown` lands first, this node imports the shipped component directly. If `03-docs` lands first in implementation order, it fronts a temporary inline `<DocBody>` matching the shape `08-markdown` will export, and the swap is mechanical once `08-markdown` ships. Either order works in parallel worktrees because the contract is fixed (see Decisions D9).
 
 ### Components
@@ -150,7 +152,7 @@ src/lib/
 
 A reviewer running `pnpm dev` and visiting `/docs` must see:
 
-1. The hierarchical tree of all 9 nodes (`root`, `01-ui`, `01-shell`, `02-dag`, `03-docs`, plus the four still-planned siblings).
+1. The hierarchical tree of every authored and manifest-only node — currently 10 (root + 01-ui + the eight round-2 panels including `08-markdown`). Anchor this check to the rendered tree, not to a hard-coded list, so adding a sibling later doesn't silently invalidate it.
 2. Each row links to `/docs/<id>`; clicking a planned-only row goes to the manifest-only viewer; clicking an authored row goes to the rendered viewer.
 3. Status chips visible per row, matching the DAG panel's chips for the same nodes.
 4. PLANNED rows visibly distinct (muted text or dashed leader).
@@ -193,6 +195,7 @@ Cross-cutting:
 | D7 | Reuse `StatusChip` from `src/components/dag/` as-is, do not move to `src/components/ui/` | Two consumers isn't enough to justify a shared location yet. Move when a third panel needs it (likely 04-tasks or 06-health, which both render statuses). |
 | D8 | Manifest-only nodes are visitable at `/docs/<id>`, not 404'd | Every node in the DAG should be clickable to its doc URL even when no markdown file exists yet — operator should not have to know which nodes are authored. The viewer surfaces the manifest fields so the URL still has *something* to say. |
 | D9 | `03-docs` and `08-markdown` are implementable in either order | The contract between them is `<MarkdownBody>`'s public surface (defined in `08-markdown` §Design). Whichever node ships first stubs the other side against that contract; the swap is mechanical. This unblocks parallel worktree dispatch. |
+| D10 | The viewer route is itself the full-content surface — no shell inspector use | `02-dag` opens its inspector for node detail because the DAG canvas is the primary surface and detail wouldn't fit. `06-health` D12 opts out for the same reason inverted (its rows already show the structured signal in line). `03-docs` is the dedicated full-content viewer — opening an inspector on top of it would be a redundant detail layer over the same document. The route handles its own back-link and parent-link affordances. If a future "preview a doc without leaving the current view" need emerges, revisit (likely needs `<DocPreview>` as a sibling component rather than reusing the inspector). |
 
 ---
 
@@ -205,6 +208,24 @@ Cross-cutting:
 - **Empty-state for `/docs` if zero docs exist.** Cannot happen today (the parser always finds at least `00-project.md`), but the panel should still degrade gracefully. Handle with a generic empty state. *(Priority: TRIVIAL.)*
 - **Long-doc render perf.** Re-rendering the full `react-markdown` tree on every navigation is fine at current sizes. If body sizes grow significantly, consider memoization keyed by `(id, raw)` or virtualization at the section level. *(Priority: LOW.)*
 - **Cross-subtree link resolution edge cases.** `idForPath` will receive whatever string appears in backticks; malformed paths (typos, paths to non-doc files) should fall through to plain-code rendering, not throw. Spec compliance: no console errors for malformed link targets. *(Priority: LOW — covered by the "unresolved paths render as plain code" rule, but worth a unit test.)*
+
+---
+
+## Spec Review (2026-05-22)
+
+Independent review against this DRAFT after authoring. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Audit of findings and how each was handled:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `DocSource` declared a `.path` field duplicating `DocNode.source` (already canonical in `types.ts`; `06-health` already names `node.source` as the lookup key). High-probability source of a drift bug at implementation time. | Removed `.path` from `DocSource`. Added prose explicitly directing call sites to read the path from `DocNode.source`. The drift bug is now closed in the spec before implementation starts. |
+| S2 | Inspector contract not stated. `02-dag` uses the inspector; `06-health` D12 opts out. `03-docs` was silent. | Added D10 explicitly opting out: the viewer route is itself the full-content surface, no inspector layered on top. |
+| S3 | The `#open-issues` anchor target — emitted by `06-health` for issue-row click-throughs — depends on `rehype-slug`'s slug for `## Open Issues`, but the spec never documents this cross-panel contract. | Added "Anchor contract with `06-health`" subsection under §Design > Markdown rendering, calling out the slug as part of the cross-panel contract and flagging the rename risk. |
+| N1 | `parseDocs.ts` location consistency check. | Non-issue — reviewer self-resolved. No change. |
+| N2 | `idForPath` "inverse" claim was imprecise — the existing extractor takes an absolute Vite glob key while `idForPath` takes a relative `docs/...md` path. Not strict inverses. | Reworded as "sibling helper," explained the input-shape difference, and noted both share normalisation. |
+| N3 | Acceptance check item 1 said "all 9 nodes" but the tree has 10 (08-markdown was added). Either count would drift again as siblings are added. | Reworded to anchor on the rendered tree rather than a hard-coded count, so future sibling additions don't invalidate the check. |
+| N4 | Bundle delta estimate didn't account for the fact that `08-markdown` already shipped the deps to `package.json` (currently tree-shaken). | Replaced the estimate with a precise expectation and named the baseline (post-fixture-removal build at commit `ea1ebaa`: 716 KB raw / 232 KB gzip). Now reproducible. |
+
+Nothing punted. All findings applied. Audit table retained so the implementing agent can see what was decided.
 
 ---
 
@@ -221,7 +242,7 @@ When this node moves to `VERIFY`, the verifier confirms the full Acceptance chec
 1. `parseDocs.ts` continues to pass its existing parser smoke test (no behavior change for DAG consumers); the new exported `idForPath` helper is the inverse of the existing id extraction for every doc currently in the tree.
 2. `useDocSource(id)` returns `undefined` (not a thrown error) for unknown ids; the viewer renders the 404 empty state.
 3. Following a cross-doc Link does not cause a full page reload (verified by checking that the Vite client connection stays open).
-4. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. Bundle delta is reported in Implementation Notes when the node moves to VERIFY (expected: +~150–250 KB raw / +~50–80 KB gzip from `react-markdown` + `remark-gfm` + `rehype-slug` + `rehype-autolink-headings`).
+4. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. Bundle delta is reported in Implementation Notes. Expected: ~+170 KB raw / ~+55 KB gzip — `react-markdown` + `remark-gfm` + `rehype-slug` + `rehype-autolink-headings` are already in `package.json` (shipped by `08-markdown`) but are currently tree-shaken because no route imports `<MarkdownBody>`. Importing it from this panel restores them to the bundle. The pre-implementation baseline to measure against is the post-fixture-removal build (716 KB raw / 232 KB gzip on commit `ea1ebaa`).
 5. DAG panel regression check: clicking a node in `/dag` still opens the inspector with no errors, and the "Open document" link in the inspector lands on the viewer.
 
 ---
