@@ -1,7 +1,7 @@
 # Leaf-node Implementation Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-05-23
+**Last Updated:** 2026-05-23 (commit-per-transition rule added)
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
 
@@ -46,7 +46,7 @@ Add the new node to its parent's children manifest in the same commit.
 
 ### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
 
-Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. SPEC_REVIEW is a real lifecycle state per PRD §6.2: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
+Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. **Commit this transition as its own commit** before dispatching the reviewer — every lifecycle transition produces its own commit (see Patterns below). SPEC_REVIEW is a real lifecycle state per PRD §6.2: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
 
 Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) and brief it:
 
@@ -80,7 +80,10 @@ Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
 - Pointer to the spec doc as source of truth.
 - Specific callouts from the Spec Review audit table. Those are the highest-leverage details that the implementer would otherwise risk missing.
 - Required context: spec docs of any dependencies, parent doc, CLAUDE.md, the actual source files it will touch.
-- Process steps: implement → run `pnpm typecheck` / `lint` / `build` → fill Implementation Notes (deps + decisions + bundle delta + any deviations) → bump status to VERIFY in the spec + parent manifest → commit in the worktree.
+- Process steps — **two commits**, one per status transition:
+  - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
+  - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
+  - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event.
 - Reporting: bundle delta vs a named baseline, files changed, acceptance-check items the agent could not verify in its headless environment.
 
 Why worktree isolation:
@@ -118,7 +121,7 @@ Evaluation criteria expand to include:
 
 ### 7. Apply easy review fixes in the worktree; record the audit
 
-Same pattern as stage 3. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance.
+Same pattern as stage 3. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance. **Commit the audit + any code fixes as a single commit** in the worktree.
 
 If the implementation diverged from the spec in a way the operator approves, update the spec in the same commit. "Doc and code must agree" (CLAUDE.md) is honoured by updating whichever side drifted; silent divergence is not.
 
@@ -136,7 +139,7 @@ Walk the spec's Acceptance check items in the browser. UI changes need human eye
 
 #### 8b. If verification finds bugs — VERIFY → ISSUE_OPEN, loop back
 
-Bump Status VERIFY → ISSUE_OPEN. File the discovered bugs into the spec's Open Issues with priority tags. Pick the re-entry point:
+Bump Status VERIFY → ISSUE_OPEN. File the discovered bugs into the spec's Open Issues with priority tags. **Commit this transition** (status bump + new Open Issues entries + parent manifest row update) as its own commit before re-entering the cycle. Pick the re-entry point:
 
 - **Mechanical fixes inside the implementation:** re-enter at stage 4 with a brief patch task. The implementer (same or new agent) addresses the issues; a new dated subsection joins Implementation Notes documenting what was fixed.
 - **Spec was wrong:** re-enter at stage 1 (revise the spec, then re-run stage 2's review pass). The original Spec Review and Implementation Review audit tables stay; the new spec revisions land alongside.
@@ -192,6 +195,8 @@ Once merged:
 ## Patterns to lean on
 
 - **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
+
+- **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. Stages whose only output is a transition (stages 2, 4a, 8b) commit just the status bump; stages that bundle a transition with substantive work (stages 1, 3, 4c, 7, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
 - **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it.
 
