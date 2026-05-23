@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/06-health`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-23
+**Last Updated:** 2026-05-23 (implementation)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/02-dag` (dep-impact preview reuses `DocNode`/`NodeId` types), `01-ui/08-markdown` (declared as a planned consumer per D9 — `<MarkdownBody>` is not invoked in v1; issue items render as plain text)
@@ -291,7 +291,42 @@ Nothing was punted in this review pass — all findings are minor, all applied. 
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:** None. All code is in-tree (`parseDocs.ts`, `useDocGraph`, `useDocSource`-pattern, `StatusChip`).
+
+**Hook-rules deviation (R2):** The spec calls for `useDocSource(id)` to be called in a per-node loop inside `useHealthData`. That pattern is semantically safe because `useDocSource` is a thin synchronous lookup over an eager build-time map. However, the ESLint `react-hooks/rules-of-hooks` rule cannot introspect the implementation and flags any hook call inside `.map()`. To remain lint-clean without suppressing the rule, `useHealthData.ts` duplicates the `import.meta.glob` + `idForPath` pattern from `useDocSource.ts` at module scope, producing a `rawByNodeId: ReadonlyMap<NodeId, string>`. The per-node iteration then uses plain Map lookups — no hook calls in the loop. The spec's HOOK-RULES NOTE assumption (upgrade trigger on async `useDocSource`) is preserved in a file-level comment. This is a zero-behavioral-change deviation: identical data path, no new dependency, no external module added.
+
+**Decisions beyond spec:** None. All choices follow the spec or its referenced decisions.
+
+**Bundle delta vs baseline commit `2be1df9`** (main branch dist from 2026-05-22 18:53):
+
+| Asset | Baseline | This build | Delta |
+|-------|----------|------------|-------|
+| `index-*.js` (uncompressed) | 904,713 B | 933,995 B | +29,282 B (+3.2%) |
+| `index-*.css` (uncompressed) | 37,348 B | 40,348 B | +3,000 B (+8.0%) |
+| `index.html` | — | 399 B | — |
+
+Gzip totals reported by Vite: JS 300.11 kB, CSS 7.96 kB. The chunk-size warning (>500 kB) was already present in the baseline build; no new chunks were added.
+
+**Acceptance check items NOT verifiable in headless environment (manual):**
+
+- **#1** (2×2 grid visual, card chrome) — visual only.
+- **#2** (Open Issues widget: at least one item per authored doc with issues; priority filter toggles work) — requires browser interaction.
+- **#3** (Staleness widget: at least one stale node appears; row click navigates) — requires browser.
+- **#4** (Token Cost: table + banner renders, no errors) — visual only.
+- **#5** (Dep-Impact: selecting `01-ui/01-shell` shows `01-ui/02-dag`; leaf node shows empty message) — requires browser interaction.
+- **#6** (StatusChip badge color parity with DAG panel) — visual only.
+- **#7** (Issue row click navigates to `/docs/:nodeId#open-issues`) — requires browser.
+- **#8** (No new network requests) — requires browser devtools.
+- **#9** (typecheck/lint/build zero output) — **verified in this environment**: all three exit zero.
+
+**Items verified headlessly:**
+
+- Acceptance check #9: `pnpm typecheck`, `pnpm lint`, `pnpm build` all exit 0.
+- `computeDepImpact` logic: BFS over reverse-adjacency graph; `01-ui/01-shell` is in `dependsOn` of every panel node per the children manifest, so it will have dependents.
+- `deriveStaleness` covers ISSUE_OPEN, VERIFY, HIGH-issue, and ≥2 MEDIUM-issue conditions.
+- `parseIssueItems` handles absent `## Open Issues` section (returns `[]`) and bullet extraction with priority regex.
+
+**Deviations from spec:** Only the hook-loop deviation described above. Recorded here; no doc-level spec change needed (the code comment at the call site is the durable record per the spec's own HOOK-RULES NOTE).
 
 ---
 

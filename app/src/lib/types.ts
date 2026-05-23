@@ -46,3 +46,61 @@ export interface DocSource {
   /** Raw markdown body, with the metadata header preserved. */
   raw: string;
 }
+
+// ---------------------------------------------------------------------------
+// Health dashboard types — introduced by 01-ui/06-health
+// ---------------------------------------------------------------------------
+
+/**
+ * A single open-issue item extracted from a doc node's "## Open Issues" section.
+ * Introduced by 01-ui/06-health.
+ */
+export interface IssueItem {
+  /** Source node. */
+  nodeId: NodeId;
+  /** The raw markdown text of the bullet (single item, may be multi-line). */
+  text: string;
+  /** Priority tag extracted from the item text, e.g. "HIGH", "MEDIUM", "LOW", "TRIVIAL". */
+  priority: IssuePriority;
+  /**
+   * Slug of the "## Open Issues" heading in the source doc, for anchor deep-linking.
+   * Always "open-issues" for the current doc schema.
+   */
+  sectionSlug: string;
+}
+
+export type IssuePriority = "HIGH" | "MEDIUM" | "LOW" | "TRIVIAL" | "UNKNOWN";
+
+/**
+ * Staleness signal for a single node. Phase-1: derived from status + open issues.
+ * Phase-2: will include mtime delta from the health daemon.
+ */
+export interface StalenessSignal {
+  nodeId: NodeId;
+  /** True when node status is VERIFY or ISSUE_OPEN, or node has ≥1 HIGH/MEDIUM open issue. */
+  isStale: boolean;
+  /** Human-readable reason, e.g. "Status is ISSUE_OPEN" or "2 HIGH-priority open issues". */
+  reason: string;
+}
+
+/**
+ * Token-cost roll-up per subtree root. Phase-1: all values are 0 / null.
+ * Populated by the API when the cost tracker lands.
+ */
+export interface SubtreeCost {
+  subtreeRootId: NodeId;
+  /** Total input tokens in the subtree, or null when unavailable. */
+  inputTokens: number | null;
+  /** Total output tokens in the subtree, or null when unavailable. */
+  outputTokens: number | null;
+}
+
+/**
+ * Result of a dep-impact query: given a source node, which nodes are downstream?
+ */
+export interface DepImpactResult {
+  /** Node the operator queried on. */
+  sourceNodeId: NodeId;
+  /** Transitively downstream node IDs (direct + indirect dependents). */
+  affectedNodeIds: NodeId[];
+}
