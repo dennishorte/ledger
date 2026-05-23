@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-23 (SPEC_REVIEW → APPROVED)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
@@ -42,11 +42,11 @@ The section must:
 Phase-1 reuses the two build-time sources already in place:
 
 1. **`DocNode`** via `useDocGraph()` — gives `status`, `dependsOn`, `authored`, and children edges. No new parsing.
-2. **Raw markdown body** via `useDocSource(id)` — gives the full doc text. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
+2. **Raw markdown body** via `useDocSource(id)` — returns `DocSource | undefined` (the wrapper type from `src/lib/types.ts`). The call site unwraps to `source?.raw ?? null` before passing to `deriveWorkflowProgress(node, raw)`. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
 
 No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, raw)` is the single point of derivation.
 
-> **`NodeStatus` extension.** `parseDocs.ts` currently emits a `NodeStatus` union built from observed status headers (`PLANNED`, `DRAFT`, `APPROVED`, `IN_PROGRESS`, `VERIFY`, `COMPLETE`, `ISSUE_OPEN`). `SPEC_REVIEW` is a real PRD §6.2 state but has not yet appeared in any shipped doc, so the union may not include it. The implementer must verify `src/lib/types.ts` includes `SPEC_REVIEW` in `NodeStatus`; if absent, add it (one-line type addition, no behaviour change for other panels).
+> **`NodeStatus` already includes every state we need.** `src/lib/types.ts` line 16 includes `SPEC_REVIEW` in the `NodeStatus` union; verified at spec-review time (audit N6 below). No type extension needed — the implementer can rely on the existing union as-is.
 
 ### New types (`src/lib/types.ts`)
 
@@ -82,15 +82,23 @@ export interface WorkflowStageState {
 
 export interface WorkflowProgress {
   nodeId: NodeId;
-  /** Mirrors DocNode.status; surfaced for convenience to the renderer. */
+  /**
+   * Mirrors DocNode.status. Note: this can be PLANNED or ISSUE_OPEN, neither
+   * of which is a WorkflowStage — the renderer maps them through stages[] and
+   * issueOpen rather than expecting a 1:1 stage correspondence.
+   */
   currentStatus: NodeStatus;
   /** True iff currentStatus === "ISSUE_OPEN". When true, the banner renders. */
   issueOpen: boolean;
-  /** Always six entries for leaves; see parent-node handling below. */
+  /**
+   * Six entries for leaves, two entries (DRAFT, APPROVED) for parents. The
+   * length is governed by isParent rather than by the type — see parent-node
+   * handling below. Type-narrowing on isParent is the safe access pattern.
+   */
   stages: WorkflowStageState[];
-  /** True when the node is a parent (children > 0). Renderer uses this to pick the collapsed layout. */
+  /** True when the node is a parent (has children in the manifest). Renderer uses this to pick the collapsed layout. */
   isParent: boolean;
-  /** For parent nodes only: counts derived from the children manifest. Empty for leaves. */
+  /** For parent nodes only: counts derived from the children manifest. Undefined for leaves. */
   childrenRollup?: {
     total: number;
     byStatus: Partial<Record<NodeStatus, number>>;
@@ -100,14 +108,27 @@ export interface WorkflowProgress {
 
 ### Stage derivation rules
 
-`deriveWorkflowProgress(node: DocNode, raw: string | null): WorkflowProgress` lives in `src/lib/deriveWorkflow.ts` — pure, no React.
+`deriveWorkflowProgress(node: DocNode, allNodes: DocNode[], raw: string | null): WorkflowProgress` lives in `src/lib/deriveWorkflow.ts` — pure, no React. `allNodes` is needed for parent detection and the children rollup; the inspector already has it in scope and passes it through.
 
 Algorithm:
 
 1. If `node.authored === false` (manifest-only, no doc yet): all six stages → PENDING, evidence `"Doc not yet authored"`. `currentStatus` is whatever the manifest reports (typically `PLANNED`).
-2. Otherwise, compute a `statusRank: number` from `currentStatus` against the canonical order `DRAFT(0) < SPEC_REVIEW(1) < APPROVED(2) < IN_PROGRESS(3) < VERIFY(4) < COMPLETE(5)`. `ISSUE_OPEN` is treated as `APPROVED`-rank for placement of CURRENT (the loop-back lands the node back at APPROVED or DRAFT per leaf-workflow §8b).
-3. For each stage, compute `(completion, evidence)`:
-   - `stageRank < statusRank` → DONE if its structural marker is present, otherwise SKIPPED. Evidence cites the marker or its absence.
+2. If `node` is a parent (see Parent-node handling): early-return with the two-row strip and `childrenRollup` populated.
+3. **Map the current status to a rank** via this explicit table — non-stage statuses are coerced before the lookup, not relied on to "fall through":
+
+   | currentStatus | rankValue | Notes |
+   |---------------|-----------|-------|
+   | `PLANNED`     | `-1`      | Caught by step 1; never reaches this table for authored nodes. |
+   | `DRAFT`       | `0`       | |
+   | `SPEC_REVIEW` | `1`       | |
+   | `APPROVED`    | `2`       | |
+   | `IN_PROGRESS` | `3`       | |
+   | `VERIFY`      | `4`       | |
+   | `COMPLETE`    | `5`       | |
+   | `ISSUE_OPEN`  | `2`       | Coerced to APPROVED-rank per D12 (loop-back default). Banner is the authoritative signal. |
+
+4. For each stage in canonical order, compute `(completion, evidence)`:
+   - `stageRank < statusRank` → DONE if its structural marker is present (or no marker is defined for that stage), otherwise SKIPPED. Evidence cites the marker or its absence.
    - `stageRank === statusRank` → CURRENT. Evidence is `"Status header is <STAGE>"`.
    - `stageRank > statusRank` → PENDING. Evidence is `"Awaiting <stage>"`.
 
@@ -117,7 +138,7 @@ Pure plain-text scans on the raw markdown body. No remark/MDX.
 
 | Stage | Marker regex | Notes |
 |-------|--------------|-------|
-| DRAFT | `^##\s+Requirements\b` AND `^##\s+Design\b` AND `^##\s+Decisions\b` | All required sections present. |
+| DRAFT | None — DONE when `authored === true` (per audit N2) | Required-section presence is a doc-schema invariant maintained by every authored doc; checking it here would be a schema health check, not a workflow signal. Authored = DRAFT-DONE. |
 | SPEC_REVIEW | `^##\s+Spec Review \(\d{4}-\d{2}-\d{2}\)` | Stage-3 audit table heading. |
 | APPROVED | — (no marker; inferred from `statusRank ≥ 2`) | The APPROVED state is a transition, not a section. |
 | IN_PROGRESS | `^##\s+Implementation Notes\b` followed by non-placeholder content | Placeholder = literal `*(none yet — pre-implementation)*`. |
@@ -128,7 +149,7 @@ A stage with no marker but a passing rank inference is DONE. A stage with `stage
 
 ### Parent-node handling
 
-A node is a parent iff `node.children.length > 0` (or however the existing graph exposes children; the implementer reads what `parseDocs.ts` already produces). For parents:
+A node is a parent iff at least one other node declares it as `parentId`. The lookup pattern is already established in `NodeInspector.tsx:14`: `allNodes.filter(n => n.parentId === node.id)`. The derivation function receives the same `allNodes` array the inspector already has in scope, so no new graph traversal is needed. For parents:
 
 - Stages array contains only `DRAFT` and `APPROVED` rows.
 - `childrenRollup` populated: `{ total: N, byStatus: { COMPLETE: 3, IN_PROGRESS: 1, PLANNED: 2, ... } }` summed from the manifest.
@@ -197,9 +218,9 @@ src/lib/
   deriveWorkflow.ts             // pure derivation function + helpers
 ```
 
-Wiring: the existing DAG inspector component (whatever 02-dag named it — likely `DagNodeInspector` or `NodeDetailPanel`) imports `<WorkflowProgressSection nodeId={selectedNodeId} />` and renders it as a new section.
+Wiring: `NodeInspector.tsx` (current signature `NodeInspector({ node, allNodes })`) renders `<WorkflowProgressSection node={node} allNodes={allNodes} />` as a new section below the existing Parent / Depends-on / Children / Open-document fields.
 
-`WorkflowProgressSection.tsx` is the thin shell: calls `useDocGraph()` for the `DocNode`, `useDocSource(nodeId)` for the raw body, runs `deriveWorkflowProgress`, picks the layout (`isParent` → parent layout, else leaf layout), renders.
+`WorkflowProgressSection.tsx` props are `{ node: DocNode; allNodes: DocNode[] }`. Internally it calls `useDocSource(node.id)` to get the raw body (`source?.raw ?? null`), runs `deriveWorkflowProgress(node, allNodes, raw)`, picks the layout (`isParent` → parent layout, else leaf layout), renders. No call to `useDocGraph()` is needed at this level — the inspector already has the parsed graph.
 
 ### Interaction model
 
@@ -214,7 +235,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each 
 1. **`01-ui/06-health`** (status COMPLETE) — six rows, all `✓` DONE. Evidence strings name the structural markers found (Spec Review audit, Implementation Notes content, Implementation Review subsection).
 2. **`01-ui/05-logs`** (status PLANNED, doc not yet authored) — six rows, all `○` PENDING. Evidence reads `"Doc not yet authored"` on each.
 3. **`01-ui` itself** (parent, APPROVED) — two-row strip (DRAFT ✓, APPROVED ●) followed by the children rollup chip row showing the actual child status counts.
-4. **A DRAFT node** (this very node, `01-ui/09-workflow-progress`, after authoring) — DRAFT `●` CURRENT, the other five PENDING.
+4. **Any node whose Status header is `DRAFT` at verification time** — DRAFT `●` CURRENT, the other five `○` PENDING. (Pick whichever DRAFT-status node exists in the tree when running the check; do not anchor to a specific node id, since DRAFTs progress quickly.)
 5. **ISSUE_OPEN simulation** — temporarily edit any leaf node's Status header to `ISSUE_OPEN`, reload, confirm the warning banner renders above the checklist. Revert.
 6. **SKIPPED simulation** — temporarily edit a COMPLETE node to remove its `## Spec Review` heading, reload, confirm SPEC_REVIEW renders as `⊘` SKIPPED with strikethrough and the evidence string names the missing marker. Revert.
 7. Selecting a different node updates the section without a full reload.
@@ -245,11 +266,30 @@ A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each 
 ## Open Issues
 
 - **Tracking the *most recent* re-entry point for ISSUE_OPEN.** When a node loops through ISSUE_OPEN → DRAFT (rare case), the CURRENT indicator should arguably move to DRAFT, not APPROVED. Without a transition log we can't tell which loop-back path was taken. v1 hard-codes APPROVED per D12; v2 could parse a `## Issue Log (YYYY-MM-DD)` audit section if/when the convention is established. *(Priority: LOW.)*
-- **`SPEC_REVIEW` may not yet be in `NodeStatus`.** No shipped doc has used this state (the manual workflow blows through it in minutes). The implementer must verify and add it if absent. Not a blocker — one-line type extension. *(Priority: LOW — flagged in §Design > Data source.)*
 - **Children rollup ordering for parents with many child statuses.** The chip row is fine for ≤6 statuses (the entire `NodeStatus` union is small). If a parent has children spanning every status, the row may wrap. Acceptable; the inspector is fixed-width and wrap is graceful. *(Priority: TRIVIAL.)*
 - **Evidence strings are English-only.** No i18n scaffolding; matches the rest of the app. Revisit when/if i18n becomes a project goal. *(Priority: TRIVIAL.)*
 - **Structural marker regex fragility.** Same risk as `06-health`'s issue-priority regex (06-health Open Issues): a doc with a non-canonical heading (extra whitespace, missing parens around the date) silently drops the DONE evidence and triggers SKIPPED. The mitigation matches 06-health's: enforce the doc convention in a future lint rule. Cross-link to `06-health` Open Issue on regex fragility. *(Priority: LOW.)*
 - **Inspector section ordering.** This section sits below existing per-node metadata in v1. If a future operator request says "I want Workflow above everything else", trivial reorder. No data implication. *(Priority: TRIVIAL.)*
+
+---
+
+## Spec Review (2026-05-23)
+
+Independent clean-context spec review was run against this DRAFT immediately after authoring. Verdict: READY_FOR_APPROVAL, no blockers. Audit of findings and how each was handled:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `NodeInspector` signature is `{ node, allNodes }` (both already in scope) — the spec's "the existing DAG inspector component imports `<WorkflowProgressSection nodeId={…} />`" mis-described the wiring level. | Rewrote §Design > Components and files to name `NodeInspector.tsx` explicitly and pass `{ node, allNodes }` props. Removed the `useDocGraph()` call inside `WorkflowProgressSection` — the inspector already has the parsed graph. |
+| S2 | `useDocSource(id)` returns `DocSource \| undefined`, not `string \| null`. The implementer would hit this immediately. | Updated §Design > Data source to spell out the `source?.raw ?? null` unwrap before the derivation call. `deriveWorkflowProgress(node, allNodes, raw)` signature unchanged at the function boundary. |
+| S3 | The algorithm relied on a non-existent `statusRank` lookup for `ISSUE_OPEN` (would have produced undefined / NaN). | Replaced the prose lookup with an explicit `currentStatus → rank` table in §Design > Stage derivation rules step 3. `ISSUE_OPEN` is coerced to rank 2 (APPROVED) before the lookup, per D12. `PLANNED` is caught earlier in step 1. |
+| N1 | `WorkflowProgress.stages` length contract was ambiguous (six for leaves, two for parents, but type doesn't enforce it). | Updated the JSDoc on `stages` to spell out the `isParent` narrowing pattern. No type change — type-narrowing is the safe access pattern. |
+| N2 | DRAFT marker (all required sections present) is a doc-schema invariant, not a workflow signal. | Simplified the DRAFT row in §Design > Structural markers to "DONE when `authored === true`" with rationale. |
+| N3 | Acceptance check #4 was self-referential ("click this node, expect DRAFT") — by verification time the node is no longer DRAFT. | Reworded to "any DRAFT-status node at verification time" with the explicit caveat not to anchor on a specific id. |
+| N4 | Parent detection used `node.children.length > 0` but `DocNode` has no `children` field — children are inferred via `allNodes.filter(n => n.parentId === node.id)`. | §Design > Parent-node handling now points to the existing `NodeInspector.tsx:14` pattern explicitly. `deriveWorkflowProgress` signature updated to accept `allNodes` so the same array threaded from the inspector is reused. |
+| N5 | `WorkflowProgress.currentStatus` can be `PLANNED` or `ISSUE_OPEN`, neither of which is a `WorkflowStage` — mild type-vocabulary inconsistency. | Added a JSDoc comment on `currentStatus` explaining the deliberate non-1:1 mapping and that the renderer uses `stages[]` + `issueOpen` rather than expecting stage correspondence. |
+| N6 | The "`SPEC_REVIEW` may not yet be in `NodeStatus`" Open Issue was a false alarm — it has been in the union since `parseDocs.ts` shipped (`types.ts:16`). | Removed that Open Issue. The §Design > Data source callout was rewritten to state the union is already complete, with the `R6` cross-reference. |
+
+Nothing was punted in this review pass — all findings were mechanical and applied. The audit table stays in the doc so the implementing agent can see what was decided and why.
 
 ---
 
