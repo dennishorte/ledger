@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (APPROVED → IN_PROGRESS)
+**Last Updated:** 2026-05-23 (IN_PROGRESS → VERIFY)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
@@ -295,7 +295,46 @@ Nothing was punted in this review pass — all findings were mechanical and appl
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:** None. Lucide icons (`Check`, `Circle`, `CircleDashed`, `CircleSlash`, `AlertTriangle`) were already a transitive dependency via the dag/ components. No new `package.json` entries.
+
+**Decisions beyond spec:**
+
+- `WorkflowStageRow` renders the evidence string in `text-[color:var(--color-muted)]` (spec said `text-[--color-faint]`). `--color-faint` is defined in `globals.css` but is lighter than muted; muted provides better contrast against the cream surface while still being clearly subordinate to the stage name. Recorded here as a deliberate presentation choice — not a spec deviation that needs a spec edit.
+- Children rollup uses `·` (middle dot) separators via space-separated `<span>` chips rather than a single string join to keep each chip individually styled if needed in future. Visual output matches the spec layout.
+- `--color-success` is used directly for the DONE checkmark icon (it's defined as `oklch(0.62 0.12 145)` in `globals.css`) rather than `text-green-*` to stay within the cream token system.
+
+**Bundle delta vs baseline commit `df3e427`** (main HEAD at worktree branch time):
+
+| Asset | Baseline | This build | Delta |
+|-------|----------|------------|-------|
+| `index-*.js` (uncompressed) | 971,533 B | 978,155 B | +6,622 B (+0.7%) |
+| `index-*.js` (gzip) | 311.66 kB | 313.39 kB | +1.73 kB |
+| `index-*.css` (uncompressed) | 40,422 B | 40,939 B | +517 B (+1.3%) |
+| `index-*.css` (gzip) | 7.98 kB | 8.06 kB | +0.08 kB |
+
+The chunk-size warning (>500 kB) was already present in the baseline; no new chunks added.
+
+**Acceptance check items NOT verifiable in headless environment (manual):**
+
+- **#1** (`01-ui/06-health` COMPLETE — six rows all DONE, evidence names structural markers) — requires browser.
+- **#2** (`01-ui/05-logs` PLANNED — six rows all PENDING, evidence "Doc not yet authored") — requires browser.
+- **#3** (`01-ui` parent APPROVED — two-row strip + children rollup chip row) — requires browser.
+- **#4** (any DRAFT-status node at verification time — DRAFT CURRENT, others PENDING) — requires browser.
+- **#5** (ISSUE_OPEN simulation — warning banner renders) — requires browser + temporary doc edit.
+- **#6** (SKIPPED simulation — strikethrough + marker-absent evidence) — requires browser + temporary doc edit.
+- **#7** (selecting different node updates section without full reload) — requires browser.
+- **#9** (no regressions in existing DAG inspector sections) — requires browser.
+
+**Items verified headlessly:**
+
+- Acceptance check #8: `pnpm typecheck`, `pnpm lint`, `pnpm build` all exit 0 at zero output.
+- `deriveWorkflowProgress` returns `stages.length === 6` for any authored leaf (CANONICAL_STAGES has six entries; the parent early-return is guarded by `childNodes.length > 0`).
+- For a COMPLETE node: all stages have `statusRank === 5`; DRAFT, APPROVED, COMPLETE have no optional marker so they return DONE directly; SPEC_REVIEW, IN_PROGRESS, VERIFY check their markers and return DONE if present or SKIPPED if absent — for `01-ui/06-health` the markers are present in the doc body.
+- For a PLANNED/manifest-only node (`authored === false`): all six stages return PENDING with evidence "Doc not yet authored" (step 1 short-circuit).
+- `ISSUE_OPEN` coercion: `statusToRank("ISSUE_OPEN") === 2` makes DRAFT (rank 0) and SPEC_REVIEW (rank 1) DONE-or-SKIPPED, APPROVED (rank 2) CURRENT, IN_PROGRESS/VERIFY/COMPLETE PENDING — with `issueOpen: true` triggering the banner.
+- Parent detection: `allNodes.filter(n => n.parentId === node.id)` mirrors the existing `NodeInspector.tsx:14` pattern exactly.
+
+**Deviations from spec:** None structural. The evidence-string colour token choice (muted vs faint) is the only presentational deviation, recorded above.
 
 ---
 

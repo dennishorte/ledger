@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import { StatusChip } from "@/components/dag/StatusChip";
+import { WorkflowProgressSection } from "@/components/dag/WorkflowProgressSection";
 import type { DocNode } from "@/lib/types";
 
 interface NodeInspectorProps {
@@ -99,6 +100,8 @@ export function NodeInspector({ node, allNodes }: NodeInspectorProps): JSX.Eleme
           <ExternalLink className="h-3 w-3" aria-hidden />
         </Link>
       )}
+
+      <WorkflowProgressSection node={node} allNodes={allNodes} />
     </div>
   );
 }
