@@ -1,0 +1,282 @@
+# Workflow Progress (Inspector Section)
+
+**Node ID:** `01-ui/09-workflow-progress`
+**Parent:** `01-ui`
+**Status:** DRAFT
+**Created:** 2026-05-23
+**Last Updated:** 2026-05-23
+
+**Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
+**Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
+
+---
+
+## Requirements
+
+Add a "Workflow" section to the DAG node inspector that visualises the selected node's position in the `leaf-workflow.md` lifecycle. The operator clicks a DAG node and immediately sees: which stages are done, which is current, which are pending, and (when applicable) whether the node has looped back through ISSUE_OPEN.
+
+The section must:
+
+- Render the six lifecycle states from PRD §6.2 (DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE) as an ordered checklist.
+- Mark each stage DONE / CURRENT / PENDING / SKIPPED based on (a) the node's current status header and (b) structural markers in the doc body (Spec Review audit table, Implementation Notes content, Implementation Review subsection).
+- Surface ISSUE_OPEN explicitly as a banner above the checklist — it is a side-branch, not a forward stage.
+- Behave sensibly for nodes with no authored doc (PLANNED manifest entries): show all stages PENDING with an "doc not yet authored" evidence string.
+- Behave sensibly for parent nodes (have a children manifest, do not run the leaf workflow): collapse to a two-row strip (DRAFT → APPROVED) plus a children-progress sub-list.
+- Read-only: no status mutation, no buttons to advance stages.
+
+### Out of scope for this node
+
+- Mutating status from the inspector (writes belong to the orchestrator when PRD §7 lands; until then the operator edits the doc).
+- Git-log or mtime-based audit (no "SPEC_REVIEW happened on date X" derived from commits — only what the doc body declares).
+- Showing operator-procedure stages from `leaf-workflow.md` that are not lifecycle states (rebase, merge `--no-ff`, worktree cleanup). They are procedural, not recorded states.
+- Rendering this section in routes other than `/dag` (the inspector is owned by the shell but its content is route-contributed; v1 only the DAG route contributes this section).
+- Per-stage diffs, time estimates, or "ETA to COMPLETE".
+- Aggregating progress across the tree (that's `06-health`'s staleness widget, not this).
+
+---
+
+## Design
+
+### Data source
+
+Phase-1 reuses the two build-time sources already in place:
+
+1. **`DocNode`** via `useDocGraph()` — gives `status`, `dependsOn`, `authored`, and children edges. No new parsing.
+2. **Raw markdown body** via `useDocSource(id)` — gives the full doc text. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
+
+No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, raw)` is the single point of derivation.
+
+> **`NodeStatus` extension.** `parseDocs.ts` currently emits a `NodeStatus` union built from observed status headers (`PLANNED`, `DRAFT`, `APPROVED`, `IN_PROGRESS`, `VERIFY`, `COMPLETE`, `ISSUE_OPEN`). `SPEC_REVIEW` is a real PRD §6.2 state but has not yet appeared in any shipped doc, so the union may not include it. The implementer must verify `src/lib/types.ts` includes `SPEC_REVIEW` in `NodeStatus`; if absent, add it (one-line type addition, no behaviour change for other panels).
+
+### New types (`src/lib/types.ts`)
+
+```ts
+/**
+ * The six PRD §6.2 lifecycle stages, in canonical order.
+ * Introduced by 01-ui/09-workflow-progress.
+ */
+export type WorkflowStage =
+  | "DRAFT"
+  | "SPEC_REVIEW"
+  | "APPROVED"
+  | "IN_PROGRESS"
+  | "VERIFY"
+  | "COMPLETE";
+
+/**
+ * Completion state of a single stage row.
+ *  - DONE:    stage is in the past (status > stage) or its structural marker is present.
+ *  - CURRENT: stage equals the node's current status.
+ *  - PENDING: stage is in the future (status < stage) and no structural marker yet.
+ *  - SKIPPED: status is past this stage but the structural marker is absent
+ *             (e.g., DRAFT→APPROVED via the leaf-workflow stage-2 shortcut).
+ */
+export type StageCompletion = "DONE" | "CURRENT" | "PENDING" | "SKIPPED";
+
+export interface WorkflowStageState {
+  stage: WorkflowStage;
+  completion: StageCompletion;
+  /** Human-readable evidence string, e.g. "Status header is COMPLETE" or "Spec Review (2026-05-22) audit table present". */
+  evidence: string;
+}
+
+export interface WorkflowProgress {
+  nodeId: NodeId;
+  /** Mirrors DocNode.status; surfaced for convenience to the renderer. */
+  currentStatus: NodeStatus;
+  /** True iff currentStatus === "ISSUE_OPEN". When true, the banner renders. */
+  issueOpen: boolean;
+  /** Always six entries for leaves; see parent-node handling below. */
+  stages: WorkflowStageState[];
+  /** True when the node is a parent (children > 0). Renderer uses this to pick the collapsed layout. */
+  isParent: boolean;
+  /** For parent nodes only: counts derived from the children manifest. Empty for leaves. */
+  childrenRollup?: {
+    total: number;
+    byStatus: Partial<Record<NodeStatus, number>>;
+  };
+}
+```
+
+### Stage derivation rules
+
+`deriveWorkflowProgress(node: DocNode, raw: string | null): WorkflowProgress` lives in `src/lib/deriveWorkflow.ts` — pure, no React.
+
+Algorithm:
+
+1. If `node.authored === false` (manifest-only, no doc yet): all six stages → PENDING, evidence `"Doc not yet authored"`. `currentStatus` is whatever the manifest reports (typically `PLANNED`).
+2. Otherwise, compute a `statusRank: number` from `currentStatus` against the canonical order `DRAFT(0) < SPEC_REVIEW(1) < APPROVED(2) < IN_PROGRESS(3) < VERIFY(4) < COMPLETE(5)`. `ISSUE_OPEN` is treated as `APPROVED`-rank for placement of CURRENT (the loop-back lands the node back at APPROVED or DRAFT per leaf-workflow §8b).
+3. For each stage, compute `(completion, evidence)`:
+   - `stageRank < statusRank` → DONE if its structural marker is present, otherwise SKIPPED. Evidence cites the marker or its absence.
+   - `stageRank === statusRank` → CURRENT. Evidence is `"Status header is <STAGE>"`.
+   - `stageRank > statusRank` → PENDING. Evidence is `"Awaiting <stage>"`.
+
+### Structural markers
+
+Pure plain-text scans on the raw markdown body. No remark/MDX.
+
+| Stage | Marker regex | Notes |
+|-------|--------------|-------|
+| DRAFT | `^##\s+Requirements\b` AND `^##\s+Design\b` AND `^##\s+Decisions\b` | All required sections present. |
+| SPEC_REVIEW | `^##\s+Spec Review \(\d{4}-\d{2}-\d{2}\)` | Stage-3 audit table heading. |
+| APPROVED | — (no marker; inferred from `statusRank ≥ 2`) | The APPROVED state is a transition, not a section. |
+| IN_PROGRESS | `^##\s+Implementation Notes\b` followed by non-placeholder content | Placeholder = literal `*(none yet — pre-implementation)*`. |
+| VERIFY | `^###\s+Implementation Review \(\d{4}-\d{2}-\d{2}\)` | Stage-7 audit subsection. |
+| COMPLETE | — (no marker; inferred from `statusRank === 5`) | The Status header is the only source of truth. |
+
+A stage with no marker but a passing rank inference is DONE. A stage with `stageRank < statusRank` whose marker *can* be checked (SPEC_REVIEW, IN_PROGRESS, VERIFY) but is absent is marked SKIPPED with evidence like `"No Spec Review audit table (stage-2 shortcut taken)"`.
+
+### Parent-node handling
+
+A node is a parent iff `node.children.length > 0` (or however the existing graph exposes children; the implementer reads what `parseDocs.ts` already produces). For parents:
+
+- Stages array contains only `DRAFT` and `APPROVED` rows.
+- `childrenRollup` populated: `{ total: N, byStatus: { COMPLETE: 3, IN_PROGRESS: 1, PLANNED: 2, ... } }` summed from the manifest.
+- Renderer shows the two-row strip plus a small chip row underneath: `3 COMPLETE · 1 IN_PROGRESS · 2 PLANNED` (one chip per non-zero status, in canonical lifecycle order).
+
+### ISSUE_OPEN handling
+
+When `currentStatus === "ISSUE_OPEN"`:
+
+- `issueOpen: true`.
+- Stages array still computed normally, with `APPROVED` marked CURRENT (the loop-back lands the node at APPROVED per leaf-workflow §8b's typical re-entry — DRAFT re-entry is possible but rarer, and treating APPROVED as the default is acceptable; the banner is the authoritative signal).
+- Renderer prepends a banner: `"Issue open — verification failed, looped back to APPROVED. See Open Issues section."` Banner uses `--color-warning` background.
+
+### Layout
+
+The section sits in the DAG inspector's content stack, below the existing node-metadata block. Title row: `Workflow` in `text-sm font-semibold text-[--color-muted]` uppercase, matching the existing inspector section headings.
+
+Leaf node (six rows):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ WORKFLOW                                                │
+├─────────────────────────────────────────────────────────┤
+│ ✓  DRAFT          Required sections present             │
+│ ✓  SPEC_REVIEW    Spec Review (2026-05-22) audit table  │
+│ ✓  APPROVED       Status reached APPROVED               │
+│ ●  IN_PROGRESS    Status header is IN_PROGRESS          │
+│ ○  VERIFY         Awaiting VERIFY                       │
+│ ○  COMPLETE       Awaiting COMPLETE                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+Parent node (two rows + rollup):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ WORKFLOW                                                │
+├─────────────────────────────────────────────────────────┤
+│ ✓  DRAFT          Required sections present             │
+│ ●  APPROVED       Status header is APPROVED             │
+│                                                         │
+│ Children: 3 COMPLETE · 1 IN_PROGRESS · 2 PLANNED        │
+└─────────────────────────────────────────────────────────┘
+```
+
+ISSUE_OPEN banner (when applicable, above the stage list):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ⚠ Issue open — verification failed, looped back to     │
+│   APPROVED. See Open Issues section.                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+Icon glyphs: `✓` (DONE), `●` (CURRENT), `○` (PENDING), `⊘` (SKIPPED). Lucide equivalents (`Check`, `Circle`, `CircleDashed`, `CircleSlash`) are acceptable substitutes if the existing inspector already imports lucide.
+
+Evidence strings render in `text-xs text-[--color-faint]`. The stage name renders in `text-sm font-medium text-[--color-fg]` (DONE/CURRENT) or `text-[--color-muted]` (PENDING/SKIPPED). SKIPPED rows additionally show the stage name in strikethrough to reinforce "this stage was bypassed, not just pending."
+
+### Components and files
+
+```
+src/components/dag/
+  WorkflowProgressSection.tsx   // the inspector section (leaf + parent layouts)
+  WorkflowStageRow.tsx          // single row (icon + name + evidence)
+src/lib/
+  deriveWorkflow.ts             // pure derivation function + helpers
+```
+
+Wiring: the existing DAG inspector component (whatever 02-dag named it — likely `DagNodeInspector` or `NodeDetailPanel`) imports `<WorkflowProgressSection nodeId={selectedNodeId} />` and renders it as a new section.
+
+`WorkflowProgressSection.tsx` is the thin shell: calls `useDocGraph()` for the `DocNode`, `useDocSource(nodeId)` for the raw body, runs `deriveWorkflowProgress`, picks the layout (`isParent` → parent layout, else leaf layout), renders.
+
+### Interaction model
+
+- Read-only. No click handlers on stage rows in v1.
+- Section re-renders whenever the selected DAG node changes (the inspector already re-renders on selection; no new state).
+- Hovering a stage row shows the full evidence string as a native `title` tooltip (in case it gets truncated at narrow inspector widths).
+
+### Acceptance check (manual)
+
+A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each named node:
+
+1. **`01-ui/06-health`** (status COMPLETE) — six rows, all `✓` DONE. Evidence strings name the structural markers found (Spec Review audit, Implementation Notes content, Implementation Review subsection).
+2. **`01-ui/05-logs`** (status PLANNED, doc not yet authored) — six rows, all `○` PENDING. Evidence reads `"Doc not yet authored"` on each.
+3. **`01-ui` itself** (parent, APPROVED) — two-row strip (DRAFT ✓, APPROVED ●) followed by the children rollup chip row showing the actual child status counts.
+4. **A DRAFT node** (this very node, `01-ui/09-workflow-progress`, after authoring) — DRAFT `●` CURRENT, the other five PENDING.
+5. **ISSUE_OPEN simulation** — temporarily edit any leaf node's Status header to `ISSUE_OPEN`, reload, confirm the warning banner renders above the checklist. Revert.
+6. **SKIPPED simulation** — temporarily edit a COMPLETE node to remove its `## Spec Review` heading, reload, confirm SPEC_REVIEW renders as `⊘` SKIPPED with strikethrough and the evidence string names the missing marker. Revert.
+7. Selecting a different node updates the section without a full reload.
+8. `pnpm typecheck`, `pnpm lint`, `pnpm build` pass at zero output.
+9. No regressions elsewhere in the DAG inspector — existing per-node metadata sections still render.
+
+---
+
+## Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D1 | Stages map 1:1 to PRD §6.2, not to `leaf-workflow.md`'s eleven operator stages | PRD §6.2 is the canonical lifecycle. Operator stages (rebase, merge `--no-ff`, worktree cleanup) are procedure, not recorded state — showing them as checklist items would imply they are tracked node-state when they are not. |
+| D2 | Phase-1 derivation from doc content only, no git log | Same data-source discipline as `02-dag` and `06-health`. The audit-tables convention already encodes lifecycle events in the doc itself; adding a git-log scan would be a second source of truth and a parser dependency. When the orchestrator (PRD §7) lands, it owns canonical transition events. |
+| D3 | ISSUE_OPEN rendered as a banner, not a stage cell | The checklist is linear; ISSUE_OPEN is a loop-back to APPROVED or DRAFT (leaf-workflow §8b). Forcing a loop-back into a linear strip would either insert a synthetic row (ugly) or move the CURRENT indicator backward without explanation (confusing). A banner says the truth plainly. |
+| D4 | Parent nodes get a collapsed two-row strip + children rollup | Parents do not run the leaf workflow — they go DRAFT → APPROVED once their manifest is settled, then their "progress" is the aggregate state of their children. Showing the full six rows for a parent would be wrong (parents do not enter IN_PROGRESS or VERIFY in the same sense). |
+| D5 | SKIPPED is its own completion state, not folded into DONE | Stage-2 of leaf-workflow explicitly allows skipping SPEC_REVIEW. Folding it into DONE would hide a meaningful operator choice ("I judged the spec safe enough to skip review"). SKIPPED with the absence-evidence string makes the choice visible without flagging it as a problem. |
+| D6 | Structural markers checked via plain-text regex, not remark AST | Same reasoning as `06-health` D2 — the doc convention is highly regular (`## Spec Review (YYYY-MM-DD)`, `### Implementation Review (YYYY-MM-DD)`, `*(none yet — pre-implementation)*` placeholder). A ~30-line pure function is faster, dependency-free, and independently testable. |
+| D7 | `deriveWorkflowProgress` is a pure function with no React imports | Testable without a render environment and reusable by the eventual API server / health daemon when they need to emit workflow events. Matches `06-health` D11. |
+| D8 | Read-only in v1 — no edit buttons, no "advance stage" actions | Status mutation belongs to the orchestrator (PRD §7). Until it lands, the operator edits the doc by hand and commits — the framework's "doc-and-code must agree" rule (CLAUDE.md) makes the doc the single source of truth. Adding edit buttons here would create a second mutation path. |
+| D9 | Lives in `src/components/dag/`, not `src/components/ui/` or a new `src/components/workflow/` directory | The section is currently embedded only in the DAG inspector. Premature extraction to a shared location would imply other routes consume it; they don't, yet. If a future route also wants this section (e.g., `03-docs` opens it from a doc viewer), move at that point. Matches `06-health` D7's two-consumers-is-the-trigger rule. |
+| D10 | Inspector section, not a new route | The data is contextual to a selected node — useless without a selection. A standalone `/workflow` route would duplicate navigation for no marginal benefit. Embedding in the inspector is the natural location and uses zero new routing surface. |
+| D11 | Evidence strings include the audit-table date when present (e.g., `"Spec Review (2026-05-22) audit table present"`) | The date is free signal — it's already in the heading we matched against. Surfacing it gives the operator a quick "when did this happen?" without opening the doc. Costs nothing; adds real value. |
+| D12 | `ISSUE_OPEN` is hard-coded to land the CURRENT indicator at APPROVED, not DRAFT | Leaf-workflow §8b says ISSUE_OPEN re-enters at either stage 4 (APPROVED → IN_PROGRESS for mechanical fixes) or stage 1 (DRAFT for spec revisions). The first is much more common; defaulting to APPROVED matches the modal case. The banner text gives the full picture either way; the indicator placement is a presentational choice, not a truth claim. |
+
+---
+
+## Open Issues
+
+- **Tracking the *most recent* re-entry point for ISSUE_OPEN.** When a node loops through ISSUE_OPEN → DRAFT (rare case), the CURRENT indicator should arguably move to DRAFT, not APPROVED. Without a transition log we can't tell which loop-back path was taken. v1 hard-codes APPROVED per D12; v2 could parse a `## Issue Log (YYYY-MM-DD)` audit section if/when the convention is established. *(Priority: LOW.)*
+- **`SPEC_REVIEW` may not yet be in `NodeStatus`.** No shipped doc has used this state (the manual workflow blows through it in minutes). The implementer must verify and add it if absent. Not a blocker — one-line type extension. *(Priority: LOW — flagged in §Design > Data source.)*
+- **Children rollup ordering for parents with many child statuses.** The chip row is fine for ≤6 statuses (the entire `NodeStatus` union is small). If a parent has children spanning every status, the row may wrap. Acceptable; the inspector is fixed-width and wrap is graceful. *(Priority: TRIVIAL.)*
+- **Evidence strings are English-only.** No i18n scaffolding; matches the rest of the app. Revisit when/if i18n becomes a project goal. *(Priority: TRIVIAL.)*
+- **Structural marker regex fragility.** Same risk as `06-health`'s issue-priority regex (06-health Open Issues): a doc with a non-canonical heading (extra whitespace, missing parens around the date) silently drops the DONE evidence and triggers SKIPPED. The mitigation matches 06-health's: enforce the doc convention in a future lint rule. Cross-link to `06-health` Open Issue on regex fragility. *(Priority: LOW.)*
+- **Inspector section ordering.** This section sits below existing per-node metadata in v1. If a future operator request says "I want Workflow above everything else", trivial reorder. No data implication. *(Priority: TRIVIAL.)*
+
+---
+
+## Implementation Notes
+
+*(none yet — pre-implementation)*
+
+---
+
+## Verification
+
+When this node moves to `VERIFY`, the verifier confirms:
+
+1. The full Acceptance check list (1–9) passes.
+2. `deriveWorkflowProgress` returns `stages.length === 6` for every authored leaf node in the current tree.
+3. For a COMPLETE node (e.g., `01-ui/06-health`), all six stage completions are DONE — none are SKIPPED — and each evidence string names a real structural marker found in the doc.
+4. For a PLANNED manifest-only node (e.g., `01-ui/05-logs`), all six stages are PENDING with evidence `"Doc not yet authored"`.
+5. For a DRAFT node (`01-ui/09-workflow-progress` itself), DRAFT is CURRENT and the other five are PENDING.
+6. For a parent node (`01-ui`), `isParent === true`, `stages.length === 2`, and `childrenRollup.total` equals the count of rows in the parent's children manifest.
+7. ISSUE_OPEN simulation (Acceptance check #5) shows the banner with `--color-warning` background.
+8. SKIPPED simulation (Acceptance check #6) shows strikethrough on the stage name and the evidence string names the missing marker.
+9. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. Bundle delta reported in Implementation Notes against a named baseline.
+10. No regressions in the DAG panel's existing per-node inspector content — pre-existing sections still render unchanged.
+11. `parseDocs.ts` was not modified except (if necessary) to add `SPEC_REVIEW` to the `NodeStatus` union — no parser logic changes.
+
+---
+
+## Children
+
+None.
