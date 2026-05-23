@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (APPROVED → IN_PROGRESS — V1 fix dispatched)
+**Last Updated:** 2026-05-23 (IN_PROGRESS → VERIFY — V1 fix landed)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
@@ -270,7 +270,8 @@ A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each 
 - **Evidence strings are English-only.** No i18n scaffolding; matches the rest of the app. Revisit when/if i18n becomes a project goal. *(Priority: TRIVIAL.)*
 - **Structural marker regex fragility.** Same risk as `06-health`'s issue-priority regex (06-health Open Issues): a doc with a non-canonical heading (extra whitespace, missing parens around the date) silently drops the DONE evidence and triggers SKIPPED. The mitigation matches 06-health's: enforce the doc convention in a future lint rule. Cross-link to `06-health` Open Issue on regex fragility. *(Priority: LOW.)*
 - **Inspector section ordering.** This section sits below existing per-node metadata in v1. If a future operator request says "I want Workflow above everything else", trivial reorder. No data implication. *(Priority: TRIVIAL.)*
-- **V1: COMPLETE row renders CURRENT (`●`) instead of DONE (`✓`) on COMPLETE-status nodes.** Operator verification (stage 8, first pass) caught this on `01-ui/06-health`. Root cause: `computeStageState` returns CURRENT whenever `stageRank === statusRank`, but COMPLETE is the terminal state — there is no "currently at COMPLETE." Spec Acceptance check #1 explicitly calls for "all six rows DONE" on a COMPLETE node, so the existing algorithm contradicts the spec. Fix: special-case `stage === "COMPLETE"` in the rank-equal branch to return DONE. *(Priority: HIGH — blocking re-verification.)*
+
+*(V1 — `COMPLETE` row CURRENT-instead-of-DONE — resolved in the V1 fix pass; see Implementation Notes > Operator Verification V1 fix (2026-05-23).)*
 
 ---
 
@@ -359,6 +360,16 @@ Bundle-delta numbers also refreshed below — the implementer's table was off by
 | `index-*.css` (gzip) | 7.98 kB | 8.05 kB | +0.07 kB |
 
 Gates re-run after the audit fixes: `typecheck`, `lint`, `build` all exit zero.
+
+### Operator Verification V1 fix (2026-05-23)
+
+Operator verification (leaf-workflow §8, first pass) on `01-ui/06-health` revealed a single rendering bug: the COMPLETE row showed the CURRENT marker (`●`) instead of DONE (`✓`). Loop-back through ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY per stage 8b. Spec was correct (Acceptance check #1 already calls for "six rows all DONE" on COMPLETE nodes), so no spec revision; mechanical fix only. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| V1 | `computeStageState` returned `completion: "CURRENT"` whenever `stageRank === statusRank`, including for the terminal `COMPLETE` stage. A COMPLETE node thus rendered with the COMPLETE row marked CURRENT (`●`) rather than DONE (`✓`), contradicting Acceptance check #1. | Added a `stage === "COMPLETE"` early-return at the top of the rank-equal branch in `deriveWorkflow.ts:113-115`: `{ completion: "DONE", evidence: "Status header is COMPLETE" }`. Three lines. The CURRENT-evidence logic for the other five stages (including the ISSUE_OPEN rank-coercion case from F1) is unchanged. |
+
+Gates re-run after V1 fix: `typecheck`, `lint`, `build` all exit zero. Bundle changed by +3,032 B uncompressed JS (the special-case branch), unchanged CSS. Hash non-determinism dominates measurements at this scale; the absolute size of the diff is the +3 lines of code plus a string literal. Nothing structural changed.
 
 ---
 

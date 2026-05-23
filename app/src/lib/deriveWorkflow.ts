@@ -114,6 +114,11 @@ function computeStageState(
   }
 
   if (stageRank === statusRank) {
+    // COMPLETE is terminal — there is no "currently at COMPLETE." Render DONE
+    // so a finished node shows six DONE rows per spec Acceptance check #1.
+    if (stage === "COMPLETE") {
+      return { stage, completion: "DONE", evidence: "Status header is COMPLETE" };
+    }
     // When the actual status differs from the stage name (e.g. ISSUE_OPEN
     // coerces to APPROVED-rank per D12), name the real status so the evidence
     // does not contradict the issue-open banner.
