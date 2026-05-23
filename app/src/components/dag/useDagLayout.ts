@@ -80,15 +80,6 @@ function layout(docs: DocNode[]): LayoutResult {
           width: 14,
           height: 14,
         },
-        label: "depends on",
-        labelStyle: {
-          fill: "var(--color-muted)",
-          fontSize: 10,
-        },
-        labelBgStyle: {
-          fill: "var(--color-surface)",
-        },
-        labelBgPadding: [4, 2] as [number, number],
       });
     }
   }

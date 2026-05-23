@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1)
+**Status:** COMPLETE (v1.1)
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-22
+**Last Updated:** 2026-05-23
 
 ---
 
@@ -17,7 +17,7 @@ Phase-1 scope, narrower than PRD §8.1 because no task runner exists yet:
 1. Render the project's **document tree** (the implementation nodes under `docs/`) as a directed graph: each `docs/*.md` is a node, parent → child edges from the manifests.
 2. Render **planned** child nodes declared in a parent's manifest even when no doc file exists yet, distinguished visually from authored nodes.
 3. Show each node's **lifecycle status** (PRD §6.2: DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, ISSUE_OPEN, plus the manifest-only `PLANNED` pseudo-state) as a colored chip on the node.
-4. **Pan, zoom, and minimap** via React Flow defaults.
+4. **Pan and zoom** via React Flow defaults. (Minimap removed in v1.1 — see D12.)
 5. **Auto-layout** the graph (no hand-authored coordinates) so adding a new doc requires zero positioning work.
 6. **Click a node → open the shell's right-hand inspector** with the node's metadata (id, parent, status, title, and a link to `/docs/:nodeId`).
 7. The "Open inspector" debug button currently on `DagPanel` is removed — node clicks replace it.
@@ -134,9 +134,9 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 2. Hierarchy is shown spatially: a translucent dashed rounded-rect frames the seven `01-ui` children, labeled `01-ui` + title. No parent → child line edges are drawn (D11).
 3. Each node's status chip matches the doc's `**Status:**` line (e.g., `01-ui/01-shell` shows `VERIFY` now, `COMPLETE` after promotion).
 4. Planned-but-unauthored nodes (`03-docs`, `04-tasks`, `05-logs`, `06-health`, `07-replay`) render with a dashed border and `PLANNED` chip.
-5. All `dependsOn` relations render as dashed bezier arrows with a "depends on" label.
+5. All `dependsOn` relations render as dashed bezier arrows. (The original "depends on" text label was removed in v1.1 — see D12.)
 6. Clicking any doc tile opens the right-hand inspector with the node's details; clicking again or selecting a different node updates content. The inspector's existing `Esc`-to-close still works. Clicks on the subtree rect itself do nothing.
-7. Pan and zoom work; the minimap is visible.
+7. Pan and zoom work. (No minimap as of v1.1 — see D12.)
 8. The graph layout looks reasonable without any manual coord tweaking — adding a new file under `docs/` and reloading repositions everything automatically.
 
 ---
@@ -156,6 +156,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 | D9 | ~~Suppress visible `dependsOn` edges when source and target share a parent.~~ **Superseded by D11.** | Round-2 feedback (F4 below) clarified that sibling deps carry real information — `02-dag` "depends on `01-shell`" is a meaningfully different statement from "is parented by `01-ui`." Suppressing them lost that information. Replaced with D11 which removes parent edges instead. |
 | D10 | Bezier (`type: "default"`) for both parent and dep edges, replacing `smoothstep` orthogonal routing | At the current node density, orthogonal routing produces overlapping right-angle runs that read as a single line. Bezier curves separate visually even when they share rank-crossing geometry. After D11, parent edges no longer render; D10 now applies only to dep edges. Revisit if the graph grows past ~30 nodes and curves start to tangle. |
 | D11 | Parent edges are not drawn at all. Hierarchy is conveyed by a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). Parent relations are still passed to dagre for rank ordering | Parent-of is already encoded in the node id (`01-ui/02-dag` ⇒ parent is `01-ui`). Drawing it as an edge adds visual weight without adding information. The interesting edges in this view are **deps** — what blocks what. Spatial grouping is the standard idiom for "these nodes share a context" (cf. subway-map line shading) and degrades gracefully as the tree deepens. Long-term, when the panel renders the *task* DAG instead of the doc tree, there will be no parents to draw anyway — this pivot anticipates that. |
+| D12 | v1.1 visual simplification: drop the "depends on" edge label, hide React Flow's connection-handle dots on doc tiles, and remove the minimap | Each removal pays its own keep. The "depends on" label is redundant — the only edges drawn are deps (per D11), so a label restating the edge type adds noise without information. Handle dots advertise an interaction (`nodesConnectable={true}`) that this panel intentionally disables (`nodesConnectable={false}`), so they were misleading affordances; handles remain in the DOM with `opacity:0` + `isConnectable={false}` so dagre-routed edges still attach correctly. The minimap added chrome without payoff — at ≤30 nodes a `fitView` initial layout plus pan/zoom is enough, and the minimap viewport box wasn't even rendering reliably for the operator (likely a CSS-token interaction with the cream theme's mask color, but rather than debug a low-value affordance, we removed it). |
 
 ---
 
@@ -252,6 +253,23 @@ The operator signed off on the current rendering as **v1 ready**. Promoted VERIF
 
 Explicitly a v1: more iteration is expected. Known follow-ups remain in §Open Issues (cross-subtree dep edges, large-tree layout, inspector contract), plus the eventual data-source swap when the API server lands. Future revisions reopen the node via the COMPLETE → ISSUE_OPEN → IN_PROGRESS → VERIFY → COMPLETE loop per PRD §6.2 rather than blocking v1.
 
+### v1.1 visual simplification (2026-05-23)
+
+Three pieces of round-3 operator feedback handled together as a single in-place revision rather than a full COMPLETE → ISSUE_OPEN cycle — none changed behavior, all three were chrome removals:
+
+| # | Finding | Severity | Response |
+|---|---|---|---|
+| F5 | The "depends on" label on every dep edge is noise — dep edges are the only edges drawn (per D11), so labeling each one with the edge type adds nothing. | Polish | Removed `label`, `labelStyle`, `labelBgStyle`, `labelBgPadding` from the dep-edge objects in `useDagLayout.ts`. See D12. |
+| F6 | Each doc tile rendered small connection-handle dots at top and bottom edges (React Flow's default for `Handle` components). They advertise an interaction (drag-to-connect) the panel doesn't support — `nodesConnectable={false}` — so they read as broken or vestigial. | Polish | `DocDagNode.tsx` keeps the `Handle` elements (dagre-routed edges still need attachment anchors) but styles them as 1×1 transparent and sets `isConnectable={false}` for belt-and-suspenders. See D12. |
+| F7 | The bottom-right minimap didn't reliably render the viewport-box overlay (likely a `maskColor` / OKLCH alpha interaction with the cream theme), and at ≤30 nodes a minimap isn't earning the space anyway. | Polish | Removed `<MiniMap>` and its `minimapStyle` memo from `DagCanvas.tsx`; dropped the `MiniMap` and `useMemo` imports. See D12. |
+
+Gates re-run on 2026-05-23 — all clean:
+
+- `pnpm -C app typecheck`: zero output.
+- `pnpm -C app lint`: zero output under `--max-warnings=0`.
+
+Status: COMPLETE (v1.1). No formal re-verification cycle — the changes are visible-on-load and the v1 acceptance items unaffected by the chrome removal still hold.
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
@@ -267,7 +285,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 1. `/dag` renders the graph described in §Design > Acceptance check; all 9 current+planned nodes appear with correct status chips.
 2. Parent edges are **not** drawn as lines (F4). The `root` and `01-ui` doc tiles sit above their respective subtrees without connecting arrows.
 3. A translucent dashed rounded rect frames the `01-ui` subtree (the seven `01-shell` … `07-replay` tiles), labeled with the parent id `01-ui` and title in the top-left corner. No subtree rect is drawn for `root` (only one child).
-4. Every `dependsOn` edge is rendered as a dashed accent-colored bezier arrow with a "depends on" label — including the six `01-shell ← {02-dag, 03-docs, 04-tasks, 05-logs, 06-health, 07-replay}` sibling deps that round-1 incorrectly suppressed.
+4. Every `dependsOn` edge is rendered as a dashed accent-colored bezier arrow — including the six `01-shell ← {02-dag, 03-docs, 04-tasks, 05-logs, 06-health, 07-replay}` sibling deps that round-1 incorrectly suppressed. (As of v1.1 the edges no longer carry a "depends on" text label — see D12.)
 5. Edges are bezier curves, not orthogonal `smoothstep` routes (F3).
 6. Subtree rects sit behind the doc tiles; clicking on a rect does **not** open the inspector (only doc-tile clicks do).
 7. Clicking each doc tile updates the inspector content; `Esc` still closes the inspector.

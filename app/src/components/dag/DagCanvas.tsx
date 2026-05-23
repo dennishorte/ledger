@@ -1,9 +1,8 @@
-import { useCallback, useMemo, type JSX } from "react";
+import { useCallback, type JSX } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type NodeMouseHandler,
@@ -37,14 +36,6 @@ function DagCanvasInner(): JSX.Element {
     [docs, openInspector],
   );
 
-  const minimapStyle = useMemo(
-    () => ({
-      backgroundColor: "var(--color-surface-sunken)",
-      border: "1px solid var(--color-border)",
-    }),
-    [],
-  );
-
   return (
     <div className="h-full w-full">
       <ReactFlow
@@ -67,14 +58,6 @@ function DagCanvasInner(): JSX.Element {
           gap={20}
           size={1}
           color="var(--color-border)"
-        />
-        <MiniMap
-          pannable
-          zoomable
-          style={minimapStyle}
-          nodeColor="var(--color-surface-raised)"
-          nodeStrokeColor="var(--color-border-strong)"
-          maskColor="oklch(0.97 0.015 80 / 0.6)"
         />
         <Controls
           showInteractive={false}

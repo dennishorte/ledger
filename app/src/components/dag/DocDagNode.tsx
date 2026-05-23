@@ -30,7 +30,8 @@ export function DocDagNode({
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2 !w-2 !border-none !bg-[color:var(--color-faint)]"
+        className="!h-px !w-px !min-h-0 !min-w-0 !border-none !bg-transparent !opacity-0"
+        isConnectable={false}
       />
       <div className="flex items-center justify-between gap-2">
         <span
@@ -56,7 +57,8 @@ export function DocDagNode({
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!h-2 !w-2 !border-none !bg-[color:var(--color-faint)]"
+        className="!h-px !w-px !min-h-0 !min-w-0 !border-none !bg-transparent !opacity-0"
+        isConnectable={false}
       />
     </div>
   );
