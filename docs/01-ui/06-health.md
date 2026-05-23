@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/06-health`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-23)
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-23 (implementation)
+**Last Updated:** 2026-05-23 (promotion)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/02-dag` (dep-impact preview reuses `DocNode`/`NodeId` types), `01-ui/08-markdown` (declared as a planned consumer per D9 — `<MarkdownBody>` is not invoked in v1; issue items render as plain text)
