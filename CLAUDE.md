@@ -6,6 +6,7 @@ This repo is the implementation of an LLM project framework: a document-driven, 
 
 - **`docs/00-project.md`** — project root / PRD. Read first for vision, scope, and architectural decisions. Its §14 holds the top-level children manifest.
 - **`docs/01-ui/00-ui.md`** — UI parent doc. Stack decisions, project layout, conventions, and the UI children manifest (current node + planned round-2 panels).
+- **`docs/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving a node through its lifecycle.
 - The implementation lives at **`app/`** (Vite + React + TS).
 
 ## Documentation discipline
