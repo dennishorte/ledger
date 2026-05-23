@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/03-docs`
 **Parent:** `01-ui`
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -84,12 +84,12 @@ LLM Project Framework                        [DRAFT]
 └─ 01-ui                                     [APPROVED]
    ├─ 01-shell                               [COMPLETE]
    ├─ 02-dag                                 [COMPLETE]
-   ├─ 03-docs                                [DRAFT]            ← self
+   ├─ 03-docs                                [APPROVED]         ← self
    ├─ 04-tasks                               [PLANNED]
    ├─ 05-logs                                [PLANNED]
    ├─ 06-health                              [DRAFT]
    ├─ 07-replay                              [PLANNED]
-   └─ 08-markdown                            [VERIFY]
+   └─ 08-markdown                            [COMPLETE]
 ```
 
 Each row: indent by depth, monospace id, plain title to its right, status chip on the far right. Each row is a `<Link to={`/docs/${encodeURIComponent(id)}`}>`. PLANNED rows are styled muted/dashed to match their DAG appearance.

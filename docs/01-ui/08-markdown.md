@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/08-markdown`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-22)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
