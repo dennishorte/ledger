@@ -103,6 +103,7 @@ function detectImplementationReview(raw: string): string | null {
 function computeStageState(
   stage: WorkflowStage,
   statusRank: number,
+  currentStatus: NodeStatus,
   authored: boolean,
   raw: string | null,
 ): WorkflowStageState {
@@ -113,11 +114,14 @@ function computeStageState(
   }
 
   if (stageRank === statusRank) {
-    return {
-      stage,
-      completion: "CURRENT",
-      evidence: `Status header is ${stage}`,
-    };
+    // When the actual status differs from the stage name (e.g. ISSUE_OPEN
+    // coerces to APPROVED-rank per D12), name the real status so the evidence
+    // does not contradict the issue-open banner.
+    const evidence =
+      currentStatus === stage
+        ? `Status header is ${stage}`
+        : `Status header is ${currentStatus} (placed at ${stage})`;
+    return { stage, completion: "CURRENT", evidence };
   }
 
   // stageRank < statusRank: stage is in the past — check structural marker.
@@ -232,12 +236,14 @@ export function deriveWorkflowProgress(
     const draftState = computeStageState(
       "DRAFT",
       parentStatusRank,
+      currentStatus,
       node.authored,
       raw,
     );
     const approvedState = computeStageState(
       "APPROVED",
       parentStatusRank,
+      currentStatus,
       node.authored,
       raw,
     );
@@ -268,7 +274,7 @@ export function deriveWorkflowProgress(
 
   // Step 4: compute each stage.
   const stages: WorkflowStageState[] = CANONICAL_STAGES.map((stage) =>
-    computeStageState(stage, statusRank, node.authored, raw),
+    computeStageState(stage, statusRank, currentStatus, node.authored, raw),
   );
 
   return {

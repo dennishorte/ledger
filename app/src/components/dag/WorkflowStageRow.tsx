@@ -23,7 +23,7 @@ function StageIcon({ completion }: { completion: StageCompletion }): JSX.Element
     case "DONE":
       return (
         <Check
-          className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-success,#4a7c59)]"
+          className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-success)]"
           aria-hidden
         />
       );

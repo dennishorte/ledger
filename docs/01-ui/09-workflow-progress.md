@@ -42,9 +42,9 @@ The section must:
 Phase-1 reuses the two build-time sources already in place:
 
 1. **`DocNode`** via `useDocGraph()` — gives `status`, `dependsOn`, `authored`, and children edges. No new parsing.
-2. **Raw markdown body** via `useDocSource(id)` — returns `DocSource | undefined` (the wrapper type from `src/lib/types.ts`). The call site unwraps to `source?.raw ?? null` before passing to `deriveWorkflowProgress(node, raw)`. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
+2. **Raw markdown body** via `useDocSource(id)` — returns `DocSource | undefined` (the wrapper type from `src/lib/types.ts`). The call site unwraps to `source?.raw ?? null` before passing to `deriveWorkflowProgress(node, allNodes, raw)`. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
 
-No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, raw)` is the single point of derivation.
+No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, allNodes, raw)` is the single point of derivation.
 
 > **`NodeStatus` already includes every state we need.** `src/lib/types.ts` line 16 includes `SPEC_REVIEW` in the `NodeStatus` union; verified at spec-review time (audit N6 below). No type extension needed — the implementer can rely on the existing union as-is.
 
@@ -335,6 +335,29 @@ The chunk-size warning (>500 kB) was already present in the baseline; no new chu
 - Parent detection: `allNodes.filter(n => n.parentId === node.id)` mirrors the existing `NodeInspector.tsx:14` pattern exactly.
 
 **Deviations from spec:** None structural. The evidence-string colour token choice (muted vs faint) is the only presentational deviation, recorded above.
+
+### Implementation Review (2026-05-23)
+
+Independent clean-context implementation review was run against this worktree post-rebase. Verdict: READY_FOR_OPERATOR_VERIFICATION (one should-fix, two nits). All Spec Review closures (S1–S3, N1–N6) verified honoured. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F1 | When `currentStatus === "ISSUE_OPEN"`, the APPROVED row's evidence read `"Status header is APPROVED"` — contradicting the banner that says the issue is open. The status header actually reads `ISSUE_OPEN`. | `computeStageState` now receives the original `currentStatus` as an extra parameter. When `stageRank === statusRank` and `currentStatus !== stage`, the evidence reads `"Status header is <currentStatus> (placed at <stage>)"`. Banner + evidence now agree. Three call sites updated. |
+| N1 | Spec doc §Design > Data source still referenced the two-arg `deriveWorkflowProgress(node, raw)` on line 45 and 47 after audit N4 expanded the signature to three args. | Updated both occurrences to `deriveWorkflowProgress(node, allNodes, raw)`. Stage derivation rules section already had the three-arg form. |
+| N2 | `WorkflowStageRow.tsx:26` used `text-[color:var(--color-success,#4a7c59)]` with a fallback value. `--color-success` is unconditionally defined in `globals.css:23`; the fallback was dead code and inconsistent with every other token usage in the codebase. | Removed the `,#4a7c59` fallback. |
+
+Bundle-delta numbers also refreshed below — the implementer's table was off by ~3.7 kB uncompressed JS due to Vite content-hash non-determinism between baseline-build environments (same root cause as `06-health` audit N1). The original Implementation Notes bundle-delta table above is superseded by this refreshed table.
+
+**Refreshed bundle delta** (final build after F1+N1+N2):
+
+| Asset | Baseline (`df3e427`) | This build | Delta |
+|-------|----------------------|------------|-------|
+| `index-*.js` (uncompressed) | 971,533 B | 981,990 B | +10,457 B (+1.1%) |
+| `index-*.js` (gzip) | 311.66 kB | 314.59 kB | +2.93 kB |
+| `index-*.css` (uncompressed) | 40,422 B | 40,920 B | +498 B (+1.2%) |
+| `index-*.css` (gzip) | 7.98 kB | 8.05 kB | +0.07 kB |
+
+Gates re-run after the audit fixes: `typecheck`, `lint`, `build` all exit zero.
 
 ---
 
