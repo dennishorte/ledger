@@ -1,7 +1,7 @@
 # Leaf-node Implementation Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-05-22
+**Last Updated:** 2026-05-23
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
 
@@ -21,7 +21,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
                                             (back to APPROVED or DRAFT)
 ```
 
-The stages below traverse this state machine.
+Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back.
 
 ---
 
@@ -44,7 +44,9 @@ Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md
 
 Add the new node to its parent's children manifest in the same commit.
 
-### 2. Spec review — dispatch a reviewer in clean context
+### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
+
+Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. SPEC_REVIEW is a real lifecycle state per PRD §6.2: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
 
 Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) and brief it:
 
@@ -53,11 +55,11 @@ Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) an
 - Evaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment.
 - Output shape: structured review with **Verdict** (`READY_FOR_APPROVAL` / `NEEDS_MINOR_REVISIONS` / `NEEDS_MAJOR_REVISIONS`), coverage matrix per the relevant PRD section, findings grouped by severity (Blocking / Should-fix / Nit) with concrete suggested fixes.
 
-The reviewer runs in clean context so it can give independent judgment. This is the framework's mitigation for the self-audit problem (PRD §11). The agent that wrote the spec cannot reliably check its own work.
+The reviewer runs in clean context so it can give independent judgment — the framework's mitigation for the self-audit problem (PRD §11). The agent that wrote the spec cannot reliably check its own work.
 
-**Shortcut allowed:** if the spec is small, well-established, and you (the operator) trust it cold, you can skip this stage and go straight to step 4. The implementation review (step 6) is the mandatory gate, not the spec review.
+**Shortcut allowed:** if the spec is small, well-established, and you (the operator) trust it cold, skip this stage. Set Status directly to APPROVED with a note in the commit message that no formal review was run. The implementation review (stage 6) is the mandatory gate, not the spec review.
 
-### 3. Apply easy fixes; record the audit
+### 3. Apply easy fixes; record audit; SPEC_REVIEW → APPROVED
 
 Apply every Should-fix and Nit that is a mechanical text change. Punt anything requiring structural rewrites or substantive judgment back to the conversation for the operator's call. Add a **Spec Review (YYYY-MM-DD)** section between Open Issues and Implementation Notes with an audit table:
 
@@ -67,13 +69,11 @@ Apply every Should-fix and Nit that is a mechanical text change. Punt anything r
 | S1 | ... | ... |
 ```
 
-The audit table stays in the doc as durable provenance — the implementing agent in step 5 will read it to know what was already decided.
+The audit table stays in the doc as durable provenance — the implementing agent in stage 4 will read it to know what was already decided.
 
-### 4. DRAFT → APPROVED
+With the audit landed, bump Status SPEC_REVIEW → APPROVED. Update the parent's children manifest row. Update cross-doc summary lines (CLAUDE.md round-2 line, PRD §14 parent status note, sibling sample-tree pictures). Single commit covers all of these — the framework's "doc-and-code must agree" rule (CLAUDE.md) extends to "all doc tree references to a node must agree."
 
-The review pass replaces the formal SPEC_REVIEW lifecycle stop. Bump the spec's Status header DRAFT → APPROVED. Update the parent's children manifest row. Update cross-doc summary lines that reference the prior state (CLAUDE.md round-2 line, PRD §14 parent status note, sibling sample-tree pictures if any). Single commit.
-
-### 5. APPROVED → IN_PROGRESS → VERIFY (implementer in isolated worktree)
+### 4. APPROVED → IN_PROGRESS → VERIFY — implementer in isolated worktree
 
 Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
 
@@ -87,22 +87,38 @@ Why worktree isolation:
 
 - Prevents conflicts when work happens in parallel with other agents or with main-branch changes.
 - Gives the agent a clean directory to write tests, fixtures, and intermediate files without polluting main.
-- Lets the operator inspect via `git diff main..HEAD` before merging. A merge artifact that looks like "main-only files were deleted" is usually a branch-divergence artifact — the actual merge preserves them.
+- Lets the operator inspect via `git diff` before merging, and abort or retry without main-branch consequences.
 
-### 6. Implementation review — reviewer against the worktree diff
+### 5. Rebase the worktree onto main HEAD
 
-Same pattern as step 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the worktree branch. Evaluation criteria expand to include:
+After the implementer reports "done", rebase the worktree branch onto current main:
 
-- **Spec conformance** — especially the Spec Review closures from step 3, since those were known risk areas.
+```bash
+git -C /path/to/worktree rebase main
+```
+
+Rationale: the worktree was branched from main at the time of dispatch. While the implementer worked, main may have advanced (other merges, PRD edits, doc-sync commits). Without rebasing, the next stage's `git diff main..HEAD` shows main-only files as **deletions** — a branch-divergence artifact that confuses reviewers (we hit this with the 08-markdown reviewer flagging the "deletion" of `06-health.md` as a `Blocking` finding). Rebasing eliminates the artifact at the source: the diff becomes clean, containing only the worktree's actual additions and modifications.
+
+If the rebase has conflicts, resolve them now — they are the same conflicts the merge would surface, found earlier. Verify the rebased worktree still builds clean (`pnpm typecheck` / `lint` / `build`) before moving on. If conflicts touch the work substantively (not just status-header churn), consider whether the implementer needs another pass.
+
+This stage also tests the **multi-worktree shared-file gap** (see Known Limitations below): if main has changed a file your worktree also changed, the conflict surfaces here.
+
+### 6. Implementation review — reviewer against the rebased worktree diff
+
+Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the (now-rebased) worktree branch. Because the diff is clean post-rebase, the reviewer can use `git diff main..HEAD` directly without artifact confusion.
+
+Evaluation criteria expand to include:
+
+- **Spec conformance** — especially the Spec Review closures from stage 3, since those were known risk areas.
 - **Build/lint/typecheck** — run them; report exit codes and bundle numbers.
 - **Code discipline** — no `any`, no suppressions (especially `eslint-disable-next-line ...`), no `console.log`, no dead code.
-- **Bundle delta sanity** — compare to the named baseline from step 5.
+- **Bundle delta sanity** — compare to the named baseline from stage 4.
 - **Regression checks** for any shared infrastructure the node touched (e.g., DAG panel if shared types or parser logic changed).
 - **Anything the implementer's report glossed over.**
 
 ### 7. Apply easy review fixes in the worktree; record the audit
 
-Same pattern as step 3. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance.
+Same pattern as stage 3. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance.
 
 If the implementation diverged from the spec in a way the operator approves, update the spec in the same commit. "Doc and code must agree" (CLAUDE.md) is honoured by updating whichever side drifted; silent divergence is not.
 
@@ -118,6 +134,15 @@ Port 4179 is pinned with `strictPort: true` in `vite.config.ts`. If something el
 
 Walk the spec's Acceptance check items in the browser. UI changes need human eyes — `typecheck` / `lint` / `build` verify *code correctness*, not *feature correctness*. The mandatory gate before COMPLETE is operator sign-off, not green checks.
 
+#### 8b. If verification finds bugs — VERIFY → ISSUE_OPEN, loop back
+
+Bump Status VERIFY → ISSUE_OPEN. File the discovered bugs into the spec's Open Issues with priority tags. Pick the re-entry point:
+
+- **Mechanical fixes inside the implementation:** re-enter at stage 4 with a brief patch task. The implementer (same or new agent) addresses the issues; a new dated subsection joins Implementation Notes documenting what was fixed.
+- **Spec was wrong:** re-enter at stage 1 (revise the spec, then re-run stage 2's review pass). The original Spec Review and Implementation Review audit tables stay; the new spec revisions land alongside.
+
+Either way the loop-back is durable in the doc: a future reader can trace exactly when ISSUE_OPEN was entered, what was found, and what was done about it. Status transitions through ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY → COMPLETE on the second pass mirror the original promotion path.
+
 ### 9. VERIFY → COMPLETE in the worktree
 
 Once verification passes, bump:
@@ -128,29 +153,33 @@ Once verification passes, bump:
 
 Single commit in the worktree.
 
-### 10. Merge with `--no-ff`
+### 10. Merge `--no-ff` — bundle the cross-doc sync into the merge commit
 
 ```bash
 git -C /path/to/main merge --no-ff --no-commit <worktree-branch>
 ```
 
-The `--no-commit` lets you inspect the merge tree first. Expect conflicts only on lines both halves edited — typically the parent manifest row (main has APPROVED, worktree has VERIFY/COMPLETE; auto-merge resolves cleanly because the lifecycle progresses monotonically).
+The `--no-commit` lets you inspect the merge tree and **apply cross-doc summary updates before the merge commit lands**. With the worktree already rebased (stage 5), the merge surface is essentially the worktree's commits — minimal conflict potential.
 
-Run `pnpm typecheck` / `lint` / `build` on the merged tree before committing the merge. If they pass, finalise: `git -C /path/to/main commit -m "..."`.
-
-`--no-ff` preserves the per-step provenance (implement → review → promote) as a merge bubble in the log. A squash flattens it; only do that if you explicitly want a linear history.
-
-### 11. Post-merge doc sync
-
-Cross-doc summary lines that referenced the node's prior state need updating:
+While the merge is uncommitted, edit:
 
 - `CLAUDE.md` round-2 panels line (or equivalent project-state summary).
 - `docs/00-project.md` §14's parent-node status note.
 - Sibling sample-tree pictures that show this node's status.
 
-One commit. Easy to overlook because the worktree doesn't touch these files (they're outside its concern) and the merge doesn't flag them as conflicts.
+These files weren't touched by the worktree (they're outside its concern) and the merge doesn't flag them as conflicts. Bundling them into the merge commit gives one atomic transition: main never sits in a half-updated state with a COMPLETE node and stale top-level summaries.
 
-### 12. Worktree cleanup
+Run `pnpm typecheck` / `lint` / `build` on the merged + synced tree. If they pass:
+
+```bash
+git -C /path/to/main commit -m "Merge <branch>: <node-id> → COMPLETE + doc sync"
+```
+
+The merge bubble in the log now contains both the merge and the doc sync.
+
+`--no-ff` preserves the per-step provenance (implement → review → promote) as a merge bubble. A squash flattens it; only do that if you explicitly want a linear history.
+
+### 11. Worktree cleanup
 
 Once merged:
 
@@ -162,7 +191,11 @@ Once merged:
 
 ## Patterns to lean on
 
-- **Reviewer in clean context** (steps 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it.
+- **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
+
+- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it.
+
+- **Rebase before review** (stage 5). Eliminates the branch-divergence "deletion" artifact and surfaces merge conflicts early. Reviewer sees a clean diff; the merge in stage 10 is mechanical.
 
 - **Audit tables as durable provenance.** Spec reviews land in a "Spec Review (YYYY-MM-DD)" section between Open Issues and Implementation Notes. Implementation reviews land in an "Implementation Review (YYYY-MM-DD)" subsection of Implementation Notes. Both stay in the doc forever — future implementing agents on related nodes will read them.
 
@@ -170,9 +203,17 @@ Once merged:
 
 - **Worktree-per-implementation.** Every implementing agent runs in its own worktree. Worktrees can run in parallel (operator dispatches multiple at once for independent nodes), can outlive a single conversation, and isolate failed attempts from main.
 
-- **Promotion bundles doc-and-code.** Status header, parent manifest row, sample-tree pictures, top-level summaries — all change together in one commit. Drift in any of them is a smell.
+- **Promotion bundles doc-and-code.** Status header, parent manifest row, sample-tree pictures, top-level summaries — all change together in one commit. Stage 3 (DRAFT→APPROVED) and stage 10 (merge + cross-doc sync) both bundle the ripple-effect edits with the primary state change. Drift in any of them is a smell.
 
-- **Operator sign-off is the COMPLETE gate.** Not the reviewer agent. Not the typecheck. The human walks the acceptance check in the browser.
+- **Operator sign-off is the COMPLETE gate.** Not the reviewer agent. Not the typecheck. The human walks the acceptance check in the browser. Stage 8b is the explicit answer for "what if the human says no."
+
+---
+
+## Known limitations
+
+- **Parallel-worktree shared-file conflicts.** When two worktrees touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. Stage 5's rebase surfaces the conflict, but resolving it is manual operator work and the second-to-merge worktree may need to rebase against changes it didn't anticipate. Today's mitigation: when dispatching parallel implementers, pick nodes whose data contracts don't overlap. The eventual fix is PRD §6.3's resource-claim model — the task DAG refuses to schedule conflicting writes. Tracked as an open issue in PRD §11.
+
+- **Worktree staleness during long runs.** A worktree dispatched against main HEAD at time T can drift if main advances substantially before the implementer finishes. Stage 5's rebase pulls it back into alignment, but if main has changed the very file the implementer rewrote, the rebase can be substantial. Today: keep dispatches scoped tight so they finish in minutes, not hours.
 
 ---
 
@@ -180,11 +221,13 @@ Once merged:
 
 Most of this is hand-driven today because the orchestration substrate (PRD §7) does not exist yet. When it does:
 
-- Step 2 (spec review) becomes a `spec_review` task that the task runner dispatches.
-- Step 5 (implementation) becomes an `implement` task with declared resource claims on the node's doc + relevant source files.
-- Step 6 (implementation review) becomes a `verify` task — possibly with a separate reviewer-agent persona (MetaGPT-style role specialisation, see PRD §4.1).
-- Step 8 (operator manual verification) becomes a `human_review` task gate that pauses the runner and surfaces the diff for explicit approval.
-- Step 11 (post-merge doc sync) is partially automated by the health daemon's staleness checks (PRD §6.4).
-- Step 12 (worktree cleanup) becomes the task runner's normal lifecycle teardown.
+- Stage 2 (spec review) becomes a `spec_review` task that the task runner dispatches; SPEC_REVIEW state becomes meaningful to other queued tasks.
+- Stage 4 (implementation) becomes an `implement` task with declared resource claims on the node's doc + relevant source files. Resource claims address the multi-worktree shared-file gap.
+- Stage 5 (rebase) becomes implicit — the task runner schedules implementers against the current state, no drift.
+- Stage 6 (implementation review) becomes a `verify` task — possibly with a separate reviewer-agent persona (MetaGPT-style role specialisation, see PRD §4.1).
+- Stage 8 (operator manual verification) becomes a `human_review` task gate that pauses the runner and surfaces the diff for explicit approval.
+- Stage 8b (ISSUE_OPEN loop-back) becomes an automatic task-runner transition: failed `human_review` enqueues a follow-up `implement` task with the operator's findings as input.
+- Stage 10's cross-doc sync is partially automated by the health daemon's staleness checks (PRD §6.4).
+- Stage 11 (worktree cleanup) becomes the task runner's normal lifecycle teardown.
 
-The *shape* of the workflow — review-in-clean-context, audit-trail, isolated-implementation, merge-with-provenance — stays the same. The orchestration layer just removes the operator from the per-step driving.
+The *shape* of the workflow — review-in-clean-context, audit-trail, isolated-implementation, rebase-before-review, merge-with-provenance — stays the same. The orchestration layer just removes the operator from the per-step driving.

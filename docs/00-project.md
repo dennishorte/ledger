@@ -2,7 +2,7 @@
  
 **Status:** Draft  
 **Version:** 0.4  
-**Last Updated:** 2026-05-22  
+**Last Updated:** 2026-05-23  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
 v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).
@@ -268,6 +268,7 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 - **LangGraph resource-locking compatibility** — Verify that LangGraph's typed state model can express our arbitrary document-node resource claims without requiring significant workarounds. Prototype required before architectural commitment. *(Priority: HIGH, blocks task runner design)*
 - **Self-audit problem** — The same agent writing the spec checks its own code against it. Mitigations: separate reviewer agent with a clean context window; structured per-requirement sign-off checklist format. Approach not yet decided. *(Priority: HIGH, blocks verification design)*
 - **Decomposition termination criteria** — Need explicit rules for when a node is too small to decompose further (minimum task size, depth limit, complexity threshold). Without this, recursive decomposition produces unnavigable trees. *(Priority: MEDIUM)*
+- **Parallel-worktree shared-file conflicts (Phase-1 manual workflow only)** — When two implementers run in parallel worktrees and both touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. The operator currently picks dispatches whose data contracts don't overlap, or accepts that the second-to-merge worktree will surface the conflict at rebase time (`docs/leaf-workflow.md` stage 5). The eventual fix is §6.3's resource-claim model on the task DAG, which refuses to schedule conflicting writes. *(Priority: MEDIUM — mitigated by current single-operator scale; revisit when parallel dispatch frequency grows.)*
 ---
  
 ## 12. Reference Projects
