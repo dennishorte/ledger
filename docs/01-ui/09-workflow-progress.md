@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** ISSUE_OPEN
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (IN_PROGRESS → VERIFY)
+**Last Updated:** 2026-05-23 (VERIFY → ISSUE_OPEN — see Open Issues V1)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
@@ -270,6 +270,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each 
 - **Evidence strings are English-only.** No i18n scaffolding; matches the rest of the app. Revisit when/if i18n becomes a project goal. *(Priority: TRIVIAL.)*
 - **Structural marker regex fragility.** Same risk as `06-health`'s issue-priority regex (06-health Open Issues): a doc with a non-canonical heading (extra whitespace, missing parens around the date) silently drops the DONE evidence and triggers SKIPPED. The mitigation matches 06-health's: enforce the doc convention in a future lint rule. Cross-link to `06-health` Open Issue on regex fragility. *(Priority: LOW.)*
 - **Inspector section ordering.** This section sits below existing per-node metadata in v1. If a future operator request says "I want Workflow above everything else", trivial reorder. No data implication. *(Priority: TRIVIAL.)*
+- **V1: COMPLETE row renders CURRENT (`●`) instead of DONE (`✓`) on COMPLETE-status nodes.** Operator verification (stage 8, first pass) caught this on `01-ui/06-health`. Root cause: `computeStageState` returns CURRENT whenever `stageRank === statusRank`, but COMPLETE is the terminal state — there is no "currently at COMPLETE." Spec Acceptance check #1 explicitly calls for "all six rows DONE" on a COMPLETE node, so the existing algorithm contradicts the spec. Fix: special-case `stage === "COMPLETE"` in the rank-equal branch to return DONE. *(Priority: HIGH — blocking re-verification.)*
 
 ---
 
