@@ -61,7 +61,12 @@ export function deriveStaleness(
     }
 
     const isStale = reason !== "";
-    signals.push({ nodeId: node.id, isStale, reason });
+    signals.push({
+      nodeId: node.id,
+      isStale,
+      reason,
+      issueCount: issues.length,
+    });
   }
 
   return signals;

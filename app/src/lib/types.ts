@@ -81,6 +81,8 @@ export interface StalenessSignal {
   isStale: boolean;
   /** Human-readable reason, e.g. "Status is ISSUE_OPEN" or "2 HIGH-priority open issues". */
   reason: string;
+  /** Total open-issue count on this node (any priority). Used as a tertiary sort key. */
+  issueCount: number;
 }
 
 /**

@@ -21,7 +21,7 @@ const STATUS_ORDER: Record<string, number> = {
   VERIFY: 1,
 };
 
-function sortKey(_signal: StalenessSignal, node: DocNode | undefined): number {
+function statusRank(node: DocNode | undefined): number {
   return STATUS_ORDER[node?.status ?? ""] ?? 2;
 }
 
@@ -33,9 +33,10 @@ export function StalenessWidget({
   const nodeById = new Map<NodeId, DocNode>(nodes.map((n) => [n.id, n]));
 
   const sorted = [...staleness].sort((a, b) => {
-    const aOrder = sortKey(a, nodeById.get(a.nodeId));
-    const bOrder = sortKey(b, nodeById.get(b.nodeId));
-    if (aOrder !== bOrder) return aOrder - bOrder;
+    const aRank = statusRank(nodeById.get(a.nodeId));
+    const bRank = statusRank(nodeById.get(b.nodeId));
+    if (aRank !== bRank) return aRank - bRank;
+    if (a.issueCount !== b.issueCount) return b.issueCount - a.issueCount;
     return a.nodeId.localeCompare(b.nodeId);
   });
 
@@ -73,8 +74,12 @@ export function StalenessWidget({
             <span className="shrink-0 font-mono text-xs text-[--color-muted]">
               {signal.nodeId}
             </span>
+            {/* Title */}
+            <span className="min-w-0 shrink-0 truncate text-xs text-[--color-fg]">
+              {node?.title ?? ""}
+            </span>
             {/* Reason */}
-            <span className="min-w-0 flex-1 text-xs text-[--color-fg]">
+            <span className="min-w-0 flex-1 truncate text-xs text-[--color-faint]">
               {signal.reason}
             </span>
             {/* Status chip */}

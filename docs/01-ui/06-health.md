@@ -160,7 +160,7 @@ Single-page dashboard. No tabs. Four widgets stacked in a 2 × 2 CSS grid at `md
 └──────────────────────┴──────────────────────┘
 ```
 
-Each widget is a card with a title, optional subtitle/badge, and a content region. Card chrome is consistent: a `1px` border in `--color-border`, rounded corners, cream background, `p-4` internal padding, heading in `text-sm font-semibold text-[--color-text-muted]` uppercase.
+Each widget is a card with a title, optional subtitle/badge, and a content region. Card chrome is consistent: a `1px` border in `--color-border`, rounded corners, cream background, `p-4` internal padding, heading in `text-sm font-semibold text-[--color-muted]` uppercase.
 
 ### Components and files
 
@@ -327,6 +327,31 @@ Gzip totals reported by Vite: JS 300.11 kB, CSS 7.96 kB. The chunk-size warning 
 - `parseIssueItems` handles absent `## Open Issues` section (returns `[]`) and bullet extraction with priority regex.
 
 **Deviations from spec:** Only the hook-loop deviation described above. Recorded here; no doc-level spec change needed (the code comment at the call site is the durable record per the spec's own HOOK-RULES NOTE).
+
+### Implementation Review (2026-05-23)
+
+Independent implementation review was run against this worktree post-rebase. Verdict: READY_FOR_OPERATOR_VERIFICATION (two should-fix, four nits). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F1 | `StalenessWidget` rendered only `id | reason | chip` — spec calls for `id | title | reason | chip`. | Added title column to `StalenessWidget.tsx`; reason demoted to `--color-faint` to keep the row visually weighted toward the title. |
+| F2 | `StalenessWidget` tertiary sort was `nodeId.localeCompare`, not "issue count descending" per spec. | Added `issueCount: number` to `StalenessSignal`; `deriveStaleness` populates it from `issues.length`; `StalenessWidget` sorts by `issueCount` descending before falling back to id. The renamed `sortKey` → `statusRank` reflects its single responsibility (the value-arg was unused, dropped). |
+| N1 | Reported bundle delta (+29,282 B) differs from measured (+32,568 B) due to build-time hash non-determinism. | Bundle-delta table refreshed below from the final build of this worktree. |
+| N2 | `sortKey(_signal, node)` had an unused first parameter. | Subsumed by F2 — function renamed `statusRank(node)`, no unused arg. |
+| N3 | `nodeById` in `StalenessWidget` not memoized (cosmetic; widget is small and re-renders rarely). | Skipped. Node list is small (≤50); inconsistency with `DepImpactWidget`'s memoization is not load-bearing. |
+| N4 | `DepImpactWidget` affected-list sort is `id.localeCompare`, not depth-first. | Skipped. The project's id naming scheme (`parent/child`, with `/` 0x2F sorting before any letter/digit) makes alphabetical equivalent to DFS for current trees: `01-ui` < `01-ui/01-shell` < `01-ui/02-dag`. If a future id scheme breaks this assumption, revisit. |
+| Op-1 | Spec referenced `--color-text-muted` (does not exist as a token); implementation correctly used `--color-muted`. | Spec updated: `text-[--color-text-muted]` → `text-[--color-muted]` in §Design > Layout. |
+
+**Refreshed bundle delta** (final build after F1+F2):
+
+| Asset | Baseline (`2be1df9`) | This build | Delta |
+|-------|----------------------|------------|-------|
+| `index-*.js` (uncompressed) | 904,713 B | 939,830 B | +35,117 B (+3.9%) |
+| `index-*.js` (gzip) | — | 301.84 kB | — |
+| `index-*.css` (uncompressed) | 37,348 B | 40,348 B | +3,000 B (+8.0%) |
+| `index-*.css` (gzip) | — | 7.96 kB | — |
+
+The original Implementation Notes bundle-delta table above is superseded by this refreshed table.
 
 ---
 
