@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/03-docs`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-22)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-22
 
@@ -84,7 +84,7 @@ LLM Project Framework                        [DRAFT]
 └─ 01-ui                                     [APPROVED]
    ├─ 01-shell                               [COMPLETE]
    ├─ 02-dag                                 [COMPLETE]
-   ├─ 03-docs                                [VERIFY]           ← self
+   ├─ 03-docs                                [COMPLETE]         ← self
    ├─ 04-tasks                               [PLANNED]
    ├─ 05-logs                                [PLANNED]
    ├─ 06-health                              [DRAFT]
