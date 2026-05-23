@@ -15,7 +15,6 @@
  */
 
 import type { JSX } from "react";
-import { useCallback } from "react";
 import { Link } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import type { DocNode, DocSource, NodeId } from "@/lib/types";
@@ -184,6 +183,18 @@ interface DocViewerProps {
  */
 const SCROLL_MARGIN = "120px";
 
+/**
+ * Doc-tree-aware link resolver (D3). Module-level because `idForPath` is a
+ * pure module-stable function — there's nothing to close over, so a hooked
+ * callback would only add ceremony. Reference identity is stable across
+ * every render, which keeps `<MarkdownBody>`'s components memoisation effective.
+ */
+function resolveDocLink(href: string): string | null {
+  const id: NodeId | null = idForPath(href);
+  if (id === null) return null;
+  return `/docs/${encodeURIComponent(id)}`;
+}
+
 export function DocViewer({ node, source }: DocViewerProps): JSX.Element {
   // ── 404 ──────────────────────────────────────────────────────────────────
   if (node === undefined) {
@@ -205,18 +216,6 @@ export function DocViewer({ node, source }: DocViewerProps): JSX.Element {
   }
 
   const isManifestOnly = !node.authored;
-
-  // ── Link resolver — doc-tree-aware (D3) ──────────────────────────────────
-  // Defined as a stable callback so MarkdownBody memoisation stays effective.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const resolveDocLink = useCallback(
-    (href: string): string | null => {
-      const id: NodeId | null = idForPath(href);
-      if (id === null) return null;
-      return `/docs/${encodeURIComponent(id)}`;
-    },
-    [], // idForPath is pure and module-stable; no deps needed
-  );
 
   // ── Authored viewer ───────────────────────────────────────────────────────
   return (

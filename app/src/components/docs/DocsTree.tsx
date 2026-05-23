@@ -45,12 +45,19 @@ const treeMap = buildTree(allNodes);
 interface TreeRowProps {
   node: DocNode;
   depth: number;
+  isLastSibling: boolean;
   childMap: Map<NodeId | null, DocNode[]>;
 }
 
-function TreeRow({ node, depth, childMap }: TreeRowProps): JSX.Element {
+function TreeRow({
+  node,
+  depth,
+  isLastSibling,
+  childMap,
+}: TreeRowProps): JSX.Element {
   const isPlanned = node.status === "PLANNED";
   const children = childMap.get(node.id) ?? [];
+  const lastIdx = children.length - 1;
 
   return (
     <>
@@ -66,13 +73,13 @@ function TreeRow({ node, depth, childMap }: TreeRowProps): JSX.Element {
               : "text-[color:var(--color-fg)]",
           ].join(" ")}
         >
-          {/* Indent leader */}
+          {/* Indent leader: ├─ for non-last siblings, └─ for the last */}
           {depth > 0 && (
             <span
               className="select-none font-mono text-[color:var(--color-faint)]"
               aria-hidden
             >
-              {"└─"}
+              {isLastSibling ? "└─" : "├─"}
             </span>
           )}
 
@@ -104,11 +111,12 @@ function TreeRow({ node, depth, childMap }: TreeRowProps): JSX.Element {
       </li>
 
       {/* Recurse for children */}
-      {children.map((child) => (
+      {children.map((child, idx) => (
         <TreeRow
           key={child.id}
           node={child}
           depth={depth + 1}
+          isLastSibling={idx === lastIdx}
           childMap={childMap}
         />
       ))}
@@ -150,11 +158,12 @@ export function DocsTree(): JSX.Element {
       {/* Tree list */}
       <div className="flex-1 overflow-y-auto px-2 py-3">
         <ul className="space-y-0.5 list-none p-0 m-0">
-          {roots.map((root) => (
+          {roots.map((root, idx) => (
             <TreeRow
               key={root.id}
               node={root}
               depth={0}
+              isLastSibling={idx === roots.length - 1}
               childMap={treeMap}
             />
           ))}

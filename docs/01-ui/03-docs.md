@@ -251,12 +251,27 @@ Nothing punted. All findings applied. Audit table retained so the implementing a
 - `useDocSource` builds its internal `NodeId → raw` map by converting absolute Vite glob keys back to the `docs/…` relative form (via `indexOf("/docs/")`) and then calling `idForPath`. This mirrors `parseDocs.ts`'s own strategy rather than duplicating the stripping logic.
 - `DocsTree` calls `loadDocNodes()` at module scope (same pattern as `DagCanvas`). The tree map is also computed at module scope for zero-cost re-renders.
 - `DocViewerPanel` calls `loadDocNodes()` at module scope to avoid re-parsing on every render; `allNodes.find()` is called per render (array is small, no perf concern at current scale).
-- The `resolveDocLink` callback in `DocViewer` is wrapped in `useCallback` with an empty dep array — `idForPath` is pure and module-stable, so this is safe and keeps `<MarkdownBody>`'s `useMemo` stable.
+- `resolveDocLink` is a **module-level function**, not a hooked callback (post-review fix; see Implementation Review R1). `idForPath` is pure and module-stable, so closing over component state isn't required; the module-level form gives a permanently stable reference for free without any hook ceremony.
 - `SCROLL_MARGIN = "120px"` is a named constant in `DocViewer.tsx` to make the sticky-header coupling explicit and easy to adjust if the header grows.
+- `DocsTree` row leaders use `├─` for non-last siblings and `└─` for the last, matching the spec's design diagram (post-review fix; see Implementation Review R2). Sibling index is threaded through `TreeRow` via an `isLastSibling` prop.
 
 **Bundle delta:** baseline 722.84 KB raw / 234.35 KB gzip → 899.71 KB raw / 289.11 KB gzip. Delta: **+176.87 KB raw / +54.76 KB gzip**. Within spec estimate (+170 KB / +55 KB). The four `react-markdown` deps (previously tree-shaken) are now live. Pre-existing >500 kB chunk warning unchanged; no threshold bump.
 
 **Deviations from spec:** None. All spec decisions (D1–D10, S1–S3) implemented as specified.
+
+---
+
+### Implementation Review (2026-05-22)
+
+Independent code review against the implementation produced one Should-fix and two Nits. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | `useCallback` for `resolveDocLink` was placed after a conditional early return on the 404 path, requiring an `eslint-disable-next-line react-hooks/rules-of-hooks` suppression to ship. | Hoisted out of the component entirely. `resolveDocLink` is now a module-level function — `idForPath` closes over nothing, so the hook ceremony was unnecessary. Removed the suppression comment. Reference identity is stable across renders automatically. |
+| R2 | `DocsTree` row leaders rendered `└─` for every non-root row, never `├─`. Cosmetic deviation from the spec's design diagram. | Threaded an `isLastSibling: boolean` prop through `TreeRow`; the iterator at every level passes `idx === lastIdx`. Rows now display `├─` for non-last siblings and `└─` for the last. |
+| N1 | `useDocSource.ts` introduces a second `import.meta.glob` call duplicating `parseDocs.ts`'s. Vite dedupes at build time. | Accepted as-is. The duplication is module-level but Vite resolves both to the same dependency graph; cleaning it up (export the glob from `parseDocs.ts`) saves no runtime cost and adds an entanglement. Revisit if a third consumer appears. |
+
+Build/lint/typecheck remain at zero after the fixes. Bundle numbers unchanged (no runtime code shift).
 
 ---
 
