@@ -299,6 +299,6 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell + 02-dag + 08-markdown COMPLETE; 03-docs APPROVED, in implementation; 06-health DRAFT; others planned) |
+| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (shell + 02-dag + 03-docs + 08-markdown COMPLETE; 06-health DRAFT; others planned) |
 
 Backend components named in §7 (API server, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.
