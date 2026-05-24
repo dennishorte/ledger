@@ -1,0 +1,400 @@
+# Orchestration Data Layer
+
+**Node ID:** `01-ui/10-orchestration`
+**Parent:** `01-ui`
+**Status:** DRAFT
+**Created:** 2026-05-24
+**Last Updated:** 2026-05-24
+
+**Dependencies:** `01-ui/01-shell`
+**Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
+
+---
+
+## Requirements
+
+Introduce the shared data layer for tasks and per-task log streams. Three consumers will sit on top:
+
+- `01-ui/04-tasks` — task control console (read-only browser in v1)
+- `01-ui/05-logs` — live log streaming panel
+- `01-ui/07-replay` — replay-mode panel (deferred; depends on doc-versioning, which is unbuilt)
+
+Phase-1 reality: no API server, no task runner, no agent dispatcher. **But Claude Code is already emitting all of the relevant data** — every session and every sub-agent dispatch produces JSONL transcripts under `~/.claude/projects/<encoded-cwd>/`. The structure maps almost 1:1 onto the PRD's task / log-event model. v1 reads those transcripts directly and exposes them to the UI via a Vite dev middleware.
+
+This is not fixture-backed — it is a real (if narrow and dev-only) observability surface for the work happening in this repo right now. When the standalone API server lands (per PRD §7), the middleware migrates to that process and the client hooks point at it instead. The client-side contract stays stable across the migration.
+
+### Out of scope for this node
+
+- UI panels (those are `04-tasks`, `05-logs`, `07-replay`).
+- Task execution, scheduling, dispatch, or any *control* of the orchestration substrate.
+- Cross-repo aggregation — transcripts from other repos under the same operator are filtered out.
+- Standalone API server (deferred to a Phase-1 backend node when ready).
+- LangGraph checkpoint state restoration (`07-replay`'s territory; deferred).
+- Persisting derived data — every request rescans the filesystem; no database.
+- Authentication / multi-user — single-operator (PRD §13).
+- Production-mode parity — `pnpm build` ships an SPA without the middleware; the panels render an honest empty state.
+
+---
+
+## Design
+
+### Data sources
+
+Claude Code writes per-session JSONL transcripts to:
+
+```
+~/.claude/projects/<encoded-cwd>/
+  <sessionId>.jsonl                  # main session log
+  <sessionId>/
+    subagents/
+      agent-<id>.jsonl               # sub-agent transcript
+      agent-<id>.meta.json           # sub-agent metadata
+```
+
+`<encoded-cwd>` is the absolute cwd with `/` replaced by `-`. For this repo: `-Users-dennis-code-ledger`. The server computes this at startup from `process.cwd()`.
+
+Sub-agent `.meta.json` fields observed against Claude Code `2.1.148`:
+
+- `agentType` — Claude Code's internal classifier (`general-purpose`, `Explore`, `Plan`, `claude-code-guide`, `statusline-setup`).
+- `worktreePath` (optional) — present when the sub-agent ran in an isolated worktree.
+- `description` — operator-provided summary, e.g., `"Implement 08-markdown node"`.
+- `toolUseId` — links back to the spawning `Agent` tool_use in the parent JSONL.
+
+### JSONL line types
+
+Each line is a JSON object with a `type` field. Observed types:
+
+| Type | Maps to |
+|---|---|
+| `assistant` | `reasoning` and/or `tool_call` events (one per `content[]` block) |
+| `user` | `tool_result` event when content is a `tool_result` block; otherwise skipped (operator input is not a log event) |
+| `system` | `status_change` for `subtype: "local_command"`; otherwise skipped |
+| `file-history-snapshot` | skipped — superseded by tool_result-derived artifacts |
+| `summary` | skipped (auto-compaction summary) |
+| `ai-title`, `last-prompt`, `task_reminder`, `skill_listing`, `deferred_tools_delta`, `date_change` | skipped — internal Claude Code metadata |
+
+The parser **must accept unknown `type` values** and skip them with a single-line warning. JSONL schema is internal to Claude Code and not a stable contract — see D10.
+
+### Types (`src/lib/types.ts`)
+
+All exported from the existing type-only module. The file is DOM-free and imported by both `app/src/` (client) and `app/server/` (Node).
+
+```ts
+export type TaskId = string;
+
+export type TaskType =
+  | "spec_draft" | "spec_review" | "implement" | "verify"
+  | "doc_refactor" | "issue_triage" | "human_review"
+  | "reverify" | "project_status_review"
+  | "operator_session"   // main human-driven Claude Code session (D2)
+  | "agent_task";        // sub-agent whose description doesn't match a specific lifecycle type (D2)
+
+export type TaskStatus =
+  | "PENDING" | "RUNNING" | "BLOCKED"
+  | "AWAITING_HUMAN_REVIEW" | "COMPLETE" | "FAILED" | "CANCELLED";
+
+export type TaskSource = "agent_generated" | "operator_injected" | "daemon_triggered";
+
+/**
+ * Resource claim — phase-1 these are descriptive (derived from observed tool calls),
+ * not prescriptive (declared upfront and enforced by the runner). See D8.
+ */
+export type ResourceClaim =
+  | { kind: "node"; nodeId: NodeId; mode: "read" | "write" }
+  | { kind: "path"; path: string; mode: "read" | "write" };
+
+export interface Task {
+  id: TaskId;
+  type: TaskType;
+  status: TaskStatus;
+  title: string;
+  source: TaskSource;
+  parentTaskId?: TaskId;
+  dependsOn: TaskId[];
+  resourceClaims: ResourceClaim[];
+  agent?: { model: string; persona?: string };
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  reviewPayload?: { summary: string; diffRef?: string };
+  /** Absolute path to the source JSONL on disk. Server-internal; never rendered in the UI. */
+  transcriptPath: string;
+}
+
+export type LogEventId = string;
+export type ConnectionStatus = "stub" | "live" | "ended" | "missing";
+
+export interface BaseLogEvent {
+  id: LogEventId;
+  taskId: TaskId;
+  at: string;        // ISO 8601
+  seq: number;       // monotonic per task
+}
+
+export type LogEvent = BaseLogEvent & (
+  | { kind: "reasoning"; text: string; subkind: "thinking" | "message" }
+  | { kind: "tool_call"; callId: string; toolName: string; arguments: string /* serialized JSON */ }
+  | { kind: "tool_result"; callId: string; status: "ok" | "error"; body: string; durationMs?: number }
+  | { kind: "artifact"; artifactKind: "doc_created" | "doc_updated" | "file_written" | "version_committed";
+      path: string; docNodeId?: NodeId; summary?: string }
+  | { kind: "status_change"; from: TaskStatus; to: TaskStatus; reason?: string }
+  | { kind: "error"; message: string; stack?: string }
+);
+```
+
+### Task derivation
+
+For each scanned transcript:
+
+**Main session (`<sessionId>.jsonl`):**
+
+| Field | Source |
+|---|---|
+| `id` | `session:<sessionId>` |
+| `type` | `operator_session` |
+| `title` | first non-meta user prompt, truncated to 80 chars; falls back to `"Operator session <short-id>"` |
+| `source` | `operator_injected` |
+| `agent` | `{ model: <observed model from first assistant line>, persona: "operator" }` |
+| `parentTaskId` | undefined |
+| `dependsOn` | `[]` |
+| `resourceClaims` | derived (see below) |
+| `createdAt` | timestamp of first line |
+| `startedAt` | same as `createdAt` |
+| `completedAt` | timestamp of last line when status is `COMPLETE`; else undefined |
+
+**Sub-agent (`<sessionId>/subagents/agent-<id>.jsonl`):**
+
+| Field | Source |
+|---|---|
+| `id` | `agent:<id>` |
+| `type` | inferred from `meta.description` via the keyword table below |
+| `title` | `meta.description` |
+| `source` | `agent_generated` |
+| `parentTaskId` | `session:<sessionId>` |
+| `dependsOn` | `[]` (no inter-agent deps inferred in Phase-1) |
+| `resourceClaims` | derived from observed tool calls + a `path/write` claim on `meta.worktreePath` if present |
+| `agent` | `{ model: <observed model>, persona: meta.agentType }` |
+
+**Sub-agent task-type inference (D2 keyword table):**
+
+| Match (case-insensitive, leading 40 chars of `description`) | Inferred type |
+|---|---|
+| `Implement`, `Implementation of` | `implement` |
+| `Spec review`, `Review spec`, `Review draft`, `SPEC_REVIEW` | `spec_review` |
+| `Implementation review`, `Review implementation`, `Verify`, `Verification of` | `verify` |
+| `Draft`, `Author spec`, `Author DRAFT`, `Spec draft` | `spec_draft` |
+| `Refactor`, `Doc refactor` | `doc_refactor` |
+| `Triage`, `Investigate`, `Diagnose` | `issue_triage` |
+| `Re-verify`, `Reverify` | `reverify` |
+| (anything else) | `agent_task` |
+
+The table is hardcoded in `app/server/transcriptParse.ts` and is expected to evolve.
+
+### Resource-claim derivation
+
+Phase-1: **descriptive, not prescriptive** — derived from observed tool calls (D8).
+
+- `Read` tool_result → `node`-claim with `mode: "read"` if path resolves to a `DocNode` via `idForPath`; else `path`-claim.
+- `Write` / `Edit` / `MultiEdit` / `NotebookEdit` tool_result with `status: "ok"` → claim with `mode: "write"`, same resolution.
+- Sub-agent `meta.worktreePath` → `{ kind: "path", path, mode: "write" }`.
+- `Bash` tool calls are not inspected for claims — D6 rationale.
+
+Claims are deduplicated per `(kind, target, mode)` pair before being attached to the `Task`.
+
+### Status derivation (D5)
+
+| Condition (evaluated in order) | Status |
+|---|---|
+| File mtime within last 5 s | `RUNNING` |
+| File quiet ≥ 5 s AND last entry is an `assistant` line WITH pending `tool_use` (no matching `tool_result` seen) | `RUNNING` — the model is waiting for tool execution, not the operator |
+| File quiet ≥ 5 s AND last entry is an `assistant` line with no pending tool_use | `AWAITING_HUMAN_REVIEW` |
+| File quiet ≥ 30 min | `COMPLETE` |
+| (Else; quiet 5 s – 30 min, last entry is `user` tool_result) | `RUNNING` — model preparing next turn |
+
+`FAILED` and `CANCELLED` are reserved for the eventual task runner and are not derived from transcripts in v1.
+
+Both thresholds are tunable via env vars (`LEDGER_RUNNING_WINDOW_S=5`, `LEDGER_COMPLETE_WINDOW_S=1800`) with defaults compiled in. Restart of the dev server reloads them.
+
+### Artifact derivation (D6)
+
+For each successful `Write` / `Edit` / `MultiEdit` / `NotebookEdit` tool_result:
+
+- `path` = `arguments.file_path`.
+- `docNodeId` = `idForPath(path)` or undefined.
+- `artifactKind`:
+  - `MultiEdit` or `Edit` on existing file → `doc_updated` if `docNodeId` set, else `file_written`.
+  - `Write` to non-existing file → `doc_created` if `docNodeId` set, else `file_written`.
+  - `Write` to existing file → `doc_updated` / `file_written` per the same rule.
+- `summary` = first 80 chars of the tool args' description-bearing field if present.
+
+`MultiEdit` produces **one** `artifact` event per call (one path) — see Open Issues.
+
+`version_committed` is reserved for the doc-versioning node and is not emitted by v1.
+
+### File layout
+
+```
+app/
+  server/                                 # NEW — dev-middleware code
+    transcriptScan.ts                     # list sessions + sub-agents under <encoded-cwd>
+    transcriptParse.ts                    # JSONL line → LogEvent[]
+    transcriptStatus.ts                   # mtime + last-entry → TaskStatus
+    deriveTask.ts                         # full transcript → Task with claims/agent/timing
+    middleware.ts                         # Vite configureServer plugin
+  src/
+    lib/
+      types.ts                            # extend with Task, LogEvent, ResourceClaim, etc.
+      useTaskList.ts                      # TanStack Query: GET /api/transcripts
+      useTask.ts                          # TanStack Query: GET /api/transcripts/:id
+      useLogStream.ts                     # TanStack Query + EventSource
+  tsconfig.json                           # client (unchanged)
+  tsconfig.server.json                    # NEW — node lib, includes ./server/
+  vite.config.ts                          # imports middleware from ./server/middleware
+```
+
+`tsconfig.server.json` extends `tsconfig.json` but overrides `compilerOptions.lib` to `["es2022"]` (no DOM) and `types` to `["node"]`. The `app/server/` directory is excluded from the client tsconfig's `include`.
+
+### Wire format
+
+All endpoints under `/api/`. JSON bodies; SSE for streams.
+
+**`GET /api/transcripts`** — list all tasks for this repo.
+
+```ts
+type ListResponse = { tasks: Task[] };
+```
+
+**`GET /api/transcripts/:taskId`** — one task + its full historical log events.
+
+```ts
+type GetResponse = { task: Task; events: LogEvent[] };
+```
+
+Returns `404` when the task id isn't found in the current scan.
+
+**`GET /api/transcripts/:taskId/stream`** — SSE that emits new `LogEvent`s as the underlying JSONL grows.
+
+```
+id: <seq>
+data: {"id":"...","taskId":"...","at":"...","seq":N,"kind":"...", ...}
+
+```
+
+- A heartbeat comment line (`: ping\n\n`) is emitted every 15 s to keep proxies from closing the connection.
+- Connection auto-closes when the source file has been unmodified for 60 s **and** task status is `COMPLETE`.
+- The `id:` field carries the event's `seq`. On reconnect, the server honors `Last-Event-ID` and resumes from `seq + 1`.
+
+### Client hooks
+
+```ts
+function useTaskList(): UseQueryResult<Task[]>;
+
+function useTask(id: TaskId): UseQueryResult<{ task: Task; events: LogEvent[] }>;
+
+interface UseLogStreamResult {
+  events: LogEvent[];             // initial batch + streamed deltas
+  status: ConnectionStatus;       // "live" | "ended" | "missing" | "stub"
+  reconnectAttempt: number;
+}
+function useLogStream(taskId: TaskId): UseLogStreamResult;
+```
+
+`useLogStream` combines an initial `useTask` fetch with an `EventSource` opened on the same task's `/stream`. The hook returns:
+
+- `status: "missing"` when the initial fetch 404s.
+- `status: "live"` while the EventSource is OPEN.
+- `status: "ended"` when the SSE closes cleanly (server signaled task `COMPLETE`).
+- `status: "stub"` is reserved for unit-test / Storybook contexts that hand-feed events.
+
+`reconnectAttempt` increments each time the EventSource reconnects; useful for UI hints ("reconnecting…").
+
+### Production behavior (D11)
+
+`pnpm build` produces a static SPA. No middleware runs. The hooks gracefully degrade:
+
+- `useTaskList()` returns `[]` when `/api/transcripts` 404s.
+- `useTask()` returns `status: "missing"`.
+- `useLogStream()` returns `status: "missing"`.
+
+The 04-tasks and 05-logs panels render an explicit empty state:
+
+> This panel observes local Claude Code transcripts via the dev server. Run `pnpm dev` to enable.
+
+Routes stay registered. Operator confirmed (this conversation, 2026-05-24) that production builds are out of scope today; the empty state is the honest behavior.
+
+### Manual acceptance check
+
+Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of these are verifiable; until then, the infra node's acceptance is verified via `curl` against `/api/*` and via the unit tests below.
+
+1. `curl http://localhost:4179/api/transcripts` returns a JSON array of every session + sub-agent task in this repo. Each entry has all required `Task` fields.
+2. `curl http://localhost:4179/api/transcripts/session:<currentSessionId>` returns the current conversation's `Task` + full `LogEvent[]`.
+3. `curl -N http://localhost:4179/api/transcripts/session:<currentSessionId>/stream` blocks; typing a new prompt into Claude Code emits new `data:` lines on the SSE within 1 s.
+4. Killing the curl and reconnecting with `-H "Last-Event-ID: <last-seq>"` resumes at the next event (no duplicates).
+5. `curl http://localhost:4179/api/transcripts/agent:<knownAgentId>` returns a sub-agent task with `parentTaskId` set and `resourceClaims` containing the worktree path.
+6. Transcripts from other repos do not appear (verifiable by listing `~/.claude/projects/` and confirming exclusion).
+7. The 5 s status window: a `touch`ed JSONL flips its task to `RUNNING` for 5 s, then settles back to `AWAITING_HUMAN_REVIEW` or `COMPLETE` per the rules.
+8. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero.
+
+---
+
+## Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| D1 | Vite dev middleware lives in `app/server/`, not a separate package | The middleware is dev-only; PRD §7's real API server is a separate (much larger) effort that will introduce the monorepo split. `01-ui/00-ui.md` D8: defer monorepo split until the backend package exists. Dev-time tooling is not a backend package. |
+| D2 | `TaskType` enum extends PRD's set with `operator_session` and `agent_task` (fallback); sub-agent type inference uses a hardcoded keyword table on `meta.description` | PRD §6.3 enumerates task types for the eventual orchestration substrate. The current manual workflow produces sessions (no clean PRD match) and sub-agents whose descriptions only sometimes match the PRD lifecycle types. `operator_session` is honest for the human-driven main convo; `agent_task` is the honest fallback for unrecognized descriptions. The keyword table is coarse but predictable and easy to tune. |
+| D3 | Real transcript ingestion in v1, not fixture-backed | Earlier design rounds considered a canned fixture for parity with `06-health`'s Phase-1 strategy. With Claude Code already emitting structured JSONL containing every PRD-relevant data point, the fixture would be theater. Real ingestion is bigger v1 scope but real value — the operator dogfoods the panel against the current session immediately. |
+| D4 | Filter transcripts by `cwd` to this repo only | The operator runs Claude Code across many projects. The first `cwd`-bearing line of each JSONL identifies the source repo; cross-repo transcripts are filtered out. Eliminates clutter and a small privacy surface. |
+| D5 | Status derivation uses mtime windows + last-entry-kind | No real status signal exists in transcripts. The 5 s mtime window catches "currently active" reliably (Claude Code writes within sub-second of any model emission). The "last entry has unmatched `tool_use`" distinction separates "waiting for tool" from "waiting for human" — the latter is the leaf-workflow stage-8 equivalent. The 30-min `COMPLETE` threshold is heuristic and explicitly soft (sessions can resume). |
+| D6 | Artifact derivation from successful `Write` / `Edit` / `MultiEdit` / `NotebookEdit` tool_results only; `MultiEdit` emits one event per call | Phase-1 honest derivation. `Bash` is excluded because shell commands can produce arbitrary side effects we can't reliably attribute to specific paths. The lossy `MultiEdit` aggregation is the only meaningful imprecision; documented in Open Issues. |
+| D7 | SSE for live tail, not WebSocket | `01-ui/00-ui.md` Open Issue tentatively prefers SSE-only for streams. Log streams are append-only — SSE's unidirectional semantics fit. `EventSource` has built-in reconnect with `Last-Event-ID` support. No upstream messages needed on this channel. |
+| D8 | Resource claims are descriptive (derived after the fact from observed tool calls), not prescriptive (declared and enforced upfront) | The PRD's resource-claim model (§6.3) requires tasks to *declare* claims before execution; the runner enforces them. We have no runner. Descriptive claims are still useful for forensic queries (UC14: "what did this task touch?"). When the runner lands, declared claims replace derived ones; the consumer-facing type stays the same. |
+| D9 | Two tsconfigs — `tsconfig.json` (client, DOM) and `tsconfig.server.json` (server, node) | The Vite client and the server modules have incompatible TS lib sets. Pure type files (`src/lib/types.ts`) are DOM-free and importable by both. |
+| D10 | Pin JSONL schema observation to Claude Code `2.1.148`; defensive parser accepts unknown line and content types | JSONL is an internal Claude Code format with no stability guarantee. The parser logs unknown types/blocks once per unique kind and skips them rather than failing. The pinned version is recorded in Verification as the contract for v1. |
+| D11 | Production builds render an honest empty state; routes stay registered | The middleware is dev-only. Operator confirmed (2026-05-24) that production builds are out of scope today. Pulling the routes from production would create dev/prod divergence; the honest empty state is preferable. |
+| D12 | Privacy disclosure: transcripts may contain secrets, file contents, pasted credentials. Single-operator local-only context (PRD §13) makes this acceptable. Middleware never serves to anything outside localhost | Worth being explicit. If the panel ever becomes networked (real API server with auth), the threat model changes. |
+| D13 | `ResourceClaim` is a discriminated union of `node` (doc-node) and `path` (free-form) | Sub-agent worktree paths and non-doc tool targets don't map to `NodeId`. A discriminated union keeps the type single-field and type-safe at every boundary. Alternative considered: a parallel `pathClaims: string[]` on `Task` — rejected as more surface for the same information. |
+
+---
+
+## Open Issues
+
+- **JSONL schema drift.** Claude Code's transcript format is internal and may change with version. v1 parser is observed against `2.1.148`. Mitigation: parser logs unknown types/blocks once-per-kind and skips them; a golden test runs against a committed sample JSONL. Long-term fix: when the real API server lands, transcripts are replaced by typed event streams from the runner. *(Priority: MEDIUM.)*
+- **`AWAITING_HUMAN_REVIEW` false positives.** Operator types slowly → status flips. The 5 s default is short. Mitigation: env var override (`LEDGER_RUNNING_WINDOW_S`). Tune after dogfooding. *(Priority: LOW.)*
+- **Sub-agent task-type inference miss rate.** D2's keyword table covers conventional descriptions but anything outside that vocabulary defaults to `agent_task`. The 04-tasks panel will surface the raw description so the operator can see the underlying intent. *(Priority: LOW.)*
+- **`MultiEdit` artifact granularity.** Each `MultiEdit` against N hunks of one file emits one artifact event. Hunk-level detail is lost. Acceptable for Phase-1; revisit when the API server defines the artifact contract. *(Priority: LOW.)*
+- **Resource-claim derivation gaps.** Tools like `Bash` and `WebFetch` can read/write arbitrary paths the parser can't reliably attribute. Those tool calls become opaque events with no claim derived. *(Priority: LOW.)*
+- **SSE reconnect state recovery.** `EventSource` reconnects automatically but the server must honor `Last-Event-ID` for resume to skip already-delivered events. Implementer must wire that path; verified in acceptance check #4 by force-killing the connection and confirming no duplicates appear on resume. *(Priority: MEDIUM.)*
+- **"Soft COMPLETE."** The 30-min quiet threshold can flip a session COMPLETE that the operator later resumes. UI consumers should treat COMPLETE as informational, not terminal. `useTaskList` re-derives on each refetch. *(Priority: LOW.)*
+- **`process.cwd()` vs the encoded directory.** The encoded directory is derived from `process.cwd()` at dev-server boot; if the operator runs `pnpm dev` from a non-repo directory the lookup misses. Mitigation: derive from the repo root via `git rev-parse --show-toplevel` instead of `process.cwd()`. To resolve in spec review. *(Priority: LOW.)*
+- **Title derivation truncation.** Truncating a long first prompt to 80 chars loses context on cluttered queues. Considered: also computing an "ai-title" from the `ai-title` JSONL line (Claude Code's own session-titling heuristic). To resolve in spec review. *(Priority: LOW.)*
+
+---
+
+## Implementation Notes
+
+*(none yet — pre-implementation)*
+
+---
+
+## Verification
+
+When this node moves to `VERIFY`, the verifier confirms:
+
+1. The full Acceptance check list (1–8) passes.
+2. `transcriptScan` lists every JSONL under `~/.claude/projects/<encoded-cwd>/` whose first `cwd`-bearing entry resolves under `/Users/dennis/code/ledger`. Other repos' transcripts are excluded.
+3. `transcriptParse` produces a valid `LogEvent[]` for every JSONL in the sample set without throwing, including transcripts containing unknown line types (`ai-title`, `last-prompt`, `task_reminder`, `skill_listing`, `deferred_tools_delta`, `date_change`).
+4. `deriveTask` returns a `Task` with non-empty `id`, `type`, `title`, `status`, `createdAt`, `transcriptPath` for every scanned transcript.
+5. Sub-agent task-type inference produces the expected type for each row in the D2 keyword table (table-driven test).
+6. Status derivation: a freshly-`touch`ed file returns `RUNNING`; an idle file with last entry as a tool_use-bearing assistant message returns `RUNNING`; an idle file with last entry as a plain assistant message returns `AWAITING_HUMAN_REVIEW`; a file last modified > 30 min ago returns `COMPLETE`.
+7. SSE: connecting to `/api/transcripts/:id/stream` and appending a JSONL line to the source file emits a `data:` line on the SSE within 1 s.
+8. SSE reconnect: closing the EventSource and reopening with `Last-Event-ID: <seq>` resumes at `seq + 1` without re-emitting earlier events.
+9. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` all exit zero. Bundle delta vs main reported in Implementation Notes.
+10. No regressions: `/dag`, `/docs`, `/health` continue to render correctly. `idForPath` (re-used from `parseDocs.ts`) still resolves correctly.
+11. Pinned schema: parsing a committed sample JSONL from Claude Code `2.1.148` produces the expected `LogEvent` sequence (golden test). The sample lives at `app/server/__fixtures__/sample-session.jsonl`.
+
+---
+
+## Children
+
+None.
