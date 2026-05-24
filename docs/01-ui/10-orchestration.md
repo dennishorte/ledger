@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-24 (SPEC_REVIEW → APPROVED)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
@@ -62,18 +62,39 @@ Sub-agent `.meta.json` fields observed against Claude Code `2.1.148`:
 
 ### JSONL line types
 
-Each line is a JSON object with a `type` field. Observed types:
+Each line is a JSON object with a top-level `type` field. Observed top-level types across this repo's 13 transcripts (Claude Code `2.1.148`):
 
 | Type | Maps to |
 |---|---|
 | `assistant` | `reasoning` and/or `tool_call` events (one per `content[]` block) |
 | `user` | `tool_result` event when content is a `tool_result` block; otherwise skipped (operator input is not a log event) |
-| `system` | `status_change` for `subtype: "local_command"`; otherwise skipped |
+| `ai-title` | consumed by Task title derivation (see D14); not emitted as a `LogEvent` |
+| `last-prompt` | skipped — Claude Code internal |
 | `file-history-snapshot` | skipped — superseded by tool_result-derived artifacts |
-| `summary` | skipped (auto-compaction summary) |
-| `ai-title`, `last-prompt`, `task_reminder`, `skill_listing`, `deferred_tools_delta`, `date_change` | skipped — internal Claude Code metadata |
+| `attachment` | skipped (inner `attachment.type` values observed: `task_reminder`, `skill_listing`, `deferred_tools_delta`, `date_change` — all internal Claude Code metadata) |
+| `system` | see subtype table below |
+| `queue-operation` | skipped — Claude Code internal queue state |
+| `permission-mode` | skipped — Claude Code permission-system state |
 
-The parser **must accept unknown `type` values** and skip them with a single-line warning. JSONL schema is internal to Claude Code and not a stable contract — see D10.
+`system.subtype` values observed:
+
+| Subtype | Maps to |
+|---|---|
+| `local_command` | `status_change` event |
+| `api_error` | `error` event |
+| `turn_duration` | skipped — internal timing |
+| `away_summary` | skipped — internal |
+
+The parser **must accept unknown top-level `type` values** and skip them with a once-per-kind warning. JSONL schema is internal to Claude Code and not a stable contract — see D10.
+
+### Parser-side field mappings
+
+The JSONL field names don't always match the `LogEvent` type field names. Bridges the parser applies:
+
+- `tool_result` content blocks use `is_error: boolean` (no `status` field). The parser sets `status = is_error ? "error" : "ok"`.
+- `tool_result.content` is a string or an array of content blocks. The parser stringifies it to `body`.
+- `durationMs` is derived: timestamp of the `tool_result` line minus timestamp of the matching `tool_call`'s assistant line. Undefined when timestamps are missing.
+- Each top-level line has its own `uuid` (used as `LogEventId`) and `timestamp` (used as `at`).
 
 ### Types (`src/lib/types.ts`)
 
@@ -152,7 +173,7 @@ For each scanned transcript:
 |---|---|
 | `id` | `session:<sessionId>` |
 | `type` | `operator_session` |
-| `title` | first non-meta user prompt, truncated to 80 chars; falls back to `"Operator session <short-id>"` |
+| `title` | derived per D14: most recent `ai-title` line's `aiTitle` field if any; else first user prompt that has `isMeta !== true`, content is a string (not a list/tool_result), and does not start with `<command-name>`, truncated to 80 chars; else `"Operator session <short-id>"` |
 | `source` | `operator_injected` |
 | `agent` | `{ model: <observed model from first assistant line>, persona: "operator" }` |
 | `parentTaskId` | undefined |
@@ -236,23 +257,26 @@ For each successful `Write` / `Edit` / `MultiEdit` / `NotebookEdit` tool_result:
 ```
 app/
   server/                                 # NEW — dev-middleware code
-    transcriptScan.ts                     # list sessions + sub-agents under <encoded-cwd>
+    transcriptScan.ts                     # list sessions + sub-agents under repo-root-encoded dir
     transcriptParse.ts                    # JSONL line → LogEvent[]
     transcriptStatus.ts                   # mtime + last-entry → TaskStatus
     deriveTask.ts                         # full transcript → Task with claims/agent/timing
     middleware.ts                         # Vite configureServer plugin
+    __fixtures__/
+      sample-session.jsonl                # NEW — pinned Claude Code 2.1.148 sample for golden tests
   src/
     lib/
       types.ts                            # extend with Task, LogEvent, ResourceClaim, etc.
       useTaskList.ts                      # TanStack Query: GET /api/transcripts
       useTask.ts                          # TanStack Query: GET /api/transcripts/:id
       useLogStream.ts                     # TanStack Query + EventSource
-  tsconfig.json                           # client (unchanged)
-  tsconfig.server.json                    # NEW — node lib, includes ./server/
+  tsconfig.json                           # composite root (unchanged)
+  tsconfig.app.json                       # client config (unchanged)
+  tsconfig.node.json                      # extend `include` to add `./server/**/*.ts`; add `"types": ["node"]`
   vite.config.ts                          # imports middleware from ./server/middleware
 ```
 
-`tsconfig.server.json` extends `tsconfig.json` but overrides `compilerOptions.lib` to `["es2022"]` (no DOM) and `types` to `["node"]`. The `app/server/` directory is excluded from the client tsconfig's `include`.
+Server code joins the existing `tsconfig.node.json` (which already targets node and currently includes only `vite.config.ts`). No new tsconfig file. Adds one dev dep: `@types/node`.
 
 ### Wire format
 
@@ -282,7 +306,7 @@ data: {"id":"...","taskId":"...","at":"...","seq":N,"kind":"...", ...}
 
 - A heartbeat comment line (`: ping\n\n`) is emitted every 15 s to keep proxies from closing the connection.
 - Connection auto-closes when the source file has been unmodified for 60 s **and** task status is `COMPLETE`.
-- The `id:` field carries the event's `seq`. On reconnect, the server honors `Last-Event-ID` and resumes from `seq + 1`.
+- The `id:` field carries the event's `seq`. On reconnect with `Last-Event-ID: <N>`, the server **re-parses the JSONL from line 0 and skips events with `seq ≤ N`**, then begins streaming. Simpler than maintaining an in-memory ring buffer; performant for current file sizes (largest observed transcript is ~2 MB, ~3000 lines, sub-100 ms re-parse).
 
 ### Client hooks
 
@@ -349,11 +373,13 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 | D6 | Artifact derivation from successful `Write` / `Edit` / `MultiEdit` / `NotebookEdit` tool_results only; `MultiEdit` emits one event per call | Phase-1 honest derivation. `Bash` is excluded because shell commands can produce arbitrary side effects we can't reliably attribute to specific paths. The lossy `MultiEdit` aggregation is the only meaningful imprecision; documented in Open Issues. |
 | D7 | SSE for live tail, not WebSocket | `01-ui/00-ui.md` Open Issue tentatively prefers SSE-only for streams. Log streams are append-only — SSE's unidirectional semantics fit. `EventSource` has built-in reconnect with `Last-Event-ID` support. No upstream messages needed on this channel. |
 | D8 | Resource claims are descriptive (derived after the fact from observed tool calls), not prescriptive (declared and enforced upfront) | The PRD's resource-claim model (§6.3) requires tasks to *declare* claims before execution; the runner enforces them. We have no runner. Descriptive claims are still useful for forensic queries (UC14: "what did this task touch?"). When the runner lands, declared claims replace derived ones; the consumer-facing type stays the same. |
-| D9 | Two tsconfigs — `tsconfig.json` (client, DOM) and `tsconfig.server.json` (server, node) | The Vite client and the server modules have incompatible TS lib sets. Pure type files (`src/lib/types.ts`) are DOM-free and importable by both. |
+| D9 | Server code joins the existing `tsconfig.node.json`; no new tsconfig file | The repo's `tsconfig.json` is a composite root with `references` to `tsconfig.app.json` (client) and `tsconfig.node.json` (node, currently `vite.config.ts` only). Server modules target node — they belong with `tsconfig.node.json`. Adds `./server/**/*.ts` to its `include` and `@types/node` as a dev dep. Pure type files (`src/lib/types.ts`) are DOM-free and imported by both configs via project references. |
 | D10 | Pin JSONL schema observation to Claude Code `2.1.148`; defensive parser accepts unknown line and content types | JSONL is an internal Claude Code format with no stability guarantee. The parser logs unknown types/blocks once per unique kind and skips them rather than failing. The pinned version is recorded in Verification as the contract for v1. |
 | D11 | Production builds render an honest empty state; routes stay registered | The middleware is dev-only. Operator confirmed (2026-05-24) that production builds are out of scope today. Pulling the routes from production would create dev/prod divergence; the honest empty state is preferable. |
 | D12 | Privacy disclosure: transcripts may contain secrets, file contents, pasted credentials. Single-operator local-only context (PRD §13) makes this acceptable. Middleware never serves to anything outside localhost | Worth being explicit. If the panel ever becomes networked (real API server with auth), the threat model changes. |
 | D13 | `ResourceClaim` is a discriminated union of `node` (doc-node) and `path` (free-form) | Sub-agent worktree paths and non-doc tool targets don't map to `NodeId`. A discriminated union keeps the type single-field and type-safe at every boundary. Alternative considered: a parallel `pathClaims: string[]` on `Task` — rejected as more surface for the same information. |
+| D14 | Task title is derived from the most recent `ai-title` JSONL line's `aiTitle` field when present; else the first qualifying user prompt | `ai-title` is Claude Code's own session-titling heuristic (verified: top-level type `{ type: "ai-title", aiTitle, sessionId }`, 190 occurrences across 13 sessions). Always available for non-trivial sessions and pithier than a raw first prompt. The fallback handles edge cases (very fresh sessions before the first `ai-title` is emitted). The qualifying-prompt filter (string content, no `<command-name>` prefix, `isMeta !== true`) prevents slash-command invocations from leaking into titles. |
+| D15 | Repo root derived from `git rev-parse --show-toplevel` at dev-server boot, cached for the process lifetime | `process.cwd()` depends on where `pnpm dev` was invoked; running from a subdirectory misses the encoded-cwd lookup. `git rev-parse` is always correct, zero-dep (already required for the repo), fail-fast outside a git repo. |
 
 ---
 
@@ -364,10 +390,29 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 - **Sub-agent task-type inference miss rate.** D2's keyword table covers conventional descriptions but anything outside that vocabulary defaults to `agent_task`. The 04-tasks panel will surface the raw description so the operator can see the underlying intent. *(Priority: LOW.)*
 - **`MultiEdit` artifact granularity.** Each `MultiEdit` against N hunks of one file emits one artifact event. Hunk-level detail is lost. Acceptable for Phase-1; revisit when the API server defines the artifact contract. *(Priority: LOW.)*
 - **Resource-claim derivation gaps.** Tools like `Bash` and `WebFetch` can read/write arbitrary paths the parser can't reliably attribute. Those tool calls become opaque events with no claim derived. *(Priority: LOW.)*
-- **SSE reconnect state recovery.** `EventSource` reconnects automatically but the server must honor `Last-Event-ID` for resume to skip already-delivered events. Implementer must wire that path; verified in acceptance check #4 by force-killing the connection and confirming no duplicates appear on resume. *(Priority: MEDIUM.)*
 - **"Soft COMPLETE."** The 30-min quiet threshold can flip a session COMPLETE that the operator later resumes. UI consumers should treat COMPLETE as informational, not terminal. `useTaskList` re-derives on each refetch. *(Priority: LOW.)*
-- **`process.cwd()` vs the encoded directory.** The encoded directory is derived from `process.cwd()` at dev-server boot; if the operator runs `pnpm dev` from a non-repo directory the lookup misses. Mitigation: derive from the repo root via `git rev-parse --show-toplevel` instead of `process.cwd()`. To resolve in spec review. *(Priority: LOW.)*
-- **Title derivation truncation.** Truncating a long first prompt to 80 chars loses context on cluttered queues. Considered: also computing an "ai-title" from the `ai-title` JSONL line (Claude Code's own session-titling heuristic). To resolve in spec review. *(Priority: LOW.)*
+
+---
+
+## Spec Review (2026-05-24)
+
+Independent spec review was run against this DRAFT in clean context. Verdict: NEEDS_MINOR_REVISIONS — two should-fix items grounded in JSONL ground-truth discrepancies, eight nits including two open issues the DRAFT had left unresolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | JSONL line-types table inaccurate. Reviewer correctly identified that `task_reminder`, `skill_listing`, `deferred_tools_delta`, `date_change` live inside `attachment.type`, not as top-level types. (Reviewer was partly wrong: `ai-title` and `last-prompt` ARE top-level types — verified independently via JSON-parsed tally across all 13 sessions in this repo: 1458 `assistant`, 1041 `user`, 190 `ai-title`, 182 `last-prompt`, 147 `file-history-snapshot`, 131 `attachment`, 87 `system`, 40 `queue-operation`, 19 `permission-mode`. The original DRAFT also missed `queue-operation` and `permission-mode` entirely.) Replaced the line-types table with the verified observation; added the inner-`attachment.type` enumeration in the same row. |
+| S2 | `tool_result` content blocks use `is_error: boolean`, not `status: "ok" \| "error"`. `durationMs` has no direct counterpart in JSONL — it's derived from timestamps. Added §"Parser-side field mappings" subsection documenting both bridges. |
+| N1 | `system` subtypes coverage was too narrow. Observed across all sessions: `local_command`, `turn_duration`, `away_summary`, `api_error`. Added a subtype table; `api_error` maps to `error` LogEvent kind. |
+| N2 | "First non-meta user prompt" filter was insufficient — slash-command invocations like `<command-name>/clear</command-name>` would slip through `isMeta: false`. Filter refined and absorbed into D14 below (string content, no `<command-name>` prefix, plus the `isMeta` check). |
+| N3 | Open Issue "Title derivation truncation" was left "to resolve in spec review" without a decision. New D14: prefer the most recent `ai-title` line's `aiTitle` field; fall back to the qualifying first user prompt. Verified shape: `{ type: "ai-title", aiTitle: "...", sessionId: "..." }`. Open Issue removed. |
+| N4 | Open Issue "process.cwd() vs encoded directory" left unresolved. New D15: derive repo root from `git rev-parse --show-toplevel`, cached at boot. Open Issue removed. |
+| N5 | tsconfig design was wrong — the repo's `tsconfig.json` is a composite root with `references` (to `tsconfig.app.json` + `tsconfig.node.json`), not a config with `compilerOptions`. D9 rewritten: server code joins the existing `tsconfig.node.json`; no new tsconfig file. Adds `@types/node` as a dev dep. File Layout diagram updated. |
+| N6 | `ConnectionStatus = "stub"` is reserved for future Storybook integration. Kept; the in-type comment already documents the reservation. No code change. |
+| N7 | Reviewer claimed `MultiEdit` uses `path` instead of `file_path`. **Not applied** — the SDK's `MultiEdit` schema uses `file_path` (consistent with `Edit` and `Write`). Implementer cross-checks at golden-test time; if reviewer is right, the parser switch is trivial. Audit kept for traceability. |
+| N8 | Golden-test fixture `app/server/__fixtures__/sample-session.jsonl` was referenced in Verification but absent from File Layout. Added. |
+| OI-3 | "SSE reconnect state recovery" needed an implementation strategy before APPROVED. Resolved: server **re-parses JSONL from line 0 and skips events with `seq ≤ Last-Event-ID`**. Simpler than an in-memory ring buffer; performant for current file sizes. Documented in §Wire format. Open Issue removed (was MEDIUM). |
+
+Two findings (S1 partial overreach on `ai-title`/`last-prompt`, and N7 on `MultiEdit` field name) are noted in the audit but not blindly applied — both contradict ground-truth verification done after the review. The reviewer's coverage of S1's core finding (`attachment` wrapping the named pseudo-types) was correct and is applied.
 
 ---
 
