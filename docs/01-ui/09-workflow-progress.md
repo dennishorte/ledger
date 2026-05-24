@@ -7,7 +7,7 @@
 **Last Updated:** 2026-05-23 (promotion)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
-**Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
+**Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/process/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
 
 ---
 

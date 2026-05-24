@@ -95,12 +95,15 @@ function parseChildrenManifest(md: string): RawChildRow[] {
  *   - `docs/<dir>/00-<slug>.md`   → `<dir>`           (parent doc of subtree)
  *   - `docs/<dir>/<other>.md`     → `<dir>/<other>`
  *   - deeper nesting recurses the same way.
+ *   - `docs/process/**`           → null              (process/operator
+ *     playbooks live outside the implementation tree; see CLAUDE.md)
  */
 function pathToNodeId(filePath: string): NodeId | null {
   const idx = filePath.indexOf("/docs/");
   if (idx === -1) return null;
   const sub = filePath.slice(idx + "/docs/".length);
   if (!sub.endsWith(".md")) return null;
+  if (sub.startsWith("process/")) return null;
   if (sub === "00-project.md") return "root";
   const noExt = sub.slice(0, -3);
   const parts = noExt.split("/");

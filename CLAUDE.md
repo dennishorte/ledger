@@ -6,7 +6,7 @@ This repo is the implementation of an LLM project framework: a document-driven, 
 
 - **`docs/00-project.md`** — project root / PRD. Read first for vision, scope, and architectural decisions. Its §14 holds the top-level children manifest.
 - **`docs/01-ui/00-ui.md`** — UI parent doc. Stack decisions, project layout, conventions, and the UI children manifest (current node + planned round-2 panels).
-- **`docs/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving a node through its lifecycle.
+- **`docs/process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving a node through its lifecycle.
 - The implementation lives at **`app/`** (Vite + React + TS).
 
 ## Documentation discipline
@@ -44,6 +44,7 @@ Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: 
 
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header AND the parent's children manifest when transitioning.
 - Implementation Notes is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
+- **`docs/process/`** holds operator playbooks and other process documentation (e.g., `leaf-workflow.md`). These docs do **not** have a `**Node ID:**`, `**Parent:**`, or lifecycle `**Status:**` — they are LIVING reference material, not implementation nodes. `parseDocs.ts` skips this subtree so process docs do not appear in the DAG. Future runbooks, glossaries, and decomposition playbooks go here too.
 - Round-2 UI panels (`02-dag`, `03-docs`, `06-health`, `08-markdown`, and `09-workflow-progress` COMPLETE; `04-tasks`, `05-logs`, `07-replay` planned) are designed for parallel dispatch in isolated git worktrees now that the shell is COMPLETE. `03-docs` consumes `08-markdown` via the `<MarkdownBody>` contract; `09-workflow-progress` embeds in `02-dag`'s `NodeInspector`. See `docs/01-ui/00-ui.md` Children section.
 
 ## When in doubt
