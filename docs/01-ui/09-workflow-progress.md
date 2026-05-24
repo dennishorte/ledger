@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-23)
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (IN_PROGRESS → VERIFY — V1 fix landed)
+**Last Updated:** 2026-05-23 (promotion)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
