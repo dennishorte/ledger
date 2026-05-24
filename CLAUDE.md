@@ -44,7 +44,7 @@ Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: 
 
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header AND the parent's children manifest when transitioning.
 - Implementation Notes is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
-- Round-2 UI panels (`02-dag`, `03-docs`, `06-health`, and `08-markdown` COMPLETE; `04-tasks`, `05-logs`, `07-replay` planned) are designed for parallel dispatch in isolated git worktrees now that the shell is COMPLETE. `03-docs` consumes `08-markdown` via the `<MarkdownBody>` contract. See `docs/01-ui/00-ui.md` Children section.
+- Round-2 UI panels (`02-dag`, `03-docs`, `06-health`, `08-markdown`, and `09-workflow-progress` COMPLETE; `04-tasks`, `05-logs`, `07-replay` planned) are designed for parallel dispatch in isolated git worktrees now that the shell is COMPLETE. `03-docs` consumes `08-markdown` via the `<MarkdownBody>` contract; `09-workflow-progress` embeds in `02-dag`'s `NodeInspector`. See `docs/01-ui/00-ui.md` Children section.
 
 ## When in doubt
 

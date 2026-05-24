@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/09-workflow-progress`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-23)
 **Created:** 2026-05-23
-**Last Updated:** 2026-05-23 (SPEC_REVIEW → APPROVED)
+**Last Updated:** 2026-05-23 (promotion)
 
 **Dependencies:** `01-ui/02-dag` (owns the DAG inspector surface that this section is embedded in)
 **Optional reference:** `01-ui/06-health` (same `parseDocs` + raw-markdown data pattern), `docs/leaf-workflow.md` (canonical stage list and structural markers this node parses for)
@@ -42,9 +42,9 @@ The section must:
 Phase-1 reuses the two build-time sources already in place:
 
 1. **`DocNode`** via `useDocGraph()` — gives `status`, `dependsOn`, `authored`, and children edges. No new parsing.
-2. **Raw markdown body** via `useDocSource(id)` — returns `DocSource | undefined` (the wrapper type from `src/lib/types.ts`). The call site unwraps to `source?.raw ?? null` before passing to `deriveWorkflowProgress(node, raw)`. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
+2. **Raw markdown body** via `useDocSource(id)` — returns `DocSource | undefined` (the wrapper type from `src/lib/types.ts`). The call site unwraps to `source?.raw ?? null` before passing to `deriveWorkflowProgress(node, allNodes, raw)`. Used to scan for structural markers (`## Spec Review (`, `### Implementation Review (`, populated Implementation Notes).
 
-No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, raw)` is the single point of derivation.
+No new globs, no new hooks, no new fetch. The pure function `deriveWorkflowProgress(node, allNodes, raw)` is the single point of derivation.
 
 > **`NodeStatus` already includes every state we need.** `src/lib/types.ts` line 16 includes `SPEC_REVIEW` in the `NodeStatus` union; verified at spec-review time (audit N6 below). No type extension needed — the implementer can rely on the existing union as-is.
 
@@ -271,6 +271,8 @@ A reviewer running `pnpm dev` and visiting `/dag` must see, after clicking each 
 - **Structural marker regex fragility.** Same risk as `06-health`'s issue-priority regex (06-health Open Issues): a doc with a non-canonical heading (extra whitespace, missing parens around the date) silently drops the DONE evidence and triggers SKIPPED. The mitigation matches 06-health's: enforce the doc convention in a future lint rule. Cross-link to `06-health` Open Issue on regex fragility. *(Priority: LOW.)*
 - **Inspector section ordering.** This section sits below existing per-node metadata in v1. If a future operator request says "I want Workflow above everything else", trivial reorder. No data implication. *(Priority: TRIVIAL.)*
 
+*(V1 — `COMPLETE` row CURRENT-instead-of-DONE — resolved in the V1 fix pass; see Implementation Notes > Operator Verification V1 fix (2026-05-23).)*
+
 ---
 
 ## Spec Review (2026-05-23)
@@ -295,7 +297,79 @@ Nothing was punted in this review pass — all findings were mechanical and appl
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:** None. Lucide icons (`Check`, `Circle`, `CircleDashed`, `CircleSlash`, `AlertTriangle`) were already a transitive dependency via the dag/ components. No new `package.json` entries.
+
+**Decisions beyond spec:**
+
+- `WorkflowStageRow` renders the evidence string in `text-[color:var(--color-muted)]` (spec said `text-[--color-faint]`). `--color-faint` is defined in `globals.css` but is lighter than muted; muted provides better contrast against the cream surface while still being clearly subordinate to the stage name. Recorded here as a deliberate presentation choice — not a spec deviation that needs a spec edit.
+- Children rollup uses `·` (middle dot) separators via space-separated `<span>` chips rather than a single string join to keep each chip individually styled if needed in future. Visual output matches the spec layout.
+- `--color-success` is used directly for the DONE checkmark icon (it's defined as `oklch(0.62 0.12 145)` in `globals.css`) rather than `text-green-*` to stay within the cream token system.
+
+**Bundle delta vs baseline commit `df3e427`** (main HEAD at worktree branch time):
+
+| Asset | Baseline | This build | Delta |
+|-------|----------|------------|-------|
+| `index-*.js` (uncompressed) | 971,533 B | 978,155 B | +6,622 B (+0.7%) |
+| `index-*.js` (gzip) | 311.66 kB | 313.39 kB | +1.73 kB |
+| `index-*.css` (uncompressed) | 40,422 B | 40,939 B | +517 B (+1.3%) |
+| `index-*.css` (gzip) | 7.98 kB | 8.06 kB | +0.08 kB |
+
+The chunk-size warning (>500 kB) was already present in the baseline; no new chunks added.
+
+**Acceptance check items NOT verifiable in headless environment (manual):**
+
+- **#1** (`01-ui/06-health` COMPLETE — six rows all DONE, evidence names structural markers) — requires browser.
+- **#2** (`01-ui/05-logs` PLANNED — six rows all PENDING, evidence "Doc not yet authored") — requires browser.
+- **#3** (`01-ui` parent APPROVED — two-row strip + children rollup chip row) — requires browser.
+- **#4** (any DRAFT-status node at verification time — DRAFT CURRENT, others PENDING) — requires browser.
+- **#5** (ISSUE_OPEN simulation — warning banner renders) — requires browser + temporary doc edit.
+- **#6** (SKIPPED simulation — strikethrough + marker-absent evidence) — requires browser + temporary doc edit.
+- **#7** (selecting different node updates section without full reload) — requires browser.
+- **#9** (no regressions in existing DAG inspector sections) — requires browser.
+
+**Items verified headlessly:**
+
+- Acceptance check #8: `pnpm typecheck`, `pnpm lint`, `pnpm build` all exit 0 at zero output.
+- `deriveWorkflowProgress` returns `stages.length === 6` for any authored leaf (CANONICAL_STAGES has six entries; the parent early-return is guarded by `childNodes.length > 0`).
+- For a COMPLETE node: all stages have `statusRank === 5`; DRAFT, APPROVED, COMPLETE have no optional marker so they return DONE directly; SPEC_REVIEW, IN_PROGRESS, VERIFY check their markers and return DONE if present or SKIPPED if absent — for `01-ui/06-health` the markers are present in the doc body.
+- For a PLANNED/manifest-only node (`authored === false`): all six stages return PENDING with evidence "Doc not yet authored" (step 1 short-circuit).
+- `ISSUE_OPEN` coercion: `statusToRank("ISSUE_OPEN") === 2` makes DRAFT (rank 0) and SPEC_REVIEW (rank 1) DONE-or-SKIPPED, APPROVED (rank 2) CURRENT, IN_PROGRESS/VERIFY/COMPLETE PENDING — with `issueOpen: true` triggering the banner.
+- Parent detection: `allNodes.filter(n => n.parentId === node.id)` mirrors the existing `NodeInspector.tsx:14` pattern exactly.
+
+**Deviations from spec:** None structural. The evidence-string colour token choice (muted vs faint) is the only presentational deviation, recorded above.
+
+### Implementation Review (2026-05-23)
+
+Independent clean-context implementation review was run against this worktree post-rebase. Verdict: READY_FOR_OPERATOR_VERIFICATION (one should-fix, two nits). All Spec Review closures (S1–S3, N1–N6) verified honoured. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F1 | When `currentStatus === "ISSUE_OPEN"`, the APPROVED row's evidence read `"Status header is APPROVED"` — contradicting the banner that says the issue is open. The status header actually reads `ISSUE_OPEN`. | `computeStageState` now receives the original `currentStatus` as an extra parameter. When `stageRank === statusRank` and `currentStatus !== stage`, the evidence reads `"Status header is <currentStatus> (placed at <stage>)"`. Banner + evidence now agree. Three call sites updated. |
+| N1 | Spec doc §Design > Data source still referenced the two-arg `deriveWorkflowProgress(node, raw)` on line 45 and 47 after audit N4 expanded the signature to three args. | Updated both occurrences to `deriveWorkflowProgress(node, allNodes, raw)`. Stage derivation rules section already had the three-arg form. |
+| N2 | `WorkflowStageRow.tsx:26` used `text-[color:var(--color-success,#4a7c59)]` with a fallback value. `--color-success` is unconditionally defined in `globals.css:23`; the fallback was dead code and inconsistent with every other token usage in the codebase. | Removed the `,#4a7c59` fallback. |
+
+Bundle-delta numbers also refreshed below — the implementer's table was off by ~3.7 kB uncompressed JS due to Vite content-hash non-determinism between baseline-build environments (same root cause as `06-health` audit N1). The original Implementation Notes bundle-delta table above is superseded by this refreshed table.
+
+**Refreshed bundle delta** (final build after F1+N1+N2):
+
+| Asset | Baseline (`df3e427`) | This build | Delta |
+|-------|----------------------|------------|-------|
+| `index-*.js` (uncompressed) | 971,533 B | 981,990 B | +10,457 B (+1.1%) |
+| `index-*.js` (gzip) | 311.66 kB | 314.59 kB | +2.93 kB |
+| `index-*.css` (uncompressed) | 40,422 B | 40,920 B | +498 B (+1.2%) |
+| `index-*.css` (gzip) | 7.98 kB | 8.05 kB | +0.07 kB |
+
+Gates re-run after the audit fixes: `typecheck`, `lint`, `build` all exit zero.
+
+### Operator Verification V1 fix (2026-05-23)
+
+Operator verification (leaf-workflow §8, first pass) on `01-ui/06-health` revealed a single rendering bug: the COMPLETE row showed the CURRENT marker (`●`) instead of DONE (`✓`). Loop-back through ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY per stage 8b. Spec was correct (Acceptance check #1 already calls for "six rows all DONE" on COMPLETE nodes), so no spec revision; mechanical fix only. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| V1 | `computeStageState` returned `completion: "CURRENT"` whenever `stageRank === statusRank`, including for the terminal `COMPLETE` stage. A COMPLETE node thus rendered with the COMPLETE row marked CURRENT (`●`) rather than DONE (`✓`), contradicting Acceptance check #1. | Added a `stage === "COMPLETE"` early-return at the top of the rank-equal branch in `deriveWorkflow.ts:113-115`: `{ completion: "DONE", evidence: "Status header is COMPLETE" }`. Three lines. The CURRENT-evidence logic for the other five stages (including the ISSUE_OPEN rank-coercion case from F1) is unchanged. |
+
+Gates re-run after V1 fix: `typecheck`, `lint`, `build` all exit zero. Bundle changed by +3,032 B uncompressed JS (the special-case branch), unchanged CSS. Hash non-determinism dominates measurements at this scale; the absolute size of the diff is the +3 lines of code plus a string literal. Nothing structural changed.
 
 ---
 

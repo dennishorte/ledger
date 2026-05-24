@@ -106,3 +106,61 @@ export interface DepImpactResult {
   /** Transitively downstream node IDs (direct + indirect dependents). */
   affectedNodeIds: NodeId[];
 }
+
+// ---------------------------------------------------------------------------
+// Workflow-progress types — introduced by 01-ui/09-workflow-progress
+// ---------------------------------------------------------------------------
+
+/**
+ * The six PRD §6.2 lifecycle stages, in canonical order.
+ * Introduced by 01-ui/09-workflow-progress.
+ */
+export type WorkflowStage =
+  | "DRAFT"
+  | "SPEC_REVIEW"
+  | "APPROVED"
+  | "IN_PROGRESS"
+  | "VERIFY"
+  | "COMPLETE";
+
+/**
+ * Completion state of a single stage row.
+ *  - DONE:    stage is in the past (status > stage) or its structural marker is present.
+ *  - CURRENT: stage equals the node's current status.
+ *  - PENDING: stage is in the future (status < stage) and no structural marker yet.
+ *  - SKIPPED: status is past this stage but the structural marker is absent
+ *             (e.g., DRAFT→APPROVED via the leaf-workflow stage-2 shortcut).
+ */
+export type StageCompletion = "DONE" | "CURRENT" | "PENDING" | "SKIPPED";
+
+export interface WorkflowStageState {
+  stage: WorkflowStage;
+  completion: StageCompletion;
+  /** Human-readable evidence string, e.g. "Status header is COMPLETE" or "Spec Review (2026-05-22) audit table present". */
+  evidence: string;
+}
+
+export interface WorkflowProgress {
+  nodeId: NodeId;
+  /**
+   * Mirrors DocNode.status. Note: this can be PLANNED or ISSUE_OPEN, neither
+   * of which is a WorkflowStage — the renderer maps them through stages[] and
+   * issueOpen rather than expecting a 1:1 stage correspondence.
+   */
+  currentStatus: NodeStatus;
+  /** True iff currentStatus === "ISSUE_OPEN". When true, the banner renders. */
+  issueOpen: boolean;
+  /**
+   * Six entries for leaves, two entries (DRAFT, APPROVED) for parents. The
+   * length is governed by isParent rather than by the type — see parent-node
+   * handling below. Type-narrowing on isParent is the safe access pattern.
+   */
+  stages: WorkflowStageState[];
+  /** True when the node is a parent (has children in the manifest). Renderer uses this to pick the collapsed layout. */
+  isParent: boolean;
+  /** For parent nodes only: counts derived from the children manifest. Undefined for leaves. */
+  childrenRollup?: {
+    total: number;
+    byStatus: Partial<Record<NodeStatus, number>>;
+  };
+}
