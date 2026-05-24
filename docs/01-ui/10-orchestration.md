@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (SPEC_REVIEW → APPROVED)
+**Last Updated:** 2026-05-24 (APPROVED → IN_PROGRESS)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
