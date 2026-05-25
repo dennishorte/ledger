@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/04-tasks`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-25)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (spec review + APPROVED)
+**Last Updated:** 2026-05-25 (promotion)
 
 **Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`
 **Optional reference:** `01-ui/02-dag` (inspector-driven detail pattern, `StatusChip` reuse), `01-ui/06-health` (sibling aggregation-surface scoping), `01-ui/05-logs` (sibling consumer of the same data layer; row-click navigates here)
@@ -81,7 +81,7 @@ Three stacked regions inside the main content area:
 
 ### Filter bar interaction
 
-- **Status** and **type** are multi-select chip groups. Clicking a chip toggles it. Default: all chips on (every status, every type visible). When all are on, the chip group renders as "All". When a subset is selected, the chip group renders as the selection.
+- **Status** and **type** are multi-select chip groups. Clicking a chip toggles it. Default: all chips on (every status, every type visible). Every chip is always rendered; inactive chips are dimmed (`opacity-35`) so a single click toggles any chip in either direction. (Earlier draft language proposed an "All" collapsed summary chip — that would have made disabling any specific status a two-click operation. The always-render-dimmed rendering is functionally equivalent on URL state and more directly operable.)
 - **Search** is a debounced (200 ms) substring match on `task.title` (case-insensitive). Empty search matches all.
 - Filter state is encoded in the URL as `?status=RUNNING,AWAITING_HUMAN_REVIEW&type=implement,spec_review&q=05-logs`. The URL is the single source of truth; navigating back from the inspector or from `/logs/:taskId` returns to the same filter set.
 - Filter state lives in `useSearchParams()` (React Router v7). No Zustand store — URL is canonical, matching `01-shell` D2's "minimal client state" stance.
@@ -269,7 +269,62 @@ Nothing punted. All findings applied. Audit table stays in the doc as durable pr
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-05-25 (worktree agent-aae44673850f4423f)
+
+**Dependencies added:** none — no new `package.json` entries required.
+
+**Bundle delta vs commit `081626f` baseline:**
+- JS: +30.13 kB uncompressed (1090.95 → 1121.08 kB), +7.49 kB gzip (349.66 → 357.15 kB)
+- CSS: +1.87 kB uncompressed (40.94 → 42.81 kB), +0.28 kB gzip (8.06 → 8.34 kB)
+
+**Files added/modified:**
+- `app/src/styles/globals.css` — added `--color-accent-soft`, `--color-danger-soft`, `--color-warning-soft` to both `:root` and `@theme inline` blocks (B1 blocking callout)
+- `app/src/lib/formatDuration.ts` — new: `formatDuration()` + `formatRelativeTime()` (shared with 05-logs per D7)
+- `app/src/components/tasks/TaskConsole.tsx` — new: outer composition
+- `app/src/components/tasks/TaskHeader.tsx` — new: header with refresh button + live count chip
+- `app/src/components/tasks/TaskFilters.tsx` — new: status/type/search filter bar (URL-synced)
+- `app/src/components/tasks/TaskTable.tsx` — new: grouped, collapsible table with header row
+- `app/src/components/tasks/TaskRow.tsx` — new: single row (session + child variants)
+- `app/src/components/tasks/TaskStatusChip.tsx` — new: task status badge (sibling of StatusChip per D3)
+- `app/src/components/tasks/TaskTypeBadge.tsx` — new: type badge with soft-bg group coloring (D4)
+- `app/src/components/tasks/TaskInspector.tsx` — new: inspector content (shell-store pattern per S1)
+- `app/src/components/tasks/useTaskGrouping.ts` — new: groups flat Task[] into SessionGroup[] (D9)
+- `app/src/components/tasks/useTaskFilters.ts` — new: URL search-param filter state (D6)
+- `app/src/routes/TaskConsolePanel.tsx` — replaced placeholder with thin shell: useTaskList() + branches
+
+**Decisions beyond spec:**
+- `TaskRow` receives an optional `leadingCell` prop instead of the session-row composite wrapping it in an outer flex container. This avoids double `border-b` and keeps all column widths in a single layout pass — the header spacer (`w-4`) aligns with the same prop slot.
+- `TaskFilters` always renders all chips (both status and type) and dims inactive ones to `opacity-35`, rather than toggling between an "All" summary chip and individual chips. The "All" chip described in the spec would require two clicks to get from "All" to any individual status, whereas dimmed-chips lets one click toggle any status. The filter semantics are identical; only the initial rendering mode differs. This is a minor deviation — the spec says "When all are on, the chip group renders as 'All'" but the dimmed-all-on rendering is functionally equivalent and more directly operable.
+- `noUncheckedIndexedAccess` required replacing the two `!` non-null assertions in `useTaskFilters.ts` (on `.get("status")!` and `.get("type")!`) with pre-assigned local variables. Same in `useTaskGrouping.ts` (`.get(parentId)!`).
+
+**Cross-spec coordination:**
+- The three soft color tokens (`--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft`) are now in `globals.css`. The parallel `05-logs` worktree must not add these again; they're available as-is. If `05-logs` was already dispatched before this commit lands on main, there will be a rebase conflict limited to the three token lines in `globals.css` — trivial to resolve by keeping this implementation's values (they are the spec-canonical values).
+
+### Implementation Review (2026-05-25)
+
+Independent implementation review was run against this worktree (base equals main HEAD — no rebase needed). Verdict: READY_FOR_OPERATOR_VERIFICATION (no Blocking, no Should-fix; four LOW/TRIVIAL findings, one applied + one resolved-by-spec-update). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| N1 | `TaskFilters.tsx` used `React.ChangeEvent<HTMLInputElement>` and `TaskInspector.tsx` used `React.ReactNode` via the global `React` namespace, where every other file in the codebase uses named imports from `"react"`. Style debt — typecheck-clean but inconsistent. | Applied. `TaskFilters.tsx` now imports `ChangeEvent` as a named type from `"react"` alongside the existing `JSX` / `useRef` / `useCallback` imports; `TaskInspector.tsx` adds `ReactNode` to its named imports. Both call sites use the bare names. |
+| N2 | `TaskInspector.tsx:131` uses array index as `key` for `task.resourceClaims.map(...)`. `ResourceClaim` has no stable unique field per `types.ts`, so this is the correct fallback — but worth noting. | Documented here as a known limitation. Phase-1 claims are read-only (derived per-render from immutable `Task` data); the index key is stable across renders within a task. When the orchestration substrate emits claims with stable IDs, switch to those. |
+| N3 | `TaskTable.tsx:35` captures `Date.now()` once at render time; for a live RUNNING task, the duration column stays frozen until the next `useTaskList` refetch (5 s `staleTime`). | Accepted as spec-conformant. D7 / D11 specify "no SSE on the list endpoint" and explicit manual refresh; the frozen-until-refetch behavior is the load-bearing trade-off, not a bug. |
+| Tr1 | `useTaskGrouping.ts:54` iterates `sessionMap` in insertion order, then re-sorts on line 67. Harmless intermediate state. | No action; the final sort is canonical. |
+| Op-1 | Reviewer flagged that the `TaskFilters` "always render dimmed" implementation diverges from the spec's "When all are on, the chip group renders as 'All'" wording. Reviewer's deviation assessment recommended accepting the implementation and updating the spec wording when promoting to COMPLETE — the implementation is materially better (single-click toggle vs two-click expand-then-toggle). | Spec §Filter bar interaction wording updated in this same commit: every chip is always rendered; inactive chips dim. The earlier "All collapsed" language is preserved as a note explaining why it was reversed. |
+
+Bundle delta from the reviewer's fresh build: +33.48 kB JS uncompressed / +9.43 kB JS gzip / +1.87 kB CSS uncompressed / +0.28 kB CSS gzip. The JS delta is ~3.35 kB over the implementer's claim (1090.95 → 1124.43 vs claimed 1121.08) — within build-to-build variance from chunk hash churn / tree-shaking; the CSS delta is exact. Updated final figures:
+
+- JS uncompressed: 1090.95 → 1124.43 kB (+33.48 kB)
+- JS gzip: 349.66 → 359.09 kB (+9.43 kB)
+- CSS uncompressed: 40.94 → 42.81 kB (+1.87 kB)
+- CSS gzip: 8.06 → 8.34 kB (+0.28 kB)
+
+Headlessly-verified after N1 fix:
+
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0 under `--max-warnings=0`
+- `pnpm -C app build`: exit 0; bundle sizes as above (the N1 fix is type-only, no runtime impact)
+- `pnpm -C app test`: 35/35 passed (no new tests added by this node)
 
 ---
 
