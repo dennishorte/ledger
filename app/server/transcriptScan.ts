@@ -38,19 +38,36 @@ export interface TranscriptEntry {
 
 let cachedRepoRoot: string | null = null;
 
-/** Returns the absolute repo root path, cached. Throws outside a git repo. */
+/**
+ * Returns the absolute path of the MAIN worktree, cached. Throws outside a
+ * git repo.
+ *
+ * `git worktree list --porcelain` lists the main worktree first even when
+ * invoked from inside a linked worktree (per the porcelain stability
+ * guarantee), so the first `worktree <path>` line is always the main repo.
+ * This is required because Claude Code's encoded-cwd directory is keyed off
+ * the directory the operator originally ran `claude` in (the main repo);
+ * `git rev-parse --show-toplevel` from a linked worktree returns the
+ * worktree's own path, which misses the transcripts dir.
+ */
 function getRepoRoot(): string {
   if (cachedRepoRoot !== null) return cachedRepoRoot;
   try {
-    const result = execSync("git rev-parse --show-toplevel", {
+    const stdout = execSync("git worktree list --porcelain", {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    cachedRepoRoot = result;
-    return result;
-  } catch {
+    });
+    const firstLine = stdout.split("\n", 1)[0] ?? "";
+    const match = /^worktree (.+)$/.exec(firstLine);
+    if (match === null || match[1] === undefined || match[1] === "") {
+      throw new Error("unexpected `git worktree list --porcelain` output");
+    }
+    cachedRepoRoot = match[1];
+    return cachedRepoRoot;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
-      "transcriptScan: git rev-parse --show-toplevel failed — is this a git repo?",
+      `transcriptScan: could not determine main repo root via \`git worktree list\` — ${reason}`,
     );
   }
 }

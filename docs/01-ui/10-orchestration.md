@@ -379,7 +379,7 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 | D12 | Privacy disclosure: transcripts may contain secrets, file contents, pasted credentials. Single-operator local-only context (PRD §13) makes this acceptable. Middleware never serves to anything outside localhost | Worth being explicit. If the panel ever becomes networked (real API server with auth), the threat model changes. |
 | D13 | `ResourceClaim` is a discriminated union of `node` (doc-node) and `path` (free-form) | Sub-agent worktree paths and non-doc tool targets don't map to `NodeId`. A discriminated union keeps the type single-field and type-safe at every boundary. Alternative considered: a parallel `pathClaims: string[]` on `Task` — rejected as more surface for the same information. |
 | D14 | Task title is derived from the most recent `ai-title` JSONL line's `aiTitle` field when present; else the first qualifying user prompt | `ai-title` is Claude Code's own session-titling heuristic (verified: top-level type `{ type: "ai-title", aiTitle, sessionId }`, 190 occurrences across 13 sessions). Always available for non-trivial sessions and pithier than a raw first prompt. The fallback handles edge cases (very fresh sessions before the first `ai-title` is emitted). The qualifying-prompt filter (string content, no `<command-name>` prefix, `isMeta !== true`) prevents slash-command invocations from leaking into titles. |
-| D15 | Repo root derived from `git rev-parse --show-toplevel` at dev-server boot, cached for the process lifetime | `process.cwd()` depends on where `pnpm dev` was invoked; running from a subdirectory misses the encoded-cwd lookup. `git rev-parse` is always correct, zero-dep (already required for the repo), fail-fast outside a git repo. |
+| D15 | Repo root derived from the first `worktree <path>` line of `git worktree list --porcelain`, cached for the process lifetime | `process.cwd()` depends on where `pnpm dev` was invoked. The originally-specified `git rev-parse --show-toplevel` is wrong inside a linked worktree — it returns the worktree's path, not the main repo's, and the leaf-workflow implementer always runs from a linked worktree (see Stage-8 Verification V1). `git worktree list --porcelain` lists the main worktree first regardless of caller location per the porcelain stability guarantee. Zero-dep (already required), fail-fast outside a git repo. |
 
 ---
 
@@ -391,7 +391,6 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 - **`MultiEdit` artifact granularity.** Each `MultiEdit` against N hunks of one file emits one artifact event. Hunk-level detail is lost. Acceptable for Phase-1; revisit when the API server defines the artifact contract. *(Priority: LOW.)*
 - **Resource-claim derivation gaps.** Tools like `Bash` and `WebFetch` can read/write arbitrary paths the parser can't reliably attribute. Those tool calls become opaque events with no claim derived. *(Priority: LOW.)*
 - **"Soft COMPLETE."** The 30-min quiet threshold can flip a session COMPLETE that the operator later resumes. UI consumers should treat COMPLETE as informational, not terminal. `useTaskList` re-derives on each refetch. *(Priority: LOW.)*
-- **Stage-8 finding: linked-worktree dev server sees no transcripts.** D15 specifies `git rev-parse --show-toplevel` for repo-root resolution. Inside a linked worktree (the standard leaf-workflow implementer environment), that command returns the *worktree's* path, not the main repo's, so the encoded-cwd lookup misses entirely (`/api/transcripts` returns an empty list). Discovered during stage-8 manual verification on this very worktree. Fix: use `git worktree list --porcelain` and read the first `worktree <path>` line — that's always the main worktree regardless of the caller's location. *(Priority: HIGH — blocks the panel's primary use case any time it's invoked from a worktree, which is most of the time during framework development.)*
 
 ---
 
@@ -477,6 +476,30 @@ Independent implementation review was run against this worktree (no rebase neede
 - `pnpm -C app lint`: exit 0
 - `pnpm -C app build`: exit 0; bundle sizes match the refreshed table above
 - `pnpm -C app test`: 35/35 passed (was 34/34; +1 for the artifact assertion)
+
+### Stage-8 Verification (2026-05-24)
+
+Operator manual verification surfaced one bug; everything else passed. Verification ran against the dev server hosted from this worktree.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| V1 | `/api/transcripts` returned an empty array when the dev server was started from the implementer worktree (`/Users/dennis/code/ledger/.claude/worktrees/agent-a598c92579a500907`). Root cause: D15 specified `git rev-parse --show-toplevel`, which returns the *worktree's* path inside a linked worktree, not the main repo's path. The encoded-cwd directory (`~/.claude/projects/-Users-dennis-code-ledger`) is keyed off the operator's original `claude` invocation directory — i.e., the main worktree. | Replaced the repo-root resolver in `app/server/transcriptScan.ts` with `git worktree list --porcelain` and parsed the first `worktree <path>` line. Per the porcelain stability guarantee that's always the main worktree regardless of where the command runs. Spec-level: D15's resolver command updated correspondingly; the operating contract (cached, main-worktree path) is unchanged. |
+
+Acceptance check after the fix (live HTTP probes against `http://localhost:4179`):
+
+| # | Item | Result |
+|---|------|--------|
+| 1 | `/api/transcripts` returns full task list | 25 tasks: 9 operator_session + 16 sub-agents (5 implement, 2 spec_review, 1 spec_draft, 2 verify, 6 agent_task). Status mix: 1 RUNNING (this session), 9 COMPLETE, 15 AWAITING_HUMAN_REVIEW. |
+| 2 | `/api/transcripts/session:<currentSessionId>` returns task + events | Current session task title `"Implement 05-logs module"` (from `ai-title` D14), 501 events. Kind distribution: 105 reasoning, 179 tool_call, 179 tool_result, 33 artifact, 4 status_change, 1 error — all six LogEvent kinds present. 27 resource claims, 8 node-claims. |
+| 3 | SSE delivers events from seq=0 | First emitted line: `id: 0` followed by the seq-0 event. B1 fix confirmed in live behavior, not just code review. |
+| 4 | `Last-Event-ID: 2` resumes correctly | First event delivered after the resume header is `id: 3`. No duplicates of seq ≤ 2. |
+| 5 | Sub-agent task has `parentTaskId` + worktree-path claim | `agent:a3562fa57108eef10` ("Implement 03-docs node") has `parentTaskId: session:374a94db-...` and a `path/write` claim on its worktree path. |
+| 6 | Cross-repo transcripts excluded | 18 sibling encoded-cwd directories exist under `~/.claude/projects/` (other repos: `-align`, `-assistant`, `-battlestar`, `-conductor`, `-culture-discussions`, `-dog`, `-ftl-clone`, `-game-center`, `-game-center-common`, `-grimoire`, … ). Zero transcript paths in the API response point outside `-Users-dennis-code-ledger/`. |
+| 7 | `touch` flips status to RUNNING within the 5 s window | `touch`ing a previously-COMPLETE transcript flipped its status to RUNNING within < 1 s. Final state after quiet again depended on last-line kind; that's expected per D5's rule table. |
+| + | Privacy: non-localhost Host rejected | `Host: evil.example.com` against `/api/transcripts` returned `403`. |
+| + | No regressions on existing SPA routes | GET `/`, `/dag`, `/docs`, `/health`, `/tasks`, `/logs/foo` all returned `200` from the Vite dev server. |
+
+**D2 keyword-table observation (informational only — not a finding):** Five sub-agents fell to the `agent_task` fallback because their descriptions ("Review 03-docs spec", "Review 06-health spec", "Review 03-docs implementation", "Review 06-health implementation", "Review 08-markdown implementation", "Build UI shell per spec") don't match the current D2 patterns. The spec's existing Open Issue "Sub-agent task-type inference miss rate" (LOW priority) already documents this as expected fuzziness. Operator opted not to extend the keyword table in this pass; later iteration on the table is welcome but not a v1 blocker.
 
 ---
 
