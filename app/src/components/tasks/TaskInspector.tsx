@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import { TaskStatusChip } from "@/components/tasks/TaskStatusChip";
@@ -167,7 +167,7 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }): JSX.Element {
   return (
     <div>

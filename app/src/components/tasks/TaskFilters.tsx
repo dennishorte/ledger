@@ -1,4 +1,4 @@
-import { type JSX, useRef, useCallback } from "react";
+import { type ChangeEvent, type JSX, useRef, useCallback } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
@@ -35,7 +35,7 @@ export function TaskFilters({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleQueryChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
       if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
