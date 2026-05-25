@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/05-logs`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-25)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (spec review + APPROVED)
+**Last Updated:** 2026-05-25 (promotion)
 
 **Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`, `01-ui/08-markdown` (consumed for `reasoning` event bodies — see D6), `01-ui/04-tasks` (consumed for the `--color-warning-soft` / `--color-danger-soft` tokens it introduces in `globals.css`, and for the `TaskStatusChip` reused in `status_change` rows — see D2)
 **Optional reference:** `01-ui/02-dag` (the panel that owns the "accessible from the DAG node side panel" affordance per PRD §8.2 — see R1a), `01-ui/03-docs` (resolver pattern — see D9)
@@ -262,7 +262,72 @@ Nothing punted. All findings applied. Audit table stays in the doc as durable pr
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:**
+- `@testing-library/react` (devDependency) — required for the golden test (Verification item 9). Added `@testing-library/jest-dom` and `jsdom` alongside it.
+- `vitest/config` — switched `vite.config.ts` from `defineConfig` (vite) to `defineConfig` (vitest/config) to support the `test` block. Added two test projects: `server` (node, `server/**/*.test.*`) and `client` (jsdom, `src/**/*.test.*`). This is the only change to `vite.config.ts`'s shape from spec.
+
+**Bundle delta (refreshed after rebase onto 04-tasks + Implementation Review fixes):**
+
+| Asset | Main `081626f` | 04-tasks tip | This (rebased) | 05-logs-only delta | Combined delta vs main |
+|---|---|---|---|---|---|
+| JS uncompressed | 1090.95 kB | 1128.05 kB | 1147.10 kB | +19.05 kB | +56.15 kB |
+| JS gzip | 349.66 kB | 360.56 kB | 365.92 kB | +5.36 kB | +16.26 kB |
+| CSS uncompressed | 40.94 kB | 42.81 kB | 43.89 kB | +1.08 kB | +2.95 kB |
+| CSS gzip | 8.06 kB | 8.34 kB | 8.53 kB | +0.19 kB | +0.47 kB |
+
+The pre-rebase numbers reported in the original Implementation Notes (JS +27 kB / CSS +1.6 kB) were measured against main HEAD when the worktree still carried its own copies of `formatDuration.ts` and the inline `TaskStatusChip`. Post-rebase, those duplicates were dropped in favor of `04-tasks`'s canonical versions; the 05-logs-only contribution shrank to +19 kB JS / +1.08 kB CSS. The combined delta (the planned `04-tasks + 05-logs` landing on main) is +56 kB JS / +3 kB CSS.
+
+**Files created:**
+- `app/src/lib/docLink.ts` — extracted `resolveDocLink` from `DocViewer.tsx` (N3). `DocViewer.tsx` updated to import from here.
+- `app/src/lib/formatDuration.ts` — shared duration formatter (D7, cross-spec coordination).
+- `app/src/components/logs/ConnectionPill.tsx`
+- `app/src/components/logs/LogEventRow.tsx` — main discriminated-union renderer with per-kind sub-renderers colocated.
+- `app/src/components/logs/LogEventList.tsx`
+- `app/src/components/logs/LogFilters.tsx`
+- `app/src/components/logs/LogStream.tsx`
+- `app/src/components/logs/LogStreamHeader.tsx`
+- `app/src/components/logs/logFiltersUtil.ts` — split from `LogFilters.tsx` to satisfy `react-refresh/only-export-components` lint rule (non-component exports must live in a separate module).
+- `app/src/components/logs/toolPreview.ts`
+- `app/src/components/logs/resultPreview.ts`
+- `app/src/components/logs/useAutoFollow.ts`
+- `app/src/components/logs/LogEventRow.test.tsx` — golden test (15 tests covering all 6 kinds + subkinds).
+
+**Files modified:**
+- `app/src/components/docs/DocViewer.tsx` — removed inlined `resolveDocLink`; now imports from `@/lib/docLink`.
+- `app/src/routes/LogStreamPanel.tsx` — full implementation (was placeholder).
+- `app/src/styles/globals.css` — added `--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft` tokens.
+- `app/vite.config.ts` — switched to `vitest/config`; added `test.projects` block.
+
+**Cross-spec coordination items (rebase reconciliation applied — this worktree is rebased onto `worktree-agent-aae44673850f4423f`):**
+
+1. **`globals.css` soft tokens** — `04-tasks`'s declarations are the canonical source. Both the original 05-logs-added block (`:root` lines 33–35) and the duplicate `@theme inline` entries (lines 65–67) were removed during the Implementation Review pass; the file now has a single declaration per token, all sourced from `04-tasks`. Values are byte-identical, so the dedup is purely a cosmetic cleanup (CSS `last-declaration-wins` had been masking the duplication).
+2. **`TaskStatusChip`** — `LogEventRow.tsx` and `LogStreamHeader.tsx` both import `TaskStatusChip` from `@/components/tasks/TaskStatusChip`. The inline `InlineStatusChip` and inline `TaskStatusChip` copies that originally lived in those files were deleted during rebase reconciliation.
+3. **`formatDuration.ts`** — `04-tasks`'s API kept (`formatDuration(startedAt, completedAt, now?)` returning `"12m" | "3s" | "—"`); 05-logs's competing `formatDuration(ms: number)` and `formatDurationBetween` deleted. `LogStreamHeader.tsx` was the only 05-logs caller — call updated to `formatDuration(task.startedAt, task.completedAt)` (omitting the `now` arg lets the default `Date.now()` handle running-task elapsed time correctly).
+4. **`vite.config.ts`** — `04-tasks` did NOT modify this file, so 05-logs's `vitest/config` switch + `test.projects` block is the sole change. Both `server` (node) and `client` (jsdom) test projects coexist; all 50 tests (35 from 10-orchestration's `transcriptParse.test.ts` + 15 from this node's `LogEventRow.test.tsx`) pass.
+
+**Deviations from spec:**
+- `logFiltersUtil.ts` was introduced (not in spec's file layout) to satisfy the `react-refresh/only-export-components` lint rule — `parseKindsFromParam` and `ALL_KINDS` cannot live in `LogFilters.tsx` alongside the component export. This is an additive deviation with no spec-visible surface change.
+- The golden test mocks `@/lib/docLink` and `@/lib/parseDocs` because `parseDocs.ts` uses `import.meta.glob` which is not available in the vitest jsdom environment. The mock is a no-op resolver (`href => /docs/${href}`) that lets the component render without the build-time doc tree. The actual `resolveDocLink` is exercised in the browser environment where `import.meta.glob` works.
+- Production "no middleware" detection uses `window.location.hostname !== "localhost"` heuristic rather than a spec-prescribed mechanism (the spec said render the same empty-state copy from `10-orchestration` D11 but didn't specify how to detect). This is a reasonable Phase-1 approximation.
+
+### Implementation Review (2026-05-25)
+
+Independent implementation review was run against the rebased worktree (base = `worktree-agent-aae44673850f4423f`, i.e., the 04-tasks tip). Verdict: READY_FOR_OPERATOR_VERIFICATION — no Blocking, no Should-fix; three minor findings (1 applied, 2 doc/cosmetic). All Spec Review audit-table closures verified.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F1 | `globals.css` had the three soft tokens declared TWICE in `:root` AND TWICE in `@theme inline` — the rebase auto-merge layered the original 05-logs additions on top of the 04-tasks declarations rather than dropping the duplicates. CSS `last-declaration-wins` made values correct but the dead block was lingering. | Applied. Removed the duplicate block (`:root` lines 33–35 and `@theme inline` lines 65–67) plus the orphaned comment marking them as parallel-worktree dupes. Single declaration per token now sourced from the 04-tasks base. |
+| F2 | The original Implementation Notes bundle numbers (JS +27 kB / CSS +1.6 kB) were measured pre-rebase against main HEAD; post-rebase the 05-logs-only contribution is smaller (+19 kB JS / +1.08 kB CSS) because the duplicated `formatDuration.ts` and inline `TaskStatusChip` copies were dropped in favor of 04-tasks's canonical versions. | Applied. Bundle delta section rewritten with five-column table covering main / 04-tasks tip / this branch / 05-logs-only delta / combined delta. |
+| F3 | `LogStreamPanel.tsx` had a dead `if (queryPending) {  // … }` block with only a comment in the body (lines 86–89 pre-fix). `ConnectionPill` already handles the pending state via the `queryPending` prop; no shell-level branching needed. | Applied. Block removed. |
+
+**Final headlessly-verified results after F1 + F3 (F2 is doc-only):**
+
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0 under `--max-warnings=0`
+- `pnpm -C app build`: exit 0; bundle sizes match the refreshed table above (JS 1147.10 kB / CSS 43.89 kB, gzip 365.92 / 8.53)
+- `pnpm -C app test`: 50/50 passed (35 from `transcriptParse.test.ts` + 15 from `LogEventRow.test.tsx`)
+
+The cross-spec coordination section above reflects the post-rebase state; the original "rebase reconciliation needed" framing is superseded by "rebase reconciliation applied."
 
 ---
 
