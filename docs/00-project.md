@@ -1,13 +1,14 @@
 # LLM Project Framework
  
 **Status:** Draft  
-**Version:** 0.5.1  
+**Version:** 0.5.2  
 **Last Updated:** 2026-05-25  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
 v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).  
 v0.5 — Reversed LangGraph adoption: task runner now built in-house in TypeScript on SQLite from Phase 1 (§5 rewritten; §7 diagram, §8.5, §8.6, §3 caveat updated). Closed the LangGraph resource-locking risk in §11 as N/A. Added four open issues from a v0.5 architecture review (implicit document schema, no framework/instance separation, transcript-ingestion coupling, missing parser tests). §14 build order shifted from UI-first to substrate-next.  
-v0.5.1 — §8.6 Replay Mode marked deferred (out of v1 scope; event log primitive stays in the runner). §11 added "no project metadata file" open issue (sibling to schema artifact). §14 row updated to reflect 07-replay DEFERRED. Cross-doc sync: `01-ui/00-ui.md` manifest, `01-ui/10-orchestration.md` children pointer, `01-ui/05-logs.md` out-of-scope bullet, `CLAUDE.md` round-2 line. New Open Issues filed on `01-ui/02-dag.md` (floating parent node, transitive edges not reduced) and `01-ui/01-shell.md` ("untitled project" fallback).
+v0.5.1 — §8.6 Replay Mode marked deferred (out of v1 scope; event log primitive stays in the runner). §11 added "no project metadata file" open issue (sibling to schema artifact). §14 row updated to reflect 07-replay DEFERRED. Cross-doc sync: `01-ui/00-ui.md` manifest, `01-ui/10-orchestration.md` children pointer, `01-ui/05-logs.md` out-of-scope bullet, `CLAUDE.md` round-2 line. New Open Issues filed on `01-ui/02-dag.md` (floating parent node, transitive edges not reduced) and `01-ui/01-shell.md` ("untitled project" fallback).  
+v0.5.2 — Five implicit decisions from the v0.5 architecture review made durable. New §7.1 (project scoping: one API server per project, CLI launcher takes path arg). New §7.2 (per-endpoint UI data-path migration strategy). §8.1 distinguishes Document DAG from Task DAG explicitly, with claims as the cross-graph link. §8.4 fleshes out the HITL approval surface (diff render, optimistic locking, inbox view, reject-with-feedback). §13 adds migration tooling, recents chooser, and replay-mode UI as named deferred items. §14 backend decomposition: replaced prose with manifest rows — `02-schema`, `03-project-metadata`, `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, all PLANNED, with declared dependencies.
  
 ---
  
@@ -207,7 +208,25 @@ Refactor tasks may not execute while any other task holds a resource claim on th
 └─────────────────────────────────────────────────────┘
 ```
 
-The Git Repo box is not a service — it is the working tree itself. The API server reads/writes via git plumbing (or `simple-git` / equivalent) and exposes JSON over HTTP to the UI. Document version history is `git log`. Rollback is `git revert`. Replay-mode walks commit history.
+The Git Repo box is not a service — it is the working tree itself. The API server reads/writes via git plumbing (or `simple-git` / equivalent) and exposes JSON over HTTP to the UI. Document version history is `git log`. Rollback is `git revert`.
+ 
+### 7.1 Project Scoping
+ 
+Each ledger instance is scoped to exactly one project. The API server takes a project path as its launch argument:
+ 
+```
+ledger /path/to/project
+```
+ 
+The launcher reads `.ledger/project.json` at that path for project identity (name, docs root, agent runtime), starts the API server scoped to that tree, and opens the browser. Multi-project usage is achieved by running multiple instances on different ports; the UI itself is single-project.
+ 
+A "recents chooser" — a small SPA shown when `ledger` is launched without a path argument, listing previously-opened projects from `~/.ledger/recent.json` — is deferred (see §13). The v1 contract is: explicit path argument or error.
+ 
+### 7.2 UI Data-Path Migration
+ 
+The round-2 UI (`01-ui` children) currently consumes data via two bootstraps: `parseDocs.ts` reads the filesystem directly for document tree state; `01-ui/10-orchestration` parses Claude Code transcript JSONL for task and log-event state.
+ 
+Both are transitional. As the API server lands, the UI migrates **per endpoint**: each TanStack Query hook (`useTask`, `useTaskList`, `useLogStream`, etc.) flips from its bootstrap source to the corresponding API endpoint in its own commit. This gives the API server real consumers to validate each endpoint against, and limits the blast radius of each migration step to one panel. Big-bang migration — deferring all UI changes until the API server is fully built — is explicitly rejected: it would land the API server with no validated consumers and concentrate refactor risk in a single PR.
  
 ---
  
@@ -215,13 +234,23 @@ The Git Repo box is not a service — it is the working tree itself. The API ser
  
 ### 8.1 DAG Visualization
  
-- Render the full task DAG with node status indicated visually:
-  - **In flight** — animated/highlighted
-  - **Complete** — muted
-  - **Blocked** — dependency-highlighted
-  - **Needs human intervention** — prominent alert state
-- Each DAG node links to its associated document node.
-- Clicking a task node opens a side panel with task details, resource claims, and log output.
+The framework exposes **two distinct graphs**. They have different structures and lifetimes; the UI renders them as separate views with cross-links.
+ 
+- **Document DAG** — the static structure of the project. Nodes are document nodes (`docs/<path>/<id>.md`); edges are `dependsOn` and `parent` relations declared in children manifests. Node state is the lifecycle Status (§6.2). This is what `01-ui/02-dag` already renders.
+- **Task DAG** — the dynamic execution structure. Nodes are task instances (`spec_draft`, `implement`, `verify`, `doc_refactor`, `issue_triage`, `human_review`); edges are task-level dependencies. Resource claims (§6.3) point from a task to one or more document nodes — they are the **link between the two graphs**. Task state is the runtime state (queued / in-flight / complete / blocked / awaiting-human).
+ 
+Both views render with consistent visual status cues:
+ 
+- **In flight** — animated/highlighted
+- **Complete** — muted
+- **Blocked** — dependency-highlighted
+- **Needs human intervention** — prominent alert state
+ 
+Cross-graph navigation:
+ 
+- Clicking a task node jumps to its primary claimed document node.
+- Clicking a document node shows "tasks that have ever claimed me" in the inspector, ordered by recency.
+- Clicking a task node also opens the side panel with task details, claims, and live log output.
 ### 8.2 Live Agent Log Streaming
  
 - Per-task log stream showing real-time agent activity.
@@ -238,7 +267,13 @@ The Git Repo box is not a service — it is the working tree itself. The API ser
 - Manual task injection: insert a task at a specified queue position with declared resource claims and dependencies.
 - Breakpoint insertion: pause execution after a specified task completes. Supports inserting a `project_status_review` task type that produces a cross-tree summary before proceeding.
 - Priority override: bump a queued task ahead of non-dependent tasks.
-- Approval gates: task types configured as `human_review` present a diff and require explicit approval before the runner proceeds.
+- **Approval gates.** When a task type is configured as `human_review` (or a task hits an approval breakpoint), the runner suspends the task and surfaces it for operator action. The approval surface:
+  - Lists the task ID, type, and the document node(s) being claimed.
+  - Shows the proposed change as a diff for `verify` and `implement` tasks (rendered with the same diff component used by `01-ui/03-docs`).
+  - Shows the agent's reasoning summary if available.
+  - Offers two actions: **approve** (runner resumes) and **reject with feedback** (a feedback string is recorded into the task's Open Issues and the task transitions to ISSUE_OPEN). Rejection without feedback is not allowed — the loop-back needs a reason for the next pass.
+  - POSTs to a dedicated API endpoint with optimistic locking against the task's current status (rejects if the task has been moved by another actor mid-review).
+  - The topbar surfaces a count of tasks awaiting approval; a dedicated inbox route lists them in priority order.
 ### 8.5 Rollback
  
 - Any document node can be reverted to a prior version.
@@ -312,6 +347,9 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 - Integration with external issue trackers (GitHub Issues, Jira)
 - Cost budget enforcement (hard stop when token spend exceeds threshold)
 - Support for non-code project types (research, writing, data pipelines)
+- **Migration tooling** — an automated `ledger migrate /path/to/existing/project` command that scaffolds `.ledger/project.json` and an initial `docs/` tree from an existing repository's READMEs, structure, and history. Validated path: dogfood a second project manually first (operator follows a written checklist), then capture the checklist as a CLI command, then LLM-assist the scaffolding step. Premature today (no schema artifact to migrate *to* yet).
+- **Recents chooser UI** — a small SPA shown when `ledger` is launched without a path argument. See §7.1 — v1 requires an explicit path argument.
+- **Replay-mode UI** — see §8.6. The event log primitive stays in the runner; the replay UI itself is deferred until a concrete post-mortem use case demands more than `git log` + `01-ui/05-logs` can serve.
 
 ---
 
@@ -322,7 +360,13 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
 | `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED in v0.5.1, out of v1 scope) |
+| `02-schema` | Document schema artifact (JSON Schema + validator; formalises what `parseDocs.ts` assumes today) | — | PLANNED |
+| `03-project-metadata` | Project metadata file (`.ledger/project.json`) and loader; provides project identity and scoping (§7.1) | — | PLANNED |
+| `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | PLANNED |
+| `05-task-runner` | In-house task runner (tasks table, append-only event log, scheduler tick, HITL gates, resource claims; §5) | `04-api-server` | PLANNED |
+| `06-agent-dispatcher` | Agent dispatcher — MCP-based interface; Claude Code as first integration; replaces `10-orchestration`'s transcript ingestion as the data source | `05-task-runner` | PLANNED |
+| `07-health-daemon` | Document health daemon — size, staleness, orphan-issue monitors; enqueues `doc_refactor` / `reverify` / `issue_triage` tasks (§6.4) | `05-task-runner` | PLANNED |
 
-Backend components named in §7 (document schema artifact, API server, in-house task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree.
+Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` and `07-health-daemon` can then proceed in parallel.
 
-**Build-order shift (v0.5):** earlier this PRD prioritised completing the UI tree first. With the round-2 UI manifest COMPLETE and the v0.5 architecture review surfacing an unbuilt substrate plus framework-vs-instance gaps (§11), the next focus shifts to the backend. Suggested ordering: (a) document schema artifact — unblocks parser tests, validation, and the framework-vs-template story; (b) API server — defines the real data contract `01-ui` will eventually consume; (c) in-house task runner — implements §6.3 resource claims and HITL natively; (d) agent dispatcher and health daemon follow. Today's `parseDocs.ts` and `01-ui/10-orchestration` transcript ingestion are bootstraps to be replaced as the substrate lands.
+The git repo is the document store (§5) — it is not a buildable component, just the working tree. Today's `parseDocs.ts` and `01-ui/10-orchestration` transcript ingestion are bootstraps to be replaced as the substrate lands, per §7.2's per-endpoint UI migration strategy.
