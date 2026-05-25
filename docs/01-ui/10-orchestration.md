@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-24)
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (IN_PROGRESS → VERIFY — worktree-root patch applied + audited)
+**Last Updated:** 2026-05-24 (promotion)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
