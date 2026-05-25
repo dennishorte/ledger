@@ -108,6 +108,111 @@ export interface DepImpactResult {
 }
 
 // ---------------------------------------------------------------------------
+// Orchestration types — introduced by 01-ui/10-orchestration
+// ---------------------------------------------------------------------------
+
+export type TaskId = string;
+
+export type TaskType =
+  | "spec_draft"
+  | "spec_review"
+  | "implement"
+  | "verify"
+  | "doc_refactor"
+  | "issue_triage"
+  | "human_review"
+  | "reverify"
+  | "project_status_review"
+  | "operator_session" // main human-driven Claude Code session (D2)
+  | "agent_task"; // sub-agent whose description doesn't match a specific lifecycle type (D2)
+
+export type TaskStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "BLOCKED"
+  | "AWAITING_HUMAN_REVIEW"
+  | "COMPLETE"
+  | "FAILED"
+  | "CANCELLED";
+
+export type TaskSource =
+  | "agent_generated"
+  | "operator_injected"
+  | "daemon_triggered";
+
+/**
+ * Resource claim — phase-1 these are descriptive (derived from observed tool calls),
+ * not prescriptive (declared upfront and enforced by the runner). See D8.
+ */
+export type ResourceClaim =
+  | { kind: "node"; nodeId: NodeId; mode: "read" | "write" }
+  | { kind: "path"; path: string; mode: "read" | "write" };
+
+export interface Task {
+  id: TaskId;
+  type: TaskType;
+  status: TaskStatus;
+  title: string;
+  source: TaskSource;
+  parentTaskId?: TaskId;
+  dependsOn: TaskId[];
+  resourceClaims: ResourceClaim[];
+  agent?: { model: string; persona?: string };
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  reviewPayload?: { summary: string; diffRef?: string };
+  /** Absolute path to the source JSONL on disk. Server-internal; never rendered in the UI. */
+  transcriptPath: string;
+}
+
+export type LogEventId = string;
+export type ConnectionStatus = "stub" | "live" | "ended" | "missing";
+
+export interface BaseLogEvent {
+  id: LogEventId;
+  taskId: TaskId;
+  at: string; // ISO 8601
+  seq: number; // monotonic per task
+}
+
+export type LogEvent = BaseLogEvent &
+  (
+    | { kind: "reasoning"; text: string; subkind: "thinking" | "message" }
+    | {
+        kind: "tool_call";
+        callId: string;
+        toolName: string;
+        arguments: string /* serialized JSON */;
+      }
+    | {
+        kind: "tool_result";
+        callId: string;
+        status: "ok" | "error";
+        body: string;
+        durationMs?: number;
+      }
+    | {
+        kind: "artifact";
+        artifactKind:
+          | "doc_created"
+          | "doc_updated"
+          | "file_written"
+          | "version_committed";
+        path: string;
+        docNodeId?: NodeId;
+        summary?: string;
+      }
+    | {
+        kind: "status_change";
+        from: TaskStatus;
+        to: TaskStatus;
+        reason?: string;
+      }
+    | { kind: "error"; message: string; stack?: string }
+  );
+
+// ---------------------------------------------------------------------------
 // Workflow-progress types — introduced by 01-ui/09-workflow-progress
 // ---------------------------------------------------------------------------
 

@@ -418,7 +418,47 @@ Two findings (S1 partial overreach on `ai-title`/`last-prompt`, and N7 on `Multi
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:**
+
+- `@types/node@^22.10.2` — dev dep, used by `app/server/**` for `node:fs`, `node:path`, `node:url`, `node:child_process`.
+- `vitest@^4.1.7` — dev dep, used for the golden test (`app/server/transcriptParse.test.ts`). Added a `test: "vitest run"` script in `app/package.json`. No prior test framework existed; this is the first.
+
+**Decisions beyond spec:**
+
+- **`app/server/serverIdForPath.ts` is a separate node-side copy of `idForPath`, not a re-import.** `parseDocs.ts` is a client module (uses Vite's `import.meta.glob`) and cannot be imported into the server tsconfig. The duplication is ~40 lines and the contract is the same; documented at the top of the file. Replace with a shared utility module when the API server lands.
+- **Vitest config inferred from defaults.** No `vitest.config.ts` added; the golden test runs against the default `app/` root via the `test` script. If we later add browser/JSDOM tests this becomes structural.
+- **`KEYWORD_TABLE` ordering bug surfaced during test.** The original ordering put `^implement` before `^implementation review`; "Implementation review for 03-docs" resolved to `implement` instead of `verify`. Reordered to evaluate more-specific patterns first; added a comment in `transcriptParse.ts` documenting the precedence rule. Spec's D2 keyword table is unchanged — same patterns, just an evaluation-order constraint not previously called out.
+- **Three lint deviations applied while resolving `@typescript-eslint/no-unnecessary-condition` and `no-unnecessary-type-assertion`** in `transcriptParse.test.ts`: replaced `.filter(...)`+inline-narrowing patterns with `.flatMap((e) => (e.kind === "X" ? [e] : []))` which preserves discriminated-union narrowing in the result type. No behavioural change.
+
+**Bundle delta vs baseline commit `eebc3c3`** (main `dist/` from 2026-05-23 23:54):
+
+| Asset | Baseline | This build | Delta |
+|---|---|---|---|
+| `index-*.js` (uncompressed) | 986,086 B | 1,018,103 B | +32,017 B (+3.2 %) |
+| `index-*.js` (gzip) | — | 326.68 kB | — |
+| `index-*.css` (uncompressed) | 40,920 B | 40,944 B | +24 B (+0.1 %) |
+| `index-*.css` (gzip) | — | 8.06 kB | — |
+
+JS growth is `@tanstack/react-query` pulled into the active tree (it was already a dep but had no consumer until this node). The chunk-size warning (>500 kB) was already present in the baseline and unchanged by this node.
+
+**Acceptance check items NOT verifiable in headless environment (manual):**
+
+- **#1** `curl /api/transcripts` returns every session + sub-agent — needs `pnpm dev` and a transcript directory.
+- **#2** `curl /api/transcripts/session:<currentSessionId>` for current convo — same.
+- **#3** SSE emits new `data:` line within 1 s of a JSONL append — requires the live dev server.
+- **#4** SSE reconnect via `Last-Event-ID` — same.
+- **#5** Sub-agent task with `parentTaskId` and worktree-path claim — same.
+- **#6** Cross-repo transcripts excluded — same.
+- **#7** Status-window transitions (RUNNING → AWAITING_HUMAN_REVIEW → COMPLETE) — same.
+
+**Items verified headlessly in this environment:**
+
+- **#8** `pnpm -C app typecheck` exits 0.
+- **#8** `pnpm -C app lint` exits 0 with `--max-warnings=0`.
+- **#8** `pnpm -C app build` exits 0; produces dist with the bundle sizes above.
+- Golden test (`pnpm -C app test`): **34/34 passed**, including the D2 keyword-table coverage (every row) and the six-LogEvent-kinds emission check against the committed Claude Code 2.1.148 fixture.
+
+**Deviations from spec:** Only the keyword-table ordering noted above (constraint added to the implementation, not a doc-level deviation). All other behavior matches the spec.
 
 ---
 
