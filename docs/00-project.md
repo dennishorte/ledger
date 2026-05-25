@@ -1,14 +1,15 @@
 # LLM Project Framework
  
 **Status:** Draft  
-**Version:** 0.5.2  
+**Version:** 0.5.3  
 **Last Updated:** 2026-05-25  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
 v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).  
 v0.5 — Reversed LangGraph adoption: task runner now built in-house in TypeScript on SQLite from Phase 1 (§5 rewritten; §7 diagram, §8.5, §8.6, §3 caveat updated). Closed the LangGraph resource-locking risk in §11 as N/A. Added four open issues from a v0.5 architecture review (implicit document schema, no framework/instance separation, transcript-ingestion coupling, missing parser tests). §14 build order shifted from UI-first to substrate-next.  
 v0.5.1 — §8.6 Replay Mode marked deferred (out of v1 scope; event log primitive stays in the runner). §11 added "no project metadata file" open issue (sibling to schema artifact). §14 row updated to reflect 07-replay DEFERRED. Cross-doc sync: `01-ui/00-ui.md` manifest, `01-ui/10-orchestration.md` children pointer, `01-ui/05-logs.md` out-of-scope bullet, `CLAUDE.md` round-2 line. New Open Issues filed on `01-ui/02-dag.md` (floating parent node, transitive edges not reduced) and `01-ui/01-shell.md` ("untitled project" fallback).  
-v0.5.2 — Five implicit decisions from the v0.5 architecture review made durable. New §7.1 (project scoping: one API server per project, CLI launcher takes path arg). New §7.2 (per-endpoint UI data-path migration strategy). §8.1 distinguishes Document DAG from Task DAG explicitly, with claims as the cross-graph link. §8.4 fleshes out the HITL approval surface (diff render, optimistic locking, inbox view, reject-with-feedback). §13 adds migration tooling, recents chooser, and replay-mode UI as named deferred items. §14 backend decomposition: replaced prose with manifest rows — `02-schema`, `03-project-metadata`, `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, all PLANNED, with declared dependencies.
+v0.5.2 — Five implicit decisions from the v0.5 architecture review made durable. New §7.1 (project scoping: one API server per project, CLI launcher takes path arg). New §7.2 (per-endpoint UI data-path migration strategy). §8.1 distinguishes Document DAG from Task DAG explicitly, with claims as the cross-graph link. §8.4 fleshes out the HITL approval surface (diff render, optimistic locking, inbox view, reject-with-feedback). §13 adds migration tooling, recents chooser, and replay-mode UI as named deferred items. §14 backend decomposition: replaced prose with manifest rows — `02-schema`, `03-project-metadata`, `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, all PLANNED, with declared dependencies.  
+v0.5.3 — `07-health-daemon` sequenced after `06-agent-dispatcher` (was parallel). Rationale: daemon-enqueued tasks have no executor until the dispatcher exists, and the runner's task API is better validated by one consumer at a time. §14 manifest row and build-order prose updated; `CLAUDE.md` next-focus line synced.
  
 ---
  
@@ -365,8 +366,8 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 | `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | PLANNED |
 | `05-task-runner` | In-house task runner (tasks table, append-only event log, scheduler tick, HITL gates, resource claims; §5) | `04-api-server` | PLANNED |
 | `06-agent-dispatcher` | Agent dispatcher — MCP-based interface; Claude Code as first integration; replaces `10-orchestration`'s transcript ingestion as the data source | `05-task-runner` | PLANNED |
-| `07-health-daemon` | Document health daemon — size, staleness, orphan-issue monitors; enqueues `doc_refactor` / `reverify` / `issue_triage` tasks (§6.4) | `05-task-runner` | PLANNED |
+| `07-health-daemon` | Document health daemon — size, staleness, orphan-issue monitors; enqueues `doc_refactor` / `reverify` / `issue_triage` tasks (§6.4) | `06-agent-dispatcher` | PLANNED |
 
-Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` and `07-health-daemon` can then proceed in parallel.
+Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` follows the runner. `07-health-daemon` is sequenced after the dispatcher: the daemon's enqueued tasks (`doc_refactor`, `reverify`, `issue_triage`) have no executor until the dispatcher exists, so sequencing means the daemon's first deploy is immediately useful — and the runner's task API is better validated by one consumer at a time than two parallel ones.
 
 The git repo is the document store (§5) — it is not a buildable component, just the working tree. Today's `parseDocs.ts` and `01-ui/10-orchestration` transcript ingestion are bootstraps to be replaced as the substrate lands, per §7.2's per-endpoint UI migration strategy.
