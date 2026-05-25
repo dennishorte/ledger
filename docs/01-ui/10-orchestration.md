@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-24)
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (SPEC_REVIEW → APPROVED)
+**Last Updated:** 2026-05-24 (promotion)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
@@ -379,7 +379,7 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 | D12 | Privacy disclosure: transcripts may contain secrets, file contents, pasted credentials. Single-operator local-only context (PRD §13) makes this acceptable. Middleware never serves to anything outside localhost | Worth being explicit. If the panel ever becomes networked (real API server with auth), the threat model changes. |
 | D13 | `ResourceClaim` is a discriminated union of `node` (doc-node) and `path` (free-form) | Sub-agent worktree paths and non-doc tool targets don't map to `NodeId`. A discriminated union keeps the type single-field and type-safe at every boundary. Alternative considered: a parallel `pathClaims: string[]` on `Task` — rejected as more surface for the same information. |
 | D14 | Task title is derived from the most recent `ai-title` JSONL line's `aiTitle` field when present; else the first qualifying user prompt | `ai-title` is Claude Code's own session-titling heuristic (verified: top-level type `{ type: "ai-title", aiTitle, sessionId }`, 190 occurrences across 13 sessions). Always available for non-trivial sessions and pithier than a raw first prompt. The fallback handles edge cases (very fresh sessions before the first `ai-title` is emitted). The qualifying-prompt filter (string content, no `<command-name>` prefix, `isMeta !== true`) prevents slash-command invocations from leaking into titles. |
-| D15 | Repo root derived from `git rev-parse --show-toplevel` at dev-server boot, cached for the process lifetime | `process.cwd()` depends on where `pnpm dev` was invoked; running from a subdirectory misses the encoded-cwd lookup. `git rev-parse` is always correct, zero-dep (already required for the repo), fail-fast outside a git repo. |
+| D15 | Repo root derived from the first `worktree <path>` line of `git worktree list --porcelain`, cached for the process lifetime | `process.cwd()` depends on where `pnpm dev` was invoked. The originally-specified `git rev-parse --show-toplevel` is wrong inside a linked worktree — it returns the worktree's path, not the main repo's, and the leaf-workflow implementer always runs from a linked worktree (see Stage-8 Verification V1). `git worktree list --porcelain` lists the main worktree first regardless of caller location per the porcelain stability guarantee. Zero-dep (already required), fail-fast outside a git repo. |
 
 ---
 
@@ -418,7 +418,88 @@ Two findings (S1 partial overreach on `ai-title`/`last-prompt`, and N7 on `Multi
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:**
+
+- `vitest@^4.1.7` — dev dep, used for the golden test (`app/server/transcriptParse.test.ts`). Added a `test: "vitest run"` script in `app/package.json`. No prior test framework existed; this is the first. `@types/node` was already present in the baseline `package.json` and is not a new dependency.
+
+**Decisions beyond spec:**
+
+- **`app/server/serverIdForPath.ts` is a separate node-side copy of `idForPath`, not a re-import.** `parseDocs.ts` is a client module (uses Vite's `import.meta.glob`) and cannot be imported into the server tsconfig. The duplication is ~40 lines and the contract is the same; documented at the top of the file. Replace with a shared utility module when the API server lands.
+- **Vitest config inferred from defaults.** No `vitest.config.ts` added; the golden test runs against the default `app/` root via the `test` script. If we later add browser/JSDOM tests this becomes structural.
+- **`KEYWORD_TABLE` ordering bug surfaced during test.** The original ordering put `^implement` before `^implementation review`; "Implementation review for 03-docs" resolved to `implement` instead of `verify`. Reordered to evaluate more-specific patterns first; added a comment in `transcriptParse.ts` documenting the precedence rule. Spec's D2 keyword table is unchanged — same patterns, just an evaluation-order constraint not previously called out.
+- **Three lint deviations applied while resolving `@typescript-eslint/no-unnecessary-condition` and `no-unnecessary-type-assertion`** in `transcriptParse.test.ts`: replaced `.filter(...)`+inline-narrowing patterns with `.flatMap((e) => (e.kind === "X" ? [e] : []))` which preserves discriminated-union narrowing in the result type. No behavioural change.
+
+**Bundle delta vs baseline commit `eebc3c3`** (main `dist/` from 2026-05-23 23:54):
+
+| Asset | Baseline | This build | Delta |
+|---|---|---|---|
+| `index-*.js` (uncompressed) | 986,086 B | 1,021,760 B | +35,674 B (+3.6 %) |
+| `index-*.js` (gzip) | — | 328.17 kB | — |
+| `index-*.css` (uncompressed) | 40,920 B | 40,944 B | +24 B (+0.1 %) |
+| `index-*.css` (gzip) | — | 8.06 kB | — |
+
+JS growth is `@tanstack/react-query` pulled into the active tree (it was already a dep but had no consumer until this node). The chunk-size warning (>500 kB) was already present in the baseline and unchanged by this node.
+
+**Acceptance check items NOT verifiable in headless environment (manual):**
+
+- **#1** `curl /api/transcripts` returns every session + sub-agent — needs `pnpm dev` and a transcript directory.
+- **#2** `curl /api/transcripts/session:<currentSessionId>` for current convo — same.
+- **#3** SSE emits new `data:` line within 1 s of a JSONL append — requires the live dev server.
+- **#4** SSE reconnect via `Last-Event-ID` — same.
+- **#5** Sub-agent task with `parentTaskId` and worktree-path claim — same.
+- **#6** Cross-repo transcripts excluded — same.
+- **#7** Status-window transitions (RUNNING → AWAITING_HUMAN_REVIEW → COMPLETE) — same.
+
+**Items verified headlessly in this environment:**
+
+- **#8** `pnpm -C app typecheck` exits 0.
+- **#8** `pnpm -C app lint` exits 0 with `--max-warnings=0`.
+- **#8** `pnpm -C app build` exits 0; produces dist with the bundle sizes above.
+- Golden test (`pnpm -C app test`): **34/34 passed**, including the D2 keyword-table coverage (every row) and the six-LogEvent-kinds emission check against the committed Claude Code 2.1.148 fixture.
+
+**Deviations from spec:** Only the keyword-table ordering noted above (constraint added to the implementation, not a doc-level deviation). All other behavior matches the spec.
+
+### Implementation Review (2026-05-24)
+
+Independent implementation review was run against this worktree (no rebase needed — base equalled main HEAD). Verdict: NEEDS_MINOR_REVISIONS (1 blocking, 1 should-fix, 2 nits). All applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | First SSE event (seq=0) dropped on every fresh connection because `lastSeq` defaulted to `0` and the predicate is `seq > lastSeq`. | `middleware.ts` initializes `lastSeq = -1` when no `Last-Event-ID` header is present and only updates from the header when `parseInt` returns a finite number. seq=0 now ships on first connection; reconnects with `Last-Event-ID: <N>` correctly skip `seq ≤ N`. |
+| S1 | `artifact` LogEvents were never emitted despite §"Artifact derivation (D6)" calling for them and the kind being present in the `LogEvent` union. | Added `artifactFromToolCall` to `transcriptParse.ts`; expanded `pendingToolCalls` to retain tool name + args alongside the call timestamp; on successful `tool_result` for Write/Edit/MultiEdit/NotebookEdit, an `artifact` event is appended after the `tool_result`. `Write` → `doc_created`/`file_written`; Edit/MultiEdit/NotebookEdit → `doc_updated`/`file_written`. Doc-node resolution via `serverIdForPath`. Added a golden-test assertion that the fixture's Write produces ≥1 artifact event (35/35 tests pass). |
+| N1 | Bundle-delta numbers in Implementation Notes were inaccurate (+32,017 B claimed vs +35,674 B measured) and `@types/node` was incorrectly listed as newly added. | Bundle-delta table refreshed from a clean rebuild post-fixes. `@types/node` claim removed; only `vitest` is genuinely new. |
+| N2 | `useLogStream` initial `connStatus: "missing"` collides with the spec's definition (404 only, not "query pending"). | Not applied. The spec is silent on the pending-query state and no consumer exists yet. Documenting here as a known minor surface — `04-tasks`/`05-logs` will refine this when they wire the hook. |
+
+**Final headlessly-verified results after fixes:**
+
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0
+- `pnpm -C app build`: exit 0; bundle sizes match the refreshed table above
+- `pnpm -C app test`: 35/35 passed (was 34/34; +1 for the artifact assertion)
+
+### Stage-8 Verification (2026-05-24)
+
+Operator manual verification surfaced one bug; everything else passed. Verification ran against the dev server hosted from this worktree.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| V1 | `/api/transcripts` returned an empty array when the dev server was started from the implementer worktree (`/Users/dennis/code/ledger/.claude/worktrees/agent-a598c92579a500907`). Root cause: D15 specified `git rev-parse --show-toplevel`, which returns the *worktree's* path inside a linked worktree, not the main repo's path. The encoded-cwd directory (`~/.claude/projects/-Users-dennis-code-ledger`) is keyed off the operator's original `claude` invocation directory — i.e., the main worktree. | Replaced the repo-root resolver in `app/server/transcriptScan.ts` with `git worktree list --porcelain` and parsed the first `worktree <path>` line. Per the porcelain stability guarantee that's always the main worktree regardless of where the command runs. Spec-level: D15's resolver command updated correspondingly; the operating contract (cached, main-worktree path) is unchanged. |
+
+Acceptance check after the fix (live HTTP probes against `http://localhost:4179`):
+
+| # | Item | Result |
+|---|------|--------|
+| 1 | `/api/transcripts` returns full task list | 25 tasks: 9 operator_session + 16 sub-agents (5 implement, 2 spec_review, 1 spec_draft, 2 verify, 6 agent_task). Status mix: 1 RUNNING (this session), 9 COMPLETE, 15 AWAITING_HUMAN_REVIEW. |
+| 2 | `/api/transcripts/session:<currentSessionId>` returns task + events | Current session task title `"Implement 05-logs module"` (from `ai-title` D14), 501 events. Kind distribution: 105 reasoning, 179 tool_call, 179 tool_result, 33 artifact, 4 status_change, 1 error — all six LogEvent kinds present. 27 resource claims, 8 node-claims. |
+| 3 | SSE delivers events from seq=0 | First emitted line: `id: 0` followed by the seq-0 event. B1 fix confirmed in live behavior, not just code review. |
+| 4 | `Last-Event-ID: 2` resumes correctly | First event delivered after the resume header is `id: 3`. No duplicates of seq ≤ 2. |
+| 5 | Sub-agent task has `parentTaskId` + worktree-path claim | `agent:a3562fa57108eef10` ("Implement 03-docs node") has `parentTaskId: session:374a94db-...` and a `path/write` claim on its worktree path. |
+| 6 | Cross-repo transcripts excluded | 18 sibling encoded-cwd directories exist under `~/.claude/projects/` (other repos: `-align`, `-assistant`, `-battlestar`, `-conductor`, `-culture-discussions`, `-dog`, `-ftl-clone`, `-game-center`, `-game-center-common`, `-grimoire`, … ). Zero transcript paths in the API response point outside `-Users-dennis-code-ledger/`. |
+| 7 | `touch` flips status to RUNNING within the 5 s window | `touch`ing a previously-COMPLETE transcript flipped its status to RUNNING within < 1 s. Final state after quiet again depended on last-line kind; that's expected per D5's rule table. |
+| + | Privacy: non-localhost Host rejected | `Host: evil.example.com` against `/api/transcripts` returned `403`. |
+| + | No regressions on existing SPA routes | GET `/`, `/dag`, `/docs`, `/health`, `/tasks`, `/logs/foo` all returned `200` from the Vite dev server. |
+
+**D2 keyword-table observation (informational only — not a finding):** Five sub-agents fell to the `agent_task` fallback because their descriptions ("Review 03-docs spec", "Review 06-health spec", "Review 03-docs implementation", "Review 06-health implementation", "Review 08-markdown implementation", "Build UI shell per spec") don't match the current D2 patterns. The spec's existing Open Issue "Sub-agent task-type inference miss rate" (LOW priority) already documents this as expected fuzziness. Operator opted not to extend the keyword table in this pass; later iteration on the table is welcome but not a v1 blocker.
 
 ---
 
