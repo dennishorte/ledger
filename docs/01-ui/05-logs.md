@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/05-logs`
 **Parent:** `01-ui`
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25 (spec review + APPROVED)
 
