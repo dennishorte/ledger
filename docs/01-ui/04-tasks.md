@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/04-tasks`
 **Parent:** `01-ui`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (spec review + APPROVED)
 
 **Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`
 **Optional reference:** `01-ui/02-dag` (inspector-driven detail pattern, `StatusChip` reuse), `01-ui/06-health` (sibling aggregation-surface scoping), `01-ui/05-logs` (sibling consumer of the same data layer; row-click navigates here)
@@ -17,7 +17,7 @@ Replace the `TaskConsolePanel` empty state at `/tasks` with a real read-only bro
 
 Phase-1 scope, narrower than PRD §8.4 because **no task runner, no agent dispatcher, no API server** exist yet — task control (injection, breakpoints, approval gates) is impossible without a runner to control. The parent manifest explicitly scopes this node as "read-only browser in v1; inject form + approve buttons deferred."
 
-1. `/tasks` renders a **table** of every task from `useTaskList()`. Each row shows: title, type, status, source, agent persona/model, started-at, duration. Newest task first.
+1. `/tasks` renders a **table** of every task from `useTaskList()`. Each row shows: title, type, status, agent persona/model, started-at, duration. Newest task first. (Task `source` — `operator_injected` / `agent_generated` / `daemon_triggered` — surfaces in the inspector, not the table; the type badge already conveys session-vs-sub-agent at the row level.)
 2. **Filter bar** above the table: filter by status (multi-select chips), by type (multi-select chips), and a text search over title. Filter state is URL-synced via search params so a row click → back-button returns to the same filtered view.
 3. **Row click → open the shell's right-hand inspector** with full task details: id, type, status, source, parent task (with link if known), depends-on task IDs, agent meta, full resource-claim list, and timestamps. The inspector also exposes a primary "Open log stream" button that navigates to `/logs/${encodeURIComponent(taskId)}` (consumed by `01-ui/05-logs`).
 4. **Status chip parity:** task status chips reuse the same color tokens as `StatusChip` for the matching states, with task-specific additions (`PENDING`, `RUNNING`, `BLOCKED`, `AWAITING_HUMAN_REVIEW`, `COMPLETE`, `FAILED`, `CANCELLED`) so the operator's color memory carries between this panel and the DAG.
@@ -105,7 +105,7 @@ Each row is a `<div role="row">` with the following columns:
 
 ### Inspector content (`TaskInspector.tsx`)
 
-Mirrors `NodeInspector`'s pattern (`02-dag` shipped it):
+Mirrors `NodeInspector`'s pattern (`02-dag` shipped it) — same `useShellStore.openInspector(content)` action, same `closeInspector()`, same `Esc`-to-close handler from `01-shell`:
 
 ```
 ┌────────────────────────────────────────┐
@@ -145,7 +145,7 @@ Mirrors `NodeInspector`'s pattern (`02-dag` shipped it):
 └────────────────────────────────────────┘
 ```
 
-- The "Parent task" `[open]` button calls `openInspector(<TaskInspector task={parent} … />)` — pure shell-store update, no navigation. The previous inspector content is replaced; the row in the table updates its selection highlight to the parent.
+- The "Parent task" `[open]` button calls `useShellStore.getState().openInspector(<TaskInspector task={parent} … />)` — pure shell-store update, no navigation, identical to the way `NodeInspector` already swaps its own content. The previous inspector content is replaced; the row in the table updates its selection highlight to the parent.
 - The "Open log stream" button is a `<Link to={\`/logs/\${encodeURIComponent(task.id)}\`}>` styled as a primary button. Navigation closes the inspector (the shell's default route-change behavior preserves it; the operator hits `Esc` if they want it closed).
 - Resource claims render as a deduplicated list per `10-orchestration` §Resource-claim derivation. `node` claims show the `NodeId` (mono); `path` claims show the path verbatim (mono, truncated middle on overflow with full path on hover).
 - No edit affordances. Buttons that *would* mutate task state (Cancel, Retry, Approve, Re-queue) are explicitly not rendered — see Out of scope.
@@ -211,7 +211,7 @@ A reviewer running `pnpm dev` and visiting `/tasks` must see:
 4. Search params reflect filter state: setting `?status=RUNNING&q=05-logs` in the URL produces the same filtered view as toggling those filters interactively.
 5. Sub-agent rows indent under their parent operator_session row. Collapsing a parent hides its children.
 6. Clicking a row opens the inspector with the full task detail (id, type, status, source, agent, parent task, depends-on, resource claims, timestamps).
-7. Clicking the parent-task `[open]` link in the inspector swaps the inspector to the parent's detail; clicking back via the browser does **not** clobber the inspector state (the inspector lives in the shell store, not URL).
+7. Clicking the parent-task `[open]` button swaps the inspector content to the parent task's detail. Pressing the browser back-button restores the previous URL (filter params), but the inspector panel remains open showing whatever task it last displayed — confirming inspector state is Zustand-owned, not URL-owned. `Esc` (the shell's existing handler) still closes the inspector.
 8. Clicking "Open log stream" navigates to `/logs/:taskId`. Until `05-logs` ships, the stream panel still shows the empty-state placeholder — no error.
 9. With Vite dev middleware **off** (production build), the panel renders the "run `pnpm dev` to enable" empty state instead of an empty table.
 10. The refresh button forces a fresh `useTaskList()` fetch (visible in network panel).
@@ -228,12 +228,12 @@ A reviewer running `pnpm dev` and visiting `/tasks` must see:
 | D2 | Row click → shell inspector, not navigation | Matches `02-dag`'s pattern. Task detail is dense (resource claims, agent meta, timing) and benefits from a side panel that keeps the table in view. The inspector's "Open log stream" button bridges to `05-logs`'s route. Alternative considered: master/detail in-panel (left list, right detail). Rejected — duplicates the inspector surface and creates a second interaction model the operator has to learn. |
 | D3 | `TaskStatusChip` is a sibling component of `StatusChip`, not a generalisation | `TaskStatus` and `NodeStatus` are disjoint enums (`PENDING`/`RUNNING`/`BLOCKED`/`AWAITING_HUMAN_REVIEW`/`FAILED`/`CANCELLED` vs `DRAFT`/`SPEC_REVIEW`/…). A shared generic-over-string chip would force `as` casts at every call site and lose exhaustive-switch type safety. Two ~40-line components sharing color tokens is cheaper than one generic component plus a registry. |
 | D4 | Type rendered as a text badge, not an icon | The table is dense and the type vocabulary (`operator_session`, `spec_review`, `implement`, …) is already self-describing in text. Icons would require a per-type asset and would still need hover-text for clarity. Color-by-group (D5) does the visual differentiation; text carries the meaning. |
-| D5 | Two new color tokens: `--color-accent-soft` and `--color-warning-soft` | The type badge needs a low-saturation background that won't fight with the status chip. The existing `--color-accent` / `--color-warning` are full-saturation chip backgrounds; using them for the type badge would create two competing emphases per row. Tokens land in `src/styles/globals.css` alongside the existing color set; they are general-purpose ("soft accent surface for unobtrusive emphasis") and not type-badge-specific. |
+| D5 | Three new color tokens: `--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft`. **`04-tasks` owns the introduction of all three in `src/styles/globals.css`** because it ships first per the parent manifest's dependency ordering; `05-logs` consumes `--color-warning-soft` (for `status_change` banner rows) and `--color-danger-soft` (for `error` banner rows). Concrete values, derived from the existing palette by raising lightness and lowering chroma so they sit close to the cream surface without blending in: `--color-accent-soft: oklch(0.92 0.045 35)`, `--color-warning-soft: oklch(0.94 0.05 75)`, `--color-danger-soft: oklch(0.93 0.04 25)`. Implementer may nudge ±0.02 lightness if a token looks wrong against the cream base, but the three should remain hue-aligned with their full-saturation counterparts. | The type badge needs a low-saturation background that won't fight with the status chip. The existing `--color-accent` / `--color-warning` / `--color-danger` are full-saturation chip backgrounds; using them as type-badge or banner backgrounds would create two competing emphases per row. Tokens land in `src/styles/globals.css` alongside the existing color set and the `@theme inline` block; they are general-purpose ("soft surface for unobtrusive emphasis") and not type-badge-specific. Specifying concrete OKLCH values upfront prevents two parallel implementers (`04-tasks` + `05-logs`) inventing different values for the same token. |
 | D6 | Filter state lives in URL search params, not Zustand | Filters are part of "what the operator is currently looking at" — the same conceptual class as the URL path. URL-as-state means: back-button restores view, share-by-link works, no persistence bugs from forgotten clears. Matches `01-shell` D2's stance ("minimal client state; server data in TanStack Query; ephemeral UI state in Zustand"). |
 | D7 | No SSE on the list endpoint; rely on TanStack Query refetch | The list is a coarse snapshot — task statuses change at the cadence of agent dispatch, which is operator-driven and infrequent. A 5 s `staleTime` plus the explicit refresh button gives enough liveness without the connection cost of a list-wide SSE. `05-logs` carries the SSE burden where it matters (per-task log streams). |
 | D8 | Inspector exposes a "Parent task" `[open]` button that swaps inspector content, not a Link that routes | The operator's flow when investigating a sub-agent is "what session spawned this?" — a side-step, not a navigation. Routing would change `?status=…` etc. and break the table's current filter view. Swapping inspector content keeps the operator's context (filtered table) untouched. |
 | D9 | Sub-agent grouping happens client-side in `useTaskGrouping`, not in the server response | Keeps the wire format (`Task[]` flat array) simple and matches `10-orchestration`'s shape. Grouping is a view concern. The hook returns a `SessionGroup[]` derived from the flat list; future panels (eventual task-DAG view) can use the flat list without re-extracting it from a tree. |
-| D10 | Phase-1 transcript-derived tasks are surfaced as-is; no task-runner-only fields (`AWAITING_HUMAN_REVIEW` as derived, `BLOCKED`, `PENDING`, `FAILED`, `CANCELLED`) are synthesised | `10-orchestration` D5's status derivation rules produce a real subset of `TaskStatus`. The chip and filter handle the full enum so the panel doesn't need a code change when the runner starts emitting the rest. |
+| D10 | Phase-1 transcript-derived tasks are surfaced as-is; no task-runner-only fields (`AWAITING_HUMAN_REVIEW` as derived, `BLOCKED`, `PENDING`, `FAILED`, `CANCELLED`) are synthesised | `10-orchestration` D5's status derivation rules produce a real subset of `TaskStatus` (in practice today: `RUNNING`, `AWAITING_HUMAN_REVIEW`, `COMPLETE`). The chip color table and filter chip-group still render entries for `PENDING` / `BLOCKED` / `FAILED` / `CANCELLED` — they exist for forward-compat (the runner will emit them) and will simply show zero rows in Phase 1. Surfacing the full enum now avoids a code change when the runner lands. |
 | D11 | Refresh button is a manual override, not auto-refetch on interval | An interval refetch would compete with operator scrolling and re-anchor the table mid-read. The 5 s `staleTime` ensures any user-initiated focus change (window blur/focus, click into the panel) gets fresh data via TanStack Query's default `refetchOnWindowFocus`. Explicit refresh is for the "I just dispatched a sub-agent, show me now" case. |
 
 ---
@@ -246,6 +246,24 @@ A reviewer running `pnpm dev` and visiting `/tasks` must see:
 - **Live count chip ("1 live") staleness.** Derived from the same `useTaskList()` data; refreshes at the hook's `staleTime` cadence. A task that goes RUNNING → AWAITING_HUMAN_REVIEW between refetches will show stale for up to 5 s. Acceptable for v1. *(Priority: TRIVIAL.)*
 - **Filter chip-group ergonomics.** "All on" vs "some on" requires two clicks to invert a selection (turn one off, turn it back on). Future affordance: a right-click or `option-click` to "only show this type", and a clear-filters action. Defer until friction shows up. *(Priority: LOW.)*
 - **Approval-gate UX once `human_review` tasks exist.** When the runner lands, `AWAITING_HUMAN_REVIEW` rows should expose a one-click approve. That belongs to a v2 of this panel paired with the runner's approval endpoint. Tracking here so the design isn't surprised by it. *(Priority: LOW — out of scope; mentioned for continuity.)*
+- **`05-logs` conditional consumer of `TaskStatusChip`.** `05-logs` D2 / event-kind table reuses `TaskStatusChip` in `status_change` event banner rows "if that lands first; otherwise inline." `04-tasks` ships first per parent manifest ordering, so the conditional resolves to direct reuse — but the cross-panel coupling is worth knowing about if `04-tasks` ever renames or restructures the chip's prop surface. *(Priority: LOW.)*
+
+---
+
+## Spec Review (2026-05-25)
+
+Independent spec review was run against this DRAFT in clean context. Verdict: NEEDS_MINOR_REVISIONS — one blocking finding around undeclared CSS tokens, two should-fix items on the inspector contract, three nits. All applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `--color-accent-soft` and `--color-warning-soft` (D5) don't exist in `globals.css`, and `05-logs` independently needs `--color-warning-soft` + `--color-danger-soft` for banner rows. Without ownership declared, two parallel implementers could invent different values for the same token. | D5 rewritten: three tokens (`--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft`) introduced by this node with concrete OKLCH values (lightness ≈ 0.92–0.94, chroma ≈ 0.04–0.05, hue matched to the full-saturation counterpart). `05-logs` consumes the warning + danger softs. Note added to Open Issues capturing the cross-panel coupling. |
+| S1 | Inspector "Parent task `[open]`" interaction described a store call without naming the existing shell mechanism — risk of an implementer inventing a parallel store API. | Inspector section now names `useShellStore.openInspector(...)` explicitly and notes that the mechanism is the same one `NodeInspector` (`02-dag`) already uses. |
+| S2 | Acceptance check item 7 was internally muddled ("clicking back via the browser does not clobber the inspector state") — confused URL state with Zustand state. | Rewritten: clicking the parent-task `[open]` swaps inspector content; browser back-button restores the previous URL/filter state but the inspector panel remains open with its last content, confirming Zustand-ownership; `Esc` is the explicit close affordance. |
+| N1 | Requirements R1 listed `source` as a row column, but the Row Rendering table in Design omits it (six columns: title, type, status, agent, duration, started). | R1 reworded — `source` surfaces in the inspector, not the table; type badge already conveys session-vs-sub-agent at the row level. Table dense by design. |
+| N2 | D10 reserves `FAILED` / `CANCELLED` (and the other runner-only statuses) without noting that the chip/filter entries are forward-compat — risked being flagged as dead UI. | D10 amended with an explicit "forward-compat" note: the chip table and filter chip-group render the full enum; Phase-1 transcript-derived statuses are a subset (`RUNNING` / `AWAITING_HUMAN_REVIEW` / `COMPLETE` in practice); other chips will show zero rows until the runner lands. |
+| N3 | `*(none yet — pre-implementation)*` placeholder in Implementation Notes — flagged for confirmation, not change. | No action; the placeholder matches the leaf-workflow stage-1 guidance. |
+
+Nothing punted. All findings applied. Audit table stays in the doc as durable provenance — the implementing agent in stage 4 will read it.
 
 ---
 
