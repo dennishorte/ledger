@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** ISSUE_OPEN
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (IN_PROGRESS → VERIFY)
+**Last Updated:** 2026-05-24 (VERIFY → ISSUE_OPEN, worktree-root bug found in stage-8 verification)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
@@ -391,6 +391,7 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 - **`MultiEdit` artifact granularity.** Each `MultiEdit` against N hunks of one file emits one artifact event. Hunk-level detail is lost. Acceptable for Phase-1; revisit when the API server defines the artifact contract. *(Priority: LOW.)*
 - **Resource-claim derivation gaps.** Tools like `Bash` and `WebFetch` can read/write arbitrary paths the parser can't reliably attribute. Those tool calls become opaque events with no claim derived. *(Priority: LOW.)*
 - **"Soft COMPLETE."** The 30-min quiet threshold can flip a session COMPLETE that the operator later resumes. UI consumers should treat COMPLETE as informational, not terminal. `useTaskList` re-derives on each refetch. *(Priority: LOW.)*
+- **Stage-8 finding: linked-worktree dev server sees no transcripts.** D15 specifies `git rev-parse --show-toplevel` for repo-root resolution. Inside a linked worktree (the standard leaf-workflow implementer environment), that command returns the *worktree's* path, not the main repo's, so the encoded-cwd lookup misses entirely (`/api/transcripts` returns an empty list). Discovered during stage-8 manual verification on this very worktree. Fix: use `git worktree list --porcelain` and read the first `worktree <path>` line — that's always the main worktree regardless of the caller's location. *(Priority: HIGH — blocks the panel's primary use case any time it's invoked from a worktree, which is most of the time during framework development.)*
 
 ---
 
