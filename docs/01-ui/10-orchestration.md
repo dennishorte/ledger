@@ -29,7 +29,7 @@ This is not fixture-backed — it is a real (if narrow and dev-only) observabili
 - Task execution, scheduling, dispatch, or any *control* of the orchestration substrate.
 - Cross-repo aggregation — transcripts from other repos under the same operator are filtered out.
 - Standalone API server (deferred to a Phase-1 backend node when ready).
-- LangGraph checkpoint state restoration (`07-replay`'s territory; deferred).
+- Historical replay / time-travel — event-log replay is `07-replay`'s territory; deferred. (PRD §8.6 — implemented via the in-house task runner's event log per v0.5; earlier drafts named LangGraph here.)
 - Persisting derived data — every request rescans the filesystem; no database.
 - Authentication / multi-user — single-operator (PRD §13).
 - Production-mode parity — `pnpm build` ships an SPA without the middleware; the panels render an honest empty state.

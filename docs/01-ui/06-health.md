@@ -266,7 +266,7 @@ A reviewer running `pnpm dev` and visiting `/health` must see:
 - **`StatusChip` move to `src/components/ui/`.** `06-health` is the likely third consumer (after `02-dag` and `03-docs`). If all three ship before this is resolved, move `StatusChip` to `src/components/ui/` at that point and update imports in all three panels. *(Priority: LOW — triggers on third confirmed consumer.)*
 - **Dep-impact BFS performance at scale.** The BFS over `DocNode[]` is linear in node count and fine for the current tree (≤50 nodes). Revisit if the tree grows into the hundreds. *(Priority: LOW.)*
 - **Token cost widget real wiring.** When the API server's cost endpoint lands, `useHealthData` must be updated to fetch `SubtreeCost[]` from it. Track this as a follow-up task in the health daemon's spec, not here. *(Priority: LOW — deferred to health daemon node.)*
-- **Interaction with PRD §11 open issues.** PRD §11 lists three open issues (`LangGraph resource-locking compatibility`, `Self-audit problem`, `Decomposition termination criteria`) that live on the PRD root, not on any UI node. Those do not have authored `IssueItem`s under the UI tree's docs — they will appear once the PRD node is authored and the root doc is parsed. No action needed now; document the expectation. *(Priority: LOW.)*
+- **Interaction with PRD §11 open issues.** PRD §11 lists open issues that live on the PRD root, not on any UI node. They do not have authored `IssueItem`s under the UI tree's docs — they will appear once the root doc is parsed. No action needed now; document the expectation. *(Priority: LOW.)*
 
 ---
 

@@ -1,11 +1,12 @@
 # LLM Project Framework
  
 **Status:** Draft  
-**Version:** 0.4  
-**Last Updated:** 2026-05-23  
+**Version:** 0.5  
+**Last Updated:** 2026-05-25  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
-v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).
+v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).  
+v0.5 — Reversed LangGraph adoption: task runner now built in-house in TypeScript on SQLite from Phase 1 (§5 rewritten; §7 diagram, §8.5, §8.6, §3 caveat updated). Closed the LangGraph resource-locking risk in §11 as N/A. Added four open issues from a v0.5 architecture review (implicit document schema, no framework/instance separation, transcript-ingestion coupling, missing parser tests). §14 build order shifted from UI-first to substrate-next.
  
 ---
  
@@ -35,7 +36,7 @@ This project is intended to grow into a full-purpose LLM orchestration framework
  
 **Phase 3 (future PRD):** Compete directly with LangGraph, CrewAI, and the Microsoft Agent Framework as a general-purpose orchestration substrate — differentiated by native documentation provenance and spec-verification that those frameworks lack.
  
-The LangGraph integration recommended in §5 is a tactical choice for Phase 1 to avoid rebuilding checkpointing and time-travel infrastructure. It should be treated as a dependency to potentially replace in Phase 2 as the framework's own orchestration layer matures.
+The task runner is built in-house from Phase 1 (see §5). Earlier drafts proposed LangGraph as a Phase-1 substrate to be replaced later; that decision is reversed in v0.5 — LLM-assisted coding has collapsed the in-house build cost, the resource-claim model didn't fit LangGraph's typed-state graph cleanly, and shipping a dependency we plan to remove and re-implement inverts the cost-benefit. Building our own runner from the start makes Phase 3's competitive position coherent rather than self-contradictory.
  
 **Permanent non-goals:**
  
@@ -55,7 +56,7 @@ The LangGraph integration recommended in §5 is a tactical choice for Phase 1 to
 - **Claude Code + CLAUDE.md patterns** — The community has converged on structured markdown files as agent memory (CLAUDE.md, AGENTS.md). Several open-source templates exist for persistent memory and SDD workflows built on top of Claude Code's native Tasks system. *Relevant: our document tree is a formalization and generalization of this pattern.*
 **LLM orchestration frameworks** (not SDD-specific but relevant to the task runner layer):
  
-- **LangGraph** (`github.com/langchain-ai/langgraph`) — Models agent workflows as directed graphs with typed state. Most adopted multi-agent framework as of 2026. Key capabilities: built-in checkpointing (every state transition persisted), time-travel debugging (replay any prior checkpoint), human-in-the-loop interrupts (pause graph, await human input, resume across process restarts), and sub-graph composition (a complete graph becomes a node in a parent graph). Model-agnostic. *Strong candidate for the task runner substrate — see §5.*
+- **LangGraph** (`github.com/langchain-ai/langgraph`) — Models agent workflows as directed graphs with typed state. Most adopted multi-agent framework as of 2026. Key capabilities: built-in checkpointing (every state transition persisted), time-travel debugging (replay any prior checkpoint), human-in-the-loop interrupts (pause graph, await human input, resume across process restarts), and sub-graph composition (a complete graph becomes a node in a parent graph). Model-agnostic. *Evaluated and not adopted in v0.5 — see §5. Phase 3 competitive target.*
 - **OpenAI Agents SDK** — Lightweight Python framework, provider-agnostic, focuses on tracing and guardrails. Less relevant to our DAG/persistence requirements.
 - **Microsoft Agent Framework** (AutoGen + Semantic Kernel merged, GA Q1 2026) — Enterprise-focused, supports MCP and A2A protocols. More relevant if enterprise deployment is a future goal.
 ### 4.2 The Gap This Project Fills
@@ -70,15 +71,27 @@ No existing tool provides:
  
 ## 5. Build vs. Integrate
  
-### Task Runner: Build on LangGraph (Phase 1), replace in Phase 2
+### Task Runner: Build in-house (TypeScript + SQLite)
  
-The task runner (DAG scheduling, resource locking, parallelism, human-in-the-loop) should be built on **LangGraph** in Phase 1 rather than from scratch.
+The task runner — DAG scheduling, resource locking, parallelism, HITL gates, event logging — is built natively in TypeScript on SQLite. No external orchestration substrate.
  
-LangGraph provides checkpointing, time-travel, and human approval interrupts out of the box. Its sub-graph composition model maps onto our recursive document subtree: each subtree's task graph can be a sub-graph composed into the parent. This gives us replay mode and rollback essentially for free.
+**Why not LangGraph (v0.4 reversal):**
  
-As the framework grows toward a general orchestration substrate (Phase 2+), the LangGraph dependency should be evaluated for replacement with a native implementation — both to remove the dependency and to gain full control over the scheduling model.
+- LLM-assisted coding has collapsed the build cost. Each capability LangGraph would have provided (checkpointing, replay, HITL interrupts, sub-graph composition) is 50–200 LOC against our specific task model.
+- LangGraph is Python-first; the JS port lags. Our stack is TypeScript end-to-end. Adopting it means either a Python service (multi-language tax) or the lagging port.
+- LangGraph's typed-state graph doesn't natively express arbitrary read/write claims on document nodes (§6.3). The mapping required workarounds, not fit — this was the unresolved HIGH-priority risk in v0.4's §11.
+- LangChain-ecosystem APIs churn on minor versions. Pinning is a continuous maintenance cost.
+- Phase 3 (§3) plans to compete with LangGraph as an orchestration substrate. Building Phase 1 on it is structurally incoherent — we would be shipping a dependency we plan to remove and re-implement.
  
-**Risk to validate early:** LangGraph's state model is graph-centric with typed state objects. Our resource-locking model (tasks declare read/write claims on arbitrary document nodes) needs to map cleanly onto this. Prototype required before committing to LangGraph as the substrate.
+**What we build:**
+ 
+- **Tasks table** (SQLite): `id, type, status, deps[], claims{read[], write[]}, payload, assigned_agent, timestamps`.
+- **Events table** (append-only): every status transition. Current state is a left-fold of events; replay is a `SELECT` over a historical range.
+- **Scheduler tick**: pick the highest-priority task whose deps are met and whose write-claims don't conflict with any in-flight task. Set-intersection on claims is the conflict primitive.
+- **HITL gate**: `human_review` tasks block scheduler advancement until the UI POSTs approval. Resume across process restarts is durable in the tasks table.
+- **Doc-refactor guard** (§6.5): same set-intersection — refuse to schedule a refactor while any claim holds on the target node.
+ 
+Estimate: 1000–1500 LOC of TypeScript plus tests. Same stack as the UI; no language boundary. Models §6.3 and §10 directly rather than working around someone else's primitives. This is also the code we would ship in Phase 2 regardless — no rip-and-replace step.
  
 ### Document Store: The repo
 
@@ -88,7 +101,7 @@ Git already provides the four capabilities a custom store would have to provide:
 
 What this leaves to be built fresh in the orchestration layer:
 
-- **Task runner state** — LangGraph checkpoints, queue position, resource claims, dependency edges between tasks.
+- **Task runner state** — tasks table rows (status, claims, deps), append-only event log, scheduler queue position.
 - **Live log stream** — append-only, time-series, ephemeral (flat file + tailer is sufficient; promote to a real time-series store if scale demands).
 - **Agent dispatch metadata** — which agent ran which task, exit status.
 - **Health daemon's queued tasks** — lives in the task queue, not separately.
@@ -182,9 +195,9 @@ Refactor tasks may not execute while any other task holds a resource claim on th
 └──────┬──────┘ └─────────────┘ └────────────────────┘
        │
 ┌──────▼──────────────────────────────────────────────┐
-│            Task Runner (LangGraph substrate)        │
+│        Task Runner (in-house, TS + SQLite)          │
 │  Scheduling │ Resource locking │ Parallelism        │
-│  Checkpointing │ Time-travel │ HITL interrupts      │
+│  Event log │ Replay │ HITL gates                    │
 └──────┬──────────────────────────────────────────────┘
        │
 ┌──────▼──────────────────────────────────────────────┐
@@ -229,13 +242,13 @@ The Git Repo box is not a service — it is the working tree itself. The API ser
  
 - Any document node can be reverted to a prior version.
 - Rollback enqueues a recovery task that re-queues all downstream tasks that depended on the reverted state.
-- Implemented via LangGraph checkpointer state restoration.
+- Rollback writes a revert event to the event log; downstream tasks are re-queued via dependency edges in the tasks table.
 ### 8.6 Replay Mode
  
 - Step through the full history of a document subtree: document versions, task executions, agent decisions.
 - Read-only; does not affect live state.
 - Intended for post-mortem analysis.
-- Implemented via LangGraph time-travel (checkpoint replay).
+- Implemented as a range `SELECT` over the event log, replayed into the UI as historical state.
 ### 8.7 Project Health Dashboard
  
 - Single-pane view of all open issues across the document tree.
@@ -265,10 +278,14 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
  
 ## 11. Open Issues
  
-- **LangGraph resource-locking compatibility** — Verify that LangGraph's typed state model can express our arbitrary document-node resource claims without requiring significant workarounds. Prototype required before architectural commitment. *(Priority: HIGH, blocks task runner design)*
-- **Self-audit problem** — The same agent writing the spec checks its own code against it. Mitigations: separate reviewer agent with a clean context window; structured per-requirement sign-off checklist format. Approach not yet decided. *(Priority: HIGH, blocks verification design)*
+- ~~**LangGraph resource-locking compatibility**~~ — *Closed (v0.5): N/A. LangGraph adoption reversed in favour of an in-house task runner (§5). The resource-claim model is now native to our own scheduler rather than mapped onto someone else's primitives.*
+- **Self-audit problem** — The same agent writing the spec checks its own code against it. Partially mitigated by the leaf-workflow's "reviewer in clean context" pattern (`docs/process/leaf-workflow.md` stages 2 and 6). Open: structured per-requirement sign-off format, and a separate reviewer-agent persona once the orchestration layer dispatches tasks. *(Priority: HIGH, blocks verification design)*
 - **Decomposition termination criteria** — Need explicit rules for when a node is too small to decompose further (minimum task size, depth limit, complexity threshold). Without this, recursive decomposition produces unnavigable trees. *(Priority: MEDIUM)*
 - **Parallel-worktree shared-file conflicts (Phase-1 manual workflow only)** — When two implementers run in parallel worktrees and both touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. The operator currently picks dispatches whose data contracts don't overlap, or accepts that the second-to-merge worktree will surface the conflict at rebase time (`docs/process/leaf-workflow.md` stage 5). The eventual fix is §6.3's resource-claim model on the task DAG, which refuses to schedule conflicting writes. *(Priority: MEDIUM — mitigated by current single-operator scale; revisit when parallel dispatch frequency grows.)*
+- **Document schema is implicit in `parseDocs.ts`.** §9 calls for a first-class versioned schema artifact in the document tree root; today it lives in a 245-line untested parser. New projects adopting the framework must match the exact section conventions or break parsing — blocks the "framework, not template" story. *(Priority: HIGH. Owner-node: document schema artifact, to be drafted as a child of this PRD.)*
+- **No framework / instance separation.** The framework code (`app/`) lives inside the project it dashboards. A second project would have to copy the codebase. The framework story needs an install path that points a package at any `docs/` tree. *(Priority: MEDIUM — surfaces when the extensibility test is run.)*
+- **Transcript ingestion couples the orchestration data layer to one agent runtime.** `01-ui/10-orchestration` parses Claude Code transcript JSONL. This is a bootstrap, not a target architecture; the eventual MCP-based dispatch (§5) emits a different shape. *(Priority: MEDIUM — revisit when the task runner ships and dispatch becomes the data source.)*
+- **No `parseDocs.test.ts`.** The UI's entire view of the world derives from this parser; a regex regression silently invalidates every panel. *(Priority: HIGH — trivial to fix; do alongside the schema artifact node so tests assert against the schema.)*
 ---
  
 ## 12. Reference Projects
@@ -276,7 +293,7 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 | Project | Relevance | URL |
 |---|---|---|
 | **Kiro** (AWS) | Closest commercial analog; steal hook pattern and steering file concept | kiro.dev |
-| **LangGraph** | Task runner substrate candidate; checkpointing, time-travel, HITL | github.com/langchain-ai/langgraph |
+| **LangGraph** | Reference for capabilities (checkpointing, HITL, replay); evaluated and not adopted in v0.5 (§5). Phase 3 competitive target. | github.com/langchain-ai/langgraph |
 | **MetaGPT** | Role specialization pattern for multi-agent SDD | github.com/FoundationAgents/MetaGPT |
 | **SpecKit** | Per-feature document chain structure reference | github.com/arun-gupta/speckit (community gist) |
 | **Claude Code Tasks** | Agent dispatch integration target | docs.anthropic.com/claude-code |
@@ -302,4 +319,6 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 |----|-------|------------|--------|
 | `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay deferred pending doc-versioning) |
 
-Backend components named in §7 (API server, task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree. Current focus is completing the UI tree first — the UI is the highest-leverage early surface because it gives the operator visibility into everything else as it comes online.
+Backend components named in §7 (document schema artifact, API server, in-house task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree.
+
+**Build-order shift (v0.5):** earlier this PRD prioritised completing the UI tree first. With the round-2 UI manifest COMPLETE and the v0.5 architecture review surfacing an unbuilt substrate plus framework-vs-instance gaps (§11), the next focus shifts to the backend. Suggested ordering: (a) document schema artifact — unblocks parser tests, validation, and the framework-vs-template story; (b) API server — defines the real data contract `01-ui` will eventually consume; (c) in-house task runner — implements §6.3 resource claims and HITL natively; (d) agent dispatcher and health daemon follow. Today's `parseDocs.ts` and `01-ui/10-orchestration` transcript ingestion are bootstraps to be replaced as the substrate lands.
