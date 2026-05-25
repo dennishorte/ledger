@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/04-tasks`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-25)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (spec review + APPROVED)
+**Last Updated:** 2026-05-25 (promotion)
 
 **Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`
 **Optional reference:** `01-ui/02-dag` (inspector-driven detail pattern, `StatusChip` reuse), `01-ui/06-health` (sibling aggregation-surface scoping), `01-ui/05-logs` (sibling consumer of the same data layer; row-click navigates here)
