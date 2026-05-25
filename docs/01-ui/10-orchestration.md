@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** ISSUE_OPEN
+**Status:** IN_PROGRESS
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (VERIFY → ISSUE_OPEN, worktree-root bug found in stage-8 verification)
+**Last Updated:** 2026-05-24 (ISSUE_OPEN → IN_PROGRESS — patch pass for worktree-root bug)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
