@@ -420,8 +420,7 @@ Two findings (S1 partial overreach on `ai-title`/`last-prompt`, and N7 on `Multi
 
 **Dependencies added:**
 
-- `@types/node@^22.10.2` — dev dep, used by `app/server/**` for `node:fs`, `node:path`, `node:url`, `node:child_process`.
-- `vitest@^4.1.7` — dev dep, used for the golden test (`app/server/transcriptParse.test.ts`). Added a `test: "vitest run"` script in `app/package.json`. No prior test framework existed; this is the first.
+- `vitest@^4.1.7` — dev dep, used for the golden test (`app/server/transcriptParse.test.ts`). Added a `test: "vitest run"` script in `app/package.json`. No prior test framework existed; this is the first. `@types/node` was already present in the baseline `package.json` and is not a new dependency.
 
 **Decisions beyond spec:**
 
@@ -434,8 +433,8 @@ Two findings (S1 partial overreach on `ai-title`/`last-prompt`, and N7 on `Multi
 
 | Asset | Baseline | This build | Delta |
 |---|---|---|---|
-| `index-*.js` (uncompressed) | 986,086 B | 1,018,103 B | +32,017 B (+3.2 %) |
-| `index-*.js` (gzip) | — | 326.68 kB | — |
+| `index-*.js` (uncompressed) | 986,086 B | 1,021,760 B | +35,674 B (+3.6 %) |
+| `index-*.js` (gzip) | — | 328.17 kB | — |
 | `index-*.css` (uncompressed) | 40,920 B | 40,944 B | +24 B (+0.1 %) |
 | `index-*.css` (gzip) | — | 8.06 kB | — |
 
@@ -459,6 +458,24 @@ JS growth is `@tanstack/react-query` pulled into the active tree (it was already
 - Golden test (`pnpm -C app test`): **34/34 passed**, including the D2 keyword-table coverage (every row) and the six-LogEvent-kinds emission check against the committed Claude Code 2.1.148 fixture.
 
 **Deviations from spec:** Only the keyword-table ordering noted above (constraint added to the implementation, not a doc-level deviation). All other behavior matches the spec.
+
+### Implementation Review (2026-05-24)
+
+Independent implementation review was run against this worktree (no rebase needed — base equalled main HEAD). Verdict: NEEDS_MINOR_REVISIONS (1 blocking, 1 should-fix, 2 nits). All applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | First SSE event (seq=0) dropped on every fresh connection because `lastSeq` defaulted to `0` and the predicate is `seq > lastSeq`. | `middleware.ts` initializes `lastSeq = -1` when no `Last-Event-ID` header is present and only updates from the header when `parseInt` returns a finite number. seq=0 now ships on first connection; reconnects with `Last-Event-ID: <N>` correctly skip `seq ≤ N`. |
+| S1 | `artifact` LogEvents were never emitted despite §"Artifact derivation (D6)" calling for them and the kind being present in the `LogEvent` union. | Added `artifactFromToolCall` to `transcriptParse.ts`; expanded `pendingToolCalls` to retain tool name + args alongside the call timestamp; on successful `tool_result` for Write/Edit/MultiEdit/NotebookEdit, an `artifact` event is appended after the `tool_result`. `Write` → `doc_created`/`file_written`; Edit/MultiEdit/NotebookEdit → `doc_updated`/`file_written`. Doc-node resolution via `serverIdForPath`. Added a golden-test assertion that the fixture's Write produces ≥1 artifact event (35/35 tests pass). |
+| N1 | Bundle-delta numbers in Implementation Notes were inaccurate (+32,017 B claimed vs +35,674 B measured) and `@types/node` was incorrectly listed as newly added. | Bundle-delta table refreshed from a clean rebuild post-fixes. `@types/node` claim removed; only `vitest` is genuinely new. |
+| N2 | `useLogStream` initial `connStatus: "missing"` collides with the spec's definition (404 only, not "query pending"). | Not applied. The spec is silent on the pending-query state and no consumer exists yet. Documenting here as a known minor surface — `04-tasks`/`05-logs` will refine this when they wire the hook. |
+
+**Final headlessly-verified results after fixes:**
+
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0
+- `pnpm -C app build`: exit 0; bundle sizes match the refreshed table above
+- `pnpm -C app test`: 35/35 passed (was 34/34; +1 for the artifact assertion)
 
 ---
 

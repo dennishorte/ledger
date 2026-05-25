@@ -92,11 +92,14 @@ function startSseStream(
   });
 
   // Determine the last seen seq from the request header.
+  // Default to -1 when absent: every event has seq >= 0, and the resume
+  // predicate is `seq > lastSeq`. A first connection must emit seq=0.
   const lastEventIdHeader = req.headers["last-event-id"];
-  const lastSeq =
-    typeof lastEventIdHeader === "string"
-      ? (parseInt(lastEventIdHeader, 10) || 0)
-      : 0;
+  let lastSeq = -1;
+  if (typeof lastEventIdHeader === "string") {
+    const parsed = parseInt(lastEventIdHeader, 10);
+    if (Number.isFinite(parsed)) lastSeq = parsed;
+  }
 
   const taskId = task.id;
   const jsonlPath = task.transcriptPath;

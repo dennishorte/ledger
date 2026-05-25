@@ -19,7 +19,8 @@
  */
 
 import * as fs from "node:fs";
-import type { LogEvent, TaskId, TaskStatus, TaskType } from "../src/lib/types.js";
+import type { LogEvent, NodeId, TaskId, TaskStatus, TaskType } from "../src/lib/types.js";
+import { serverIdForPath } from "./serverIdForPath.js";
 
 // ---------------------------------------------------------------------------
 // Once-per-kind warning registry
@@ -299,6 +300,62 @@ function inputToJson(input: unknown): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Artifact derivation — D6
+//
+// Successful Write / Edit / MultiEdit / NotebookEdit tool_results produce a
+// single `artifact` LogEvent. MultiEdit emits one event per call (one path,
+// multiple hunks aggregated; hunk-level granularity is intentionally lost).
+// Bash, Read, and all other tools are excluded.
+// ---------------------------------------------------------------------------
+
+const ARTIFACT_TOOLS = new Set<string>(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+interface ArtifactPayload {
+  artifactKind: "doc_created" | "doc_updated" | "file_written";
+  path: string;
+  docNodeId?: NodeId;
+  summary?: string;
+}
+
+function artifactFromToolCall(
+  toolName: string,
+  argsJson: string,
+): ArtifactPayload | null {
+  if (!ARTIFACT_TOOLS.has(toolName)) return null;
+  let args: Record<string, unknown>;
+  try {
+    args = JSON.parse(argsJson) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const filePath = typeof args["file_path"] === "string" ? args["file_path"] : null;
+  if (filePath === null) return null;
+
+  const nodeId = serverIdForPath(filePath) ?? undefined;
+  // Phase-1: we cannot tell from the JSONL whether `Write` was targeting an
+  // existing or new file. We map Write→doc_created when nodeId is set, else
+  // file_written; Edit/MultiEdit/NotebookEdit always indicate an update.
+  let artifactKind: ArtifactPayload["artifactKind"];
+  if (toolName === "Write") {
+    artifactKind = nodeId !== undefined ? "doc_created" : "file_written";
+  } else if (nodeId !== undefined) {
+    artifactKind = "doc_updated";
+  } else {
+    artifactKind = "file_written";
+  }
+
+  const summary =
+    typeof args["description"] === "string"
+      ? args["description"].slice(0, 80)
+      : undefined;
+
+  const out: ArtifactPayload = { artifactKind, path: filePath };
+  if (nodeId !== undefined) out.docNodeId = nodeId;
+  if (summary !== undefined) out.summary = summary;
+  return out;
+}
+
 export interface ParseResult {
   events: LogEvent[];
   /** Parsed line objects (used by deriveTask for title/model extraction). */
@@ -319,7 +376,10 @@ export function parseTranscript(taskId: TaskId, content: string): ParseResult {
   let seq = 0;
 
   // Track open tool_use calls by id → timestamp, for durationMs derivation.
-  const pendingToolCalls = new Map<string, string>();
+  const pendingToolCalls = new Map<
+    string,
+    { at: string; name: string; argsJson: string }
+  >();
 
   for (const rawLine of rawLines) {
     const line = parseLine(rawLine);
@@ -359,7 +419,8 @@ export function parseTranscript(taskId: TaskId, content: string): ParseResult {
               });
             }
           } else if (block.type === "tool_use") {
-            pendingToolCalls.set(block.id, at);
+            const argsJson = inputToJson(block.input);
+            pendingToolCalls.set(block.id, { at, name: block.name, argsJson });
             events.push({
               id: `${id}-tu-${block.id}`,
               taskId,
@@ -368,7 +429,7 @@ export function parseTranscript(taskId: TaskId, content: string): ParseResult {
               kind: "tool_call",
               callId: block.id,
               toolName: block.name,
-              arguments: inputToJson(block.input),
+              arguments: argsJson,
             });
           } else {
             // block.type === "tool_result" inside assistant: unexpected; skip
@@ -389,16 +450,18 @@ export function parseTranscript(taskId: TaskId, content: string): ParseResult {
             const block = parseContentBlock(rawBlock);
             if (block?.type === "tool_result") {
               const callId = block.tool_use_id;
-              const callAt = pendingToolCalls.get(callId);
+              const pending = pendingToolCalls.get(callId);
               let durationMs: number | undefined;
-              if (callAt !== undefined) {
-                const callTs = new Date(callAt).getTime();
+              if (pending !== undefined) {
+                const callTs = new Date(pending.at).getTime();
                 const resultTs = new Date(at).getTime();
                 if (isFinite(callTs) && isFinite(resultTs)) {
                   durationMs = resultTs - callTs;
                 }
                 pendingToolCalls.delete(callId);
               }
+              const status: "ok" | "error" =
+                block.is_error === true ? "error" : "ok";
               events.push({
                 id: `${id}-tr-${callId}`,
                 taskId,
@@ -406,10 +469,24 @@ export function parseTranscript(taskId: TaskId, content: string): ParseResult {
                 seq: seq++,
                 kind: "tool_result",
                 callId,
-                status: block.is_error === true ? "error" : "ok",
+                status,
                 body: stringifyContent(block.content),
                 durationMs,
               });
+              // Emit an artifact event when a write-like tool succeeded.
+              if (pending !== undefined && status === "ok") {
+                const artifact = artifactFromToolCall(pending.name, pending.argsJson);
+                if (artifact !== null) {
+                  events.push({
+                    id: `${id}-art-${callId}`,
+                    taskId,
+                    at,
+                    seq: seq++,
+                    kind: "artifact",
+                    ...artifact,
+                  });
+                }
+              }
             }
             // Other user content blocks (non-tool_result) are skipped per spec.
           }

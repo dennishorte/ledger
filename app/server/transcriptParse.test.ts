@@ -78,6 +78,15 @@ describe("parseTranscript (golden fixture)", () => {
     expect(statuses).toContain("ok");
   });
 
+  it("emits an artifact event after a successful Write tool result", () => {
+    const artifacts = events.flatMap((e) => (e.kind === "artifact" ? [e] : []));
+    expect(artifacts.length).toBeGreaterThanOrEqual(1);
+    const first = artifacts[0];
+    if (first === undefined) throw new Error("expected at least one artifact event");
+    expect(first.path.length).toBeGreaterThan(0);
+    expect(["doc_created", "doc_updated", "file_written"]).toContain(first.artifactKind);
+  });
+
   it("produces reasoning/message events from assistant text blocks", () => {
     const messageEvents = events.filter(
       (e) => e.kind === "reasoning" && e.subkind === "message",
