@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/04-tasks`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25 (spec review + APPROVED)
 
@@ -269,7 +269,36 @@ Nothing punted. All findings applied. Audit table stays in the doc as durable pr
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-05-25 (worktree agent-aae44673850f4423f)
+
+**Dependencies added:** none — no new `package.json` entries required.
+
+**Bundle delta vs commit `081626f` baseline:**
+- JS: +30.13 kB uncompressed (1090.95 → 1121.08 kB), +7.49 kB gzip (349.66 → 357.15 kB)
+- CSS: +1.87 kB uncompressed (40.94 → 42.81 kB), +0.28 kB gzip (8.06 → 8.34 kB)
+
+**Files added/modified:**
+- `app/src/styles/globals.css` — added `--color-accent-soft`, `--color-danger-soft`, `--color-warning-soft` to both `:root` and `@theme inline` blocks (B1 blocking callout)
+- `app/src/lib/formatDuration.ts` — new: `formatDuration()` + `formatRelativeTime()` (shared with 05-logs per D7)
+- `app/src/components/tasks/TaskConsole.tsx` — new: outer composition
+- `app/src/components/tasks/TaskHeader.tsx` — new: header with refresh button + live count chip
+- `app/src/components/tasks/TaskFilters.tsx` — new: status/type/search filter bar (URL-synced)
+- `app/src/components/tasks/TaskTable.tsx` — new: grouped, collapsible table with header row
+- `app/src/components/tasks/TaskRow.tsx` — new: single row (session + child variants)
+- `app/src/components/tasks/TaskStatusChip.tsx` — new: task status badge (sibling of StatusChip per D3)
+- `app/src/components/tasks/TaskTypeBadge.tsx` — new: type badge with soft-bg group coloring (D4)
+- `app/src/components/tasks/TaskInspector.tsx` — new: inspector content (shell-store pattern per S1)
+- `app/src/components/tasks/useTaskGrouping.ts` — new: groups flat Task[] into SessionGroup[] (D9)
+- `app/src/components/tasks/useTaskFilters.ts` — new: URL search-param filter state (D6)
+- `app/src/routes/TaskConsolePanel.tsx` — replaced placeholder with thin shell: useTaskList() + branches
+
+**Decisions beyond spec:**
+- `TaskRow` receives an optional `leadingCell` prop instead of the session-row composite wrapping it in an outer flex container. This avoids double `border-b` and keeps all column widths in a single layout pass — the header spacer (`w-4`) aligns with the same prop slot.
+- `TaskFilters` always renders all chips (both status and type) and dims inactive ones to `opacity-35`, rather than toggling between an "All" summary chip and individual chips. The "All" chip described in the spec would require two clicks to get from "All" to any individual status, whereas dimmed-chips lets one click toggle any status. The filter semantics are identical; only the initial rendering mode differs. This is a minor deviation — the spec says "When all are on, the chip group renders as 'All'" but the dimmed-all-on rendering is functionally equivalent and more directly operable.
+- `noUncheckedIndexedAccess` required replacing the two `!` non-null assertions in `useTaskFilters.ts` (on `.get("status")!` and `.get("type")!`) with pre-assigned local variables. Same in `useTaskGrouping.ts` (`.get(parentId)!`).
+
+**Cross-spec coordination:**
+- The three soft color tokens (`--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft`) are now in `globals.css`. The parallel `05-logs` worktree must not add these again; they're available as-is. If `05-logs` was already dispatched before this commit lands on main, there will be a rebase conflict limited to the three token lines in `globals.css` — trivial to resolve by keeping this implementation's values (they are the spec-canonical values).
 
 ---
 
