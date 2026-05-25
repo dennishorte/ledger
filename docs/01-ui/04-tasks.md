@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/04-tasks`
 **Parent:** `01-ui`
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25
 
