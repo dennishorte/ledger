@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/05-logs`
 **Parent:** `01-ui`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-25)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (spec review + APPROVED)
+**Last Updated:** 2026-05-25 (promotion)
 
 **Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`, `01-ui/08-markdown` (consumed for `reasoning` event bodies — see D6), `01-ui/04-tasks` (consumed for the `--color-warning-soft` / `--color-danger-soft` tokens it introduces in `globals.css`, and for the `TaskStatusChip` reused in `status_change` rows — see D2)
 **Optional reference:** `01-ui/02-dag` (the panel that owns the "accessible from the DAG node side panel" affordance per PRD §8.2 — see R1a), `01-ui/03-docs` (resolver pattern — see D9)
