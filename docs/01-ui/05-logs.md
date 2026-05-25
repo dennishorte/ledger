@@ -51,7 +51,7 @@ Phase-1 reality: `10-orchestration` already serves typed `LogEvent`s over SSE. T
 - **Syntax highlighting on tool-call argument JSON.** Pretty-print only (using `JSON.stringify(parsed, null, 2)`); shiki adds ~600 KB for a niche feature. `08-markdown` already shipped without shiki; same trade-off here.
 - **Log search within a single task.** Browser `Ctrl-F` over the rendered DOM suffices at current sizes. Revisit if event counts grow past a few thousand.
 - **Mutation affordances** (cancel task, retry tool, etc.) — these require the runner.
-- **Replay-mode integration.** `07-replay` is the separate node; that depends on doc-versioning which is unbuilt.
+- **Replay-mode integration.** `07-replay` is the separate node; DEFERRED in v0.5.1 (out of v1 scope, see PRD §8.6).
 
 ---
 

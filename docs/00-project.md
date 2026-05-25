@@ -1,12 +1,13 @@
 # LLM Project Framework
  
 **Status:** Draft  
-**Version:** 0.5  
+**Version:** 0.5.1  
 **Last Updated:** 2026-05-25  
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
 v0.4 — Collapsed the separate "Document Store" component into the git repo. §5 rewritten; §7 architecture diagram updated; §14 manifest note updated. Document version history, attribution, and rollback are now git-native (commit log, trailers, `git revert`).  
-v0.5 — Reversed LangGraph adoption: task runner now built in-house in TypeScript on SQLite from Phase 1 (§5 rewritten; §7 diagram, §8.5, §8.6, §3 caveat updated). Closed the LangGraph resource-locking risk in §11 as N/A. Added four open issues from a v0.5 architecture review (implicit document schema, no framework/instance separation, transcript-ingestion coupling, missing parser tests). §14 build order shifted from UI-first to substrate-next.
+v0.5 — Reversed LangGraph adoption: task runner now built in-house in TypeScript on SQLite from Phase 1 (§5 rewritten; §7 diagram, §8.5, §8.6, §3 caveat updated). Closed the LangGraph resource-locking risk in §11 as N/A. Added four open issues from a v0.5 architecture review (implicit document schema, no framework/instance separation, transcript-ingestion coupling, missing parser tests). §14 build order shifted from UI-first to substrate-next.  
+v0.5.1 — §8.6 Replay Mode marked deferred (out of v1 scope; event log primitive stays in the runner). §11 added "no project metadata file" open issue (sibling to schema artifact). §14 row updated to reflect 07-replay DEFERRED. Cross-doc sync: `01-ui/00-ui.md` manifest, `01-ui/10-orchestration.md` children pointer, `01-ui/05-logs.md` out-of-scope bullet, `CLAUDE.md` round-2 line. New Open Issues filed on `01-ui/02-dag.md` (floating parent node, transitive edges not reduced) and `01-ui/01-shell.md` ("untitled project" fallback).
  
 ---
  
@@ -243,12 +244,14 @@ The Git Repo box is not a service — it is the working tree itself. The API ser
 - Any document node can be reverted to a prior version.
 - Rollback enqueues a recovery task that re-queues all downstream tasks that depended on the reverted state.
 - Rollback writes a revert event to the event log; downstream tasks are re-queued via dependency edges in the tasks table.
-### 8.6 Replay Mode
+### 8.6 Replay Mode *(deferred — see v0.5.1 note below)*
  
 - Step through the full history of a document subtree: document versions, task executions, agent decisions.
 - Read-only; does not affect live state.
 - Intended for post-mortem analysis.
-- Implemented as a range `SELECT` over the event log, replayed into the UI as historical state.
+- Would be implemented as a range `SELECT` over the event log, replayed into the UI as historical state.
+ 
+*v0.5.1: deferred. The event log primitive remains in the task runner design (§5) — it's load-bearing for the runner regardless. The replay **UI** is deferred until a concrete post-mortem use case demands more than `git log` + the live logs panel (`01-ui/05-logs`) provide. Original rationale assumed near-free implementation via LangGraph's time-travel; without LangGraph the cost-benefit no longer justifies v1 inclusion. Revisit in a future PRD revision if demand surfaces.*
 ### 8.7 Project Health Dashboard
  
 - Single-pane view of all open issues across the document tree.
@@ -283,6 +286,7 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 - **Decomposition termination criteria** — Need explicit rules for when a node is too small to decompose further (minimum task size, depth limit, complexity threshold). Without this, recursive decomposition produces unnavigable trees. *(Priority: MEDIUM)*
 - **Parallel-worktree shared-file conflicts (Phase-1 manual workflow only)** — When two implementers run in parallel worktrees and both touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. The operator currently picks dispatches whose data contracts don't overlap, or accepts that the second-to-merge worktree will surface the conflict at rebase time (`docs/process/leaf-workflow.md` stage 5). The eventual fix is §6.3's resource-claim model on the task DAG, which refuses to schedule conflicting writes. *(Priority: MEDIUM — mitigated by current single-operator scale; revisit when parallel dispatch frequency grows.)*
 - **Document schema is implicit in `parseDocs.ts`.** §9 calls for a first-class versioned schema artifact in the document tree root; today it lives in a 245-line untested parser. New projects adopting the framework must match the exact section conventions or break parsing — blocks the "framework, not template" story. *(Priority: HIGH. Owner-node: document schema artifact, to be drafted as a child of this PRD.)*
+- **No project metadata file.** A ledger-managed project needs a small config at its root — name, docs path, agent runtime ID, schema version — so the framework can identify and scope itself to the project. Today the UI's topbar shows "untitled project" because nothing exists. Suggested shape: `.ledger/project.json` (or root `ledger.config.json`). Sibling concern to the schema artifact (both are first-class config at the project root). *(Priority: HIGH. Owner-node: project metadata artifact, to be drafted alongside the schema node.)*
 - **No framework / instance separation.** The framework code (`app/`) lives inside the project it dashboards. A second project would have to copy the codebase. The framework story needs an install path that points a package at any `docs/` tree. *(Priority: MEDIUM — surfaces when the extensibility test is run.)*
 - **Transcript ingestion couples the orchestration data layer to one agent runtime.** `01-ui/10-orchestration` parses Claude Code transcript JSONL. This is a bootstrap, not a target architecture; the eventual MCP-based dispatch (§5) emits a different shape. *(Priority: MEDIUM — revisit when the task runner ships and dispatch becomes the data source.)*
 - **No `parseDocs.test.ts`.** The UI's entire view of the world derives from this parser; a regex regression silently invalidates every panel. *(Priority: HIGH — trivial to fix; do alongside the schema artifact node so tests assert against the schema.)*
@@ -317,7 +321,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay deferred pending doc-versioning) |
+| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED in v0.5.1, out of v1 scope) |
 
 Backend components named in §7 (document schema artifact, API server, in-house task runner, agent dispatcher, health daemon) are not yet decomposed into child nodes; they will be added here as their specs are drafted. The git repo is the document store (§5) — it is not a buildable component, just the working tree.
 

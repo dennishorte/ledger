@@ -17,7 +17,7 @@ Introduce the shared data layer for tasks and per-task log streams. Three consum
 
 - `01-ui/04-tasks` — task control console (read-only browser in v1)
 - `01-ui/05-logs` — live log streaming panel
-- `01-ui/07-replay` — replay-mode panel (deferred; depends on doc-versioning, which is unbuilt)
+- `01-ui/07-replay` — replay-mode panel (DEFERRED per v0.5.1; out of v1 scope, see PRD §8.6)
 
 Phase-1 reality: no API server, no task runner, no agent dispatcher. **But Claude Code is already emitting all of the relevant data** — every session and every sub-agent dispatch produces JSONL transcripts under `~/.claude/projects/<encoded-cwd>/`. The structure maps almost 1:1 onto the PRD's task / log-event model. v1 reads those transcripts directly and exposes them to the UI via a Vite dev middleware.
 
