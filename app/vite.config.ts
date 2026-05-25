@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -32,5 +32,32 @@ export default defineConfig({
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(
       process.env.npm_package_version ?? "0.0.0",
     ),
+  },
+  test: {
+    projects: [
+      {
+        // Server-side tests (Node environment): transcriptParse.test.ts
+        test: {
+          name: "server",
+          include: ["server/**/*.test.{ts,tsx}"],
+          environment: "node",
+        },
+      },
+      {
+        // Client-side tests (jsdom environment): React component tests
+        plugins: [react()],
+        test: {
+          name: "client",
+          include: ["src/**/*.test.{ts,tsx}"],
+          environment: "jsdom",
+          globals: true,
+        },
+        resolve: {
+          alias: {
+            "@": path.resolve(__dirname, "./src"),
+          },
+        },
+      },
+    ],
   },
 });

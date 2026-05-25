@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/05-logs`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25 (spec review + APPROVED)
 
@@ -262,7 +262,49 @@ Nothing punted. All findings applied. Audit table stays in the doc as durable pr
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:**
+- `@testing-library/react` (devDependency) — required for the golden test (Verification item 9). Added `@testing-library/jest-dom` and `jsdom` alongside it.
+- `vitest/config` — switched `vite.config.ts` from `defineConfig` (vite) to `defineConfig` (vitest/config) to support the `test` block. Added two test projects: `server` (node, `server/**/*.test.*`) and `client` (jsdom, `src/**/*.test.*`). This is the only change to `vite.config.ts`'s shape from spec.
+
+**Bundle delta vs commit 081626f baseline (main repo dist):**
+- JS: 1,090,948 B → 1,118,000 B (+27,052 B uncompressed). Gzip: ~348 KB → ~357 KB (+9 KB).
+- CSS: 40,944 B → 42,590 B (+1,646 B) — soft color tokens added to globals.css.
+
+**Files created:**
+- `app/src/lib/docLink.ts` — extracted `resolveDocLink` from `DocViewer.tsx` (N3). `DocViewer.tsx` updated to import from here.
+- `app/src/lib/formatDuration.ts` — shared duration formatter (D7, cross-spec coordination).
+- `app/src/components/logs/ConnectionPill.tsx`
+- `app/src/components/logs/LogEventRow.tsx` — main discriminated-union renderer with per-kind sub-renderers colocated.
+- `app/src/components/logs/LogEventList.tsx`
+- `app/src/components/logs/LogFilters.tsx`
+- `app/src/components/logs/LogStream.tsx`
+- `app/src/components/logs/LogStreamHeader.tsx`
+- `app/src/components/logs/logFiltersUtil.ts` — split from `LogFilters.tsx` to satisfy `react-refresh/only-export-components` lint rule (non-component exports must live in a separate module).
+- `app/src/components/logs/toolPreview.ts`
+- `app/src/components/logs/resultPreview.ts`
+- `app/src/components/logs/useAutoFollow.ts`
+- `app/src/components/logs/LogEventRow.test.tsx` — golden test (15 tests covering all 6 kinds + subkinds).
+
+**Files modified:**
+- `app/src/components/docs/DocViewer.tsx` — removed inlined `resolveDocLink`; now imports from `@/lib/docLink`.
+- `app/src/routes/LogStreamPanel.tsx` — full implementation (was placeholder).
+- `app/src/styles/globals.css` — added `--color-accent-soft`, `--color-warning-soft`, `--color-danger-soft` tokens.
+- `app/vite.config.ts` — switched to `vitest/config`; added `test.projects` block.
+
+**Cross-spec coordination items (rebase reconciliation needed):**
+
+1. **`globals.css` soft tokens** — Added `--color-accent-soft: oklch(0.92 0.045 35)`, `--color-warning-soft: oklch(0.94 0.05 75)`, `--color-danger-soft: oklch(0.93 0.04 25)` as specified. At rebase time: if `04-tasks` merged first and has these tokens, keep main's version (identical values so no functional conflict). Comment in the file marks them as parallel-worktree duplicates.
+
+2. **`TaskStatusChip`** — Inlined as `InlineStatusChip` in `LogEventRow.tsx` and as `TaskStatusChip` in `LogStreamHeader.tsx` (parallel worktree pattern). At rebase time: if `app/src/components/tasks/TaskStatusChip.tsx` exists on main, replace both inline implementations with imports from `@/components/tasks/TaskStatusChip`.
+
+3. **`formatDuration.ts`** — Created at `app/src/lib/formatDuration.ts`. At rebase time: if `04-tasks` introduced this file first with the same or similar implementation, keep main's version and remove this one (or reconcile differences if the implementations diverged).
+
+4. **`vite.config.ts`** — Switched from `defineConfig` (vite) to `defineConfig` (vitest/config) and added `test.projects` block. At rebase time: if `04-tasks` also modified this file, merge the test config blocks carefully; the projects array should contain entries from both.
+
+**Deviations from spec:**
+- `logFiltersUtil.ts` was introduced (not in spec's file layout) to satisfy the `react-refresh/only-export-components` lint rule — `parseKindsFromParam` and `ALL_KINDS` cannot live in `LogFilters.tsx` alongside the component export. This is an additive deviation with no spec-visible surface change.
+- The golden test mocks `@/lib/docLink` and `@/lib/parseDocs` because `parseDocs.ts` uses `import.meta.glob` which is not available in the vitest jsdom environment. The mock is a no-op resolver (`href => /docs/${href}`) that lets the component render without the build-time doc tree. The actual `resolveDocLink` is exercised in the browser environment where `import.meta.glob` works.
+- Production "no middleware" detection uses `window.location.hostname !== "localhost"` heuristic rather than a spec-prescribed mechanism (the spec said render the same empty-state copy from `10-orchestration` D11 but didn't specify how to detect). This is a reasonable Phase-1 approximation.
 
 ---
 

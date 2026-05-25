@@ -17,8 +17,8 @@
 import type { JSX } from "react";
 import { Link } from "react-router";
 import { ChevronLeft } from "lucide-react";
-import type { DocNode, DocSource, NodeId } from "@/lib/types";
-import { idForPath } from "@/lib/parseDocs";
+import type { DocNode, DocSource } from "@/lib/types";
+import { resolveDocLink } from "@/lib/docLink";
 import { StatusChip } from "@/components/dag/StatusChip";
 import { MarkdownBody } from "@/components/markdown/MarkdownBody";
 import { EmptyState } from "@/components/layout/EmptyState";
@@ -182,18 +182,6 @@ interface DocViewerProps {
  * Override `--prose-scroll-margin-top` here when the header height changes.
  */
 const SCROLL_MARGIN = "120px";
-
-/**
- * Doc-tree-aware link resolver (D3). Module-level because `idForPath` is a
- * pure module-stable function — there's nothing to close over, so a hooked
- * callback would only add ceremony. Reference identity is stable across
- * every render, which keeps `<MarkdownBody>`'s components memoisation effective.
- */
-function resolveDocLink(href: string): string | null {
-  const id: NodeId | null = idForPath(href);
-  if (id === null) return null;
-  return `/docs/${encodeURIComponent(id)}`;
-}
 
 export function DocViewer({ node, source }: DocViewerProps): JSX.Element {
   // ── 404 ──────────────────────────────────────────────────────────────────

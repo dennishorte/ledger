@@ -25,6 +25,15 @@
   --color-warning-soft: oklch(0.94 0.05 75);
   --color-success: oklch(0.62 0.12 145);
 
+  /*
+   * Soft background tokens — introduced by 04-tasks (parallel worktree);
+   * duplicated here for 05-logs consumption. Rebase reconciliation: keep
+   * main's version if 04-tasks merges first, else this version stays.
+   */
+  --color-accent-soft: oklch(0.92 0.045 35);
+  --color-warning-soft: oklch(0.94 0.05 75);
+  --color-danger-soft: oklch(0.93 0.04 25);
+
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -53,6 +62,9 @@
   --color-warning: var(--color-warning);
   --color-warning-soft: var(--color-warning-soft);
   --color-success: var(--color-success);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-danger-soft: var(--color-danger-soft);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
