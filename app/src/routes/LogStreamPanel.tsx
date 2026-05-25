@@ -82,12 +82,6 @@ function LogStreamPanelInner({ taskId }: { taskId: string }): JSX.Element {
     );
   }
 
-  // Still loading — let useLogStream initialise; task data pending
-  if (queryPending) {
-    // Render a minimal loading state. The panel will fill in as the query resolves.
-    // ConnectionPill's N1 mitigation handles the red-pill flash.
-  }
-
   const task = taskQuery.data?.task;
 
   // No task data yet (still loading) — show a minimal shell
