@@ -2,12 +2,12 @@
 
 **Node ID:** `01-ui/05-logs`
 **Parent:** `01-ui`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (spec review + APPROVED)
 
-**Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`
-**Optional reference:** `01-ui/04-tasks` (sibling consumer of the same data layer; row-click navigates here), `01-ui/02-dag` (`StatusChip` reuse pattern), `01-ui/08-markdown` (consumed for `reasoning` event bodies — see D6)
+**Dependencies:** `01-ui/01-shell`, `01-ui/10-orchestration`, `01-ui/08-markdown` (consumed for `reasoning` event bodies — see D6), `01-ui/04-tasks` (consumed for the `--color-warning-soft` / `--color-danger-soft` tokens it introduces in `globals.css`, and for the `TaskStatusChip` reused in `status_change` rows — see D2)
+**Optional reference:** `01-ui/02-dag` (the panel that owns the "accessible from the DAG node side panel" affordance per PRD §8.2 — see R1a), `01-ui/03-docs` (resolver pattern — see D9)
 
 ---
 
@@ -18,6 +18,7 @@ Replace the `LogStreamPanel` empty state at `/logs/:taskId` with a real live-tai
 Phase-1 reality: `10-orchestration` already serves typed `LogEvent`s over SSE. This node owns the rendering surface. No new data layer; no new transport; no new types in `src/lib/types.ts`.
 
 1. `/logs/:taskId` renders a **per-task header** (task title + status + duration + agent + link back to `/tasks`) above a streaming list of `LogEvent`s.
+1a. The URL contract `/logs/:taskId` is the single addressable surface for live log streams. Per PRD §8.2 "accessible from the DAG node side panel," `01-ui/02-dag`'s `NodeInspector` is the owner of the affordance that produces such links from a selected DAG node. This spec declares the URL contract and route shape; it does not modify `02-dag`. Wiring the DAG-inspector "View task logs" button is tracked as a follow-up on `02-dag` (see Open Issues).
 2. Each `LogEvent.kind` renders with its own visual treatment so the operator can scan the stream without reading every line:
    - `reasoning` (`message`) — body as rendered markdown via `<MarkdownBody>` (D6).
    - `reasoning` (`thinking`) — italicised, collapsed by default, expandable on click (D5).
@@ -66,7 +67,7 @@ Phase-1 reality: `10-orchestration` already serves typed `LogEvent`s over SSE. T
 
 Internally combines an initial `useTask(taskId)` fetch (full historical `LogEvent[]`) with an SSE `EventSource` opened on `/api/transcripts/:taskId/stream`. Reconnect with `Last-Event-ID` is built into the browser; the server re-parses from line 0 and skips seen events (`10-orchestration` §Wire format). The hook deduplicates by `seq`.
 
-No new globs, no new fetch, no new types. The panel is a pure presenter over the hook output. Task metadata (title, status, agent, timestamps) comes from `useTask(taskId)` (re-used here directly for the header so the panel doesn't depend on a parent route having stuffed it in store).
+No new globs, no new fetch, no new types. The panel is a pure presenter over the hook output. Task metadata (title, status, agent, timestamps) comes from `useTask(taskId)` called directly at the panel level for the header. `useLogStream` *also* calls `useTask` internally (it needs the initial event list); both call sites hit the same TanStack Query cache key (`["task", id]`) and coalesce into a single network request — see `src/lib/useTask.ts`.
 
 ### Layout
 
@@ -154,6 +155,7 @@ No external library. The hook returns `{ ref, following, jumpToLatest }` and the
 ### Filter bar interaction
 
 - Chip group across the six `LogEvent.kind` values. Default: all on.
+- The `reasoning` chip filters both `subkind: "thinking"` and `subkind: "message"` events together — sub-kind is collapsed into the parent kind for filter granularity.
 - Selection is URL-synced via `useSearchParams()`: `?kind=tool_call,tool_result,artifact`. Empty / absent param = all kinds visible.
 - Filtering is purely a render-time predicate over the in-memory `events` array. No re-fetch, no state in Zustand.
 
@@ -188,7 +190,7 @@ A reviewer running `pnpm dev`, dispatching a sub-agent or running a session, and
 
 1. Header shows the task title (per `10-orchestration` D14 derivation), status chip, agent persona/model, total event count, duration.
 2. The list renders every historical `LogEvent` for that task, in chronological order, with the per-kind glyph + treatment.
-3. New events appear at the bottom within 1 s of a transcript JSONL append (verified by typing a new prompt into the live session or dispatching a sub-agent).
+3. New events appear at the bottom within 1 s of a transcript JSONL append (verified by typing a new prompt into the live session or dispatching a sub-agent). `10-orchestration` Stage-8 Verification item 3 already confirmed this 1 s bound for the underlying SSE pipeline — this panel inherits it.
 4. Auto-follow: when scrolled to the bottom, new events keep the view pinned at the bottom; scrolling up surfaces the "Jump to latest" button; clicking it re-anchors.
 5. `tool_call` rows show a one-line preview matching the heuristic table; clicking expands the full pretty-printed args.
 6. `tool_result` rows display status (`ok` / `error`), duration when present, and a one-line preview; expansion shows the full body.
@@ -217,7 +219,7 @@ A reviewer running `pnpm dev`, dispatching a sub-agent or running a session, and
 | D6 | Markdown rendering for `reasoning` event bodies via `<MarkdownBody>` from `08-markdown` | Agent reasoning routinely contains code fences, lists, and tables — the raw-text fallback would lose this structure. `<MarkdownBody>`'s `resolveDocLink` callback can be passed to make `` `docs/foo.md` `` references in agent text clickable, identical to `03-docs` (see D9). |
 | D7 | Share `formatDuration.ts` with `04-tasks` | Both panels show "12m 04s"-style durations and would otherwise duplicate the formatter. The function is pure and dependency-free. If `05-logs` ships first, the formatter lives here and `04-tasks` re-imports; if `04-tasks` ships first, this panel re-imports. Either order works. |
 | D8 | No virtualisation in v1 | Current largest transcript is ~3000 events. Plain scrolling with keyed list elements handles this without measurable lag. Virtualisation adds complexity (variable row heights, scroll-restoration on filter change) for a problem we don't have. Revisit when median event count grows past ~10k. |
-| D9 | `resolveDocLink` is passed to `<MarkdownBody>` for `reasoning` events, using the same implementation as `03-docs` | Agent reasoning often references project doc paths. Making those clickable inside the log stream costs nothing extra and matches the doc-viewer's behavior, giving the operator a consistent affordance. The resolver lives in `src/lib/docLink.ts` (extracted from `03-docs`'s module-level helper if not already shared at consumption time). |
+| D9 | `resolveDocLink` is passed to `<MarkdownBody>` for `reasoning` events, using the same implementation as `03-docs` | Agent reasoning often references project doc paths. Making those clickable inside the log stream costs nothing extra and matches the doc-viewer's behavior, giving the operator a consistent affordance. As of `03-docs` COMPLETE, the resolver is inlined as a module-level function in `src/components/docs/DocViewer.tsx` (around `idForPath` from `@/lib/parseDocs`). This node is the **second consumer** and is the right time to extract: introduce `src/lib/docLink.ts` exporting `resolveDocLink(href: string): string | null`, replace the inline copy in `DocViewer.tsx` with the import, and import it here. The extracted module is pure (closes over nothing) and zero-runtime-cost. |
 | D10 | `tool_call` argument preview uses a per-tool heuristic table, not a generic "first 120 chars" rule | Different tools have different "load-bearing" args: `Read` is `file_path`, `Bash` is `command`, `Grep` is `pattern`. The heuristic table maps tool → preview field and is open to evolution as new tools surface. Generic fallback for unknown tools (JSON-stringify + truncate) keeps the surface defensive. |
 | D11 | No syntax highlighting on expanded tool-call args / tool-result bodies | Same reasoning as `08-markdown` skipping shiki — bundle cost (~600 KB) outweighs the marginal scan benefit for an operator-only local tool. Mono `<pre>` with `whitespace-pre-wrap` is sufficient. |
 | D12 | Header is panel-owned (sticky), not shell-owned | Matches `03-docs` D10's sticky-header pattern. The header is task-specific (title, status, connection pill) and would be awkward to thread through the shell store. Sticky positioning keeps task identity visible while scrolling through long event streams. |
@@ -235,6 +237,26 @@ A reviewer running `pnpm dev`, dispatching a sub-agent or running a session, and
 - **Reconnect-attempt flicker.** `useLogStream`'s `reconnectAttempt` increments on every `onerror`, but the EventSource transitions to OPEN within ms in normal conditions. Rendering "(reconnecting…)" on every error would flicker; threshold it (only show after, say, 500 ms unresolved). *(Priority: LOW — polish.)*
 - **`status_change` event coverage in Phase 1.** `10-orchestration` reserves `FAILED` and `CANCELLED` for the eventual runner. The renderer must not assume any specific values appear; the discriminated union handles unknown future values via the existing `TaskStatus` enum. *(Priority: TRIVIAL — informational.)*
 - **Cross-doc test coverage.** A golden test against `app/server/__fixtures__/sample-session.jsonl` (introduced by `10-orchestration`) should assert that every event kind in the fixture renders without throwing. Trivial to write; specced here as a verification requirement. *(Priority: LOW.)*
+- **Brief `missing` pill flash on mount.** `useLogStream` initialises `connStatus = "missing"` before the initial `useTask` query resolves (`10-orchestration`'s implementation review N2 flagged this as a known minor surface). At Vite-dev cadence the query resolves in < 50 ms, so the flash is usually invisible — but on a slow first paint the red "No transcript" pill can briefly appear. Mitigation: the `ConnectionPill` renders a neutral "Loading" state when `queryStatus === "pending"` and only falls through to `"missing"` once the query has resolved. *(Priority: LOW — cosmetic.)*
+- **`02-dag` follow-up: "View task logs" affordance.** PRD §8.2's "accessible from the DAG node side panel" requirement is decomposed as: this node owns the `/logs/:taskId` URL contract; `02-dag`'s `NodeInspector` owns the link affordance. Wiring the affordance requires (a) a reverse query "what tasks claim this DocNode?" against `useTaskList()`, and (b) a button in `NodeInspector` that surfaces the matching tasks (a list when >1, a direct link when exactly 1). Trackable as a small `02-dag` v1.2 patch after `05-logs` ships. The PRD requirement is *not* met by this node alone — surfacing here so the operator is aware. *(Priority: MEDIUM — PRD-coverage gap; small follow-up.)*
+
+---
+
+## Spec Review (2026-05-25)
+
+Independent spec review was run against this DRAFT in clean context. Verdict: NEEDS_MINOR_REVISIONS — one blocking finding around an uncovered PRD §8.2 requirement, three should-fix items on dependency declaration and hook conformance, three nits. All applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | PRD §8.2 requires the log stream to be "accessible from the DAG node side panel." Neither the spec nor `02-dag` referenced any mechanism — leaving a silent PRD-coverage gap. | Added Requirement R1a: this node declares the URL contract `/logs/:taskId`; `02-dag`'s `NodeInspector` is the owner of the affordance that produces such links from a selected DAG node. Tracked as a MEDIUM-priority follow-up in Open Issues ("`02-dag` follow-up: 'View task logs' affordance"). `02-dag` promoted to Optional reference noting this contract. The PRD requirement is met by the contract + the follow-up; this node's v1 scope does not include modifying `02-dag`. |
+| S1 | `08-markdown` listed as "Optional reference" in the front-matter, but D6 makes `<MarkdownBody>` a hard runtime dependency for `reasoning` events — the panel cannot ship without it. | Promoted `08-markdown` to the hard Dependencies line. `04-tasks` also promoted there (already a hard dep via the soft color tokens + `TaskStatusChip`); `02-dag` and `03-docs` stay as Optional references. |
+| S2 | Data Source paragraph conflated `useLogStream`'s internal `useTask` call with the panel-level `useTask` call for the header — an implementer might think they need to choose one. | Data Source rewritten: both call sites are explicit; they hit the same TanStack Query cache key (`["task", id]`) and coalesce into a single network request. |
+| S3 | Acceptance check 3 / Verification 2 cited "within 1 s" of a transcript JSONL append without grounding the latency claim in the underlying middleware contract. | Cited `10-orchestration` Stage-8 Verification item 3 which already confirmed the 1 s bound live against the SSE pipeline. The panel inherits the bound. |
+| N1 | Brief red "No transcript" pill flash on mount because `useLogStream` initialises `connStatus = "missing"` before the query resolves. Silent in the spec. | Added Open Issue (LOW — cosmetic) with the mitigation: render a neutral "Loading" state when `queryStatus === "pending"`. |
+| N2 | Filter section said "Chip group across the six `LogEvent.kind` values" but `reasoning` has two sub-kinds — unstated whether the filter conflates them. | Added an explicit clarification line: the `reasoning` chip filters both `subkind: "thinking"` and `subkind: "message"` together. |
+| N3 | D9 said the resolver "lives in `src/lib/docLink.ts` (extracted from `03-docs`'s module-level helper if not already shared at consumption time)." Hedge was stale — verified `src/lib/docLink.ts` does not exist; the resolver is inlined in `DocViewer.tsx` around `idForPath` from `@/lib/parseDocs`. | D9 rewritten: this node is the **second consumer** and is the right time to extract. Concrete extraction plan: introduce `src/lib/docLink.ts` exporting `resolveDocLink(href)`, replace the inline copy in `DocViewer.tsx` with the import, import here. Zero-runtime-cost. |
+
+Nothing punted. All findings applied. Audit table stays in the doc as durable provenance.
 
 ---
 
