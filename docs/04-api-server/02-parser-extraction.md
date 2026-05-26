@@ -495,6 +495,10 @@ Direct relative paths work. `node -e "import('./packages/parser/dist/schema/vali
 
 Pre-extraction: 118 tests (all in `app/`). Post-extraction (after Implementation Review N-2 restored 4 dropped field-assertion tests): **69 (app) + 55 (parser) = 124 total**. Exceeds the 120 invariant (118 + 2 new buildDocGraph). The 4 restored tests assert the real `.ledger/project.json` carries the expected `name`/`docs`/`agent`/`schemaVersion` values — useful smoke checks against the dogfooded metadata.
 
+### Follow-up patch (2026-05-26 by `04-api-server/04-cli-launcher`)
+
+The SF1 runtime smoke-test (`node -e "import('./packages/parser/dist/schema/validateDocNode.js').then(...)"`) was too narrow: it loaded `validateDocNode.js` directly, but that file's only relative import (`from "./types"`) is type-only and erased at TypeScript emit. The CLI binary's import chain (`index.js → schema/parseDocNode.js → ../coreTypes`) DOES carry runtime relative imports, and TypeScript's `moduleResolution: "bundler"` emits those extensionless. Vitest transpiled around it; native Node ESM did not. `04-cli-launcher`'s implementer hit the failure when invoking the compiled CLI and added `.js` extensions to relative imports in 5 source files under `packages/parser/src/`. The fix is contained, all gates green, no behavior change. Recorded here as a backward pointer per the leaf-workflow's cross-spec discipline (the workflow doesn't explicitly cover cross-spec bug fixes; default posture: document in both nodes, do not reopen the COMPLETE node unless the fix is non-trivial or disputed).
+
 ### Implementation Review (2026-05-26)
 
 Independent implementation review run in a clean Sonnet context against the worktree diff. Verdict: CONDITIONAL PASS — promote to COMPLETE after fixes. All headless gates green, 120 tests pass, all zero-diff invariants hold, all Spec Review audit closures (SF1, SF2, SF3, SF4, cross-cutting S2, D5) verified honored. Two should-fixes and five nits. Audit:

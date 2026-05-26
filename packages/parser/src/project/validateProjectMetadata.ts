@@ -8,8 +8,8 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import schema from "../../../../docs/_schemas/project-metadata.schema.json" with { type: "json" };
-import type { ProjectMetadata, ProjectMetadataResult } from "./types";
-import { toValidationErrors } from "../schema/validateDocNode";
+import type { ProjectMetadata, ProjectMetadataResult } from "./types.js";
+import { toValidationErrors } from "../schema/validateDocNode.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);

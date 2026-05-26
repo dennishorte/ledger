@@ -1,7 +1,7 @@
-import type { NodeId, NodeStatus } from "../coreTypes";
-import { parseDocNode } from "../schema/parseDocNode";
-import { validateDocNode } from "../schema/validateDocNode";
-import type { DocNode } from "./types";
+import type { NodeId, NodeStatus } from "../coreTypes.js";
+import { parseDocNode } from "../schema/parseDocNode.js";
+import { validateDocNode } from "../schema/validateDocNode.js";
+import type { DocNode } from "./types.js";
 
 export interface BuildDocGraphResult {
   nodes: DocNode[];
