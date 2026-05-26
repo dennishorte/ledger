@@ -12,7 +12,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import type { ErrorObject } from "ajv";
 import schema from "../../../../docs/_schemas/document-node.schema.json" with { type: "json" };
-import type { DocumentNode } from "./types";
+import type { DocumentNode } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Public types

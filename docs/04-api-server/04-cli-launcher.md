@@ -404,7 +404,65 @@ Nothing punted. SF1 and SF2 are mechanical TypeScript fixes; SF3 is a small spec
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Dependencies added:**
+- `open@^10.0.0` added to `server/package.json` `dependencies` (runtime dep).
+- `@ledger/server: workspace:*` added to root `package.json` `dependencies` so pnpm creates `node_modules/.bin/ledger` and `pnpm exec ledger` works from any workspace directory.
+
+**Files added / modified:**
+
+| File | Action |
+|------|--------|
+| `server/src/bin/ledger.ts` | New — CLI entrypoint (~110 LOC) |
+| `server/test/bin.test.ts` | New — subprocess test suite (9 tests) |
+| `server/package.json` | Modified — adds `bin` field, `open` dep, `dev` script updated |
+| `server/src/server.ts` | Modified — dev-boot block deleted (SF3) |
+| `packages/parser/src/index.ts` | Modified — added `.js` extensions to relative imports (see below) |
+| `packages/parser/src/docs/buildDocGraph.ts` | Modified — same |
+| `packages/parser/src/schema/parseDocNode.ts` | Modified — same |
+| `packages/parser/src/schema/validateDocNode.ts` | Modified — same |
+| `packages/parser/src/project/validateProjectMetadata.ts` | Modified — same |
+| `docs/04-api-server/04-cli-launcher.md` | Status transitions + this section |
+| `docs/04-api-server/00-api-server.md` | Children manifest status bumps |
+| `package.json` (root) | Added `@ledger/server` workspace dep for bin wiring |
+
+**Dev-boot block deletion (SF3):** The `if (import.meta.url === ...)` block in `server/src/server.ts` was deleted. It was a pre-CLI workaround that let the implementer of `03-server-package` run `pnpm -C server dev <path>` without the launcher existing yet. With the CLI landing here, the dev script now points at `src/bin/ledger.ts` which is the correct entrypoint for both dev and production.
+
+**Parser `.js` extension fix:** `packages/parser` used `moduleResolution: "bundler"` with extensionless relative imports in source (e.g. `from "./schema/parseDocNode"`). TypeScript's `bundler` mode emits these as-is in the output JS, which works for Vite (bundler resolves them) and for Vitest (transpiles source directly) but breaks native Node ESM resolution when the compiled binary tries to load the parser via the `@ledger/parser` workspace symlink. Since the CLI binary is run via `node dist/bin/ledger.js`, all upstream imports must be natively resolvable. Added `.js` extensions to all relative imports in the five parser source files. Parser's own tests (55), server tests (38), and app tests (69) all remain green. This fix was strictly necessary for the CLI to function; `02-parser-extraction` could not have surfaced it because Vitest hides the issue.
+
+**Non-null assertion (SF1):** Used `eslint-disable-next-line @typescript-eslint/no-non-null-assertion` on `positionals[0]!` with an inline comment explaining the length guard. ESLint's `@typescript-eslint/no-non-null-assertion` rule would otherwise flag it.
+
+**Lint fix — `no-confusing-void-expression`:** ESLint rule `@typescript-eslint/no-confusing-void-expression` flagged arrow-shorthand returns of `void` expressions (`() => res()`, `() => rej(...)`). Fixed by wrapping in braces (`() => { res(); }`, `() => { rej(...); }`) in `bin.test.ts`.
+
+**Bundle delta:** `du -sh server/dist` → 108K (up from ~96K before bin landing).
+
+**Headless verification results:**
+- `pnpm -C server typecheck` → exit 0
+- `pnpm -C server lint --max-warnings=0` → exit 0
+- `pnpm -C server test` → exit 0 (38 tests: 29 pre-existing + 9 new)
+- `pnpm -C server build` → exit 0, emits `dist/bin/ledger.js` with shebang
+- `pnpm -C packages/parser typecheck` → exit 0
+- `pnpm -C packages/parser lint --max-warnings=0` → exit 0
+- `pnpm -C packages/parser test` → exit 0 (55 tests)
+- `pnpm -C app typecheck` → exit 0
+- `pnpm -C app lint --max-warnings=0` → exit 0
+- `pnpm -C app build` → exit 0
+- `pnpm typecheck` → exit 0 (all 3 packages)
+- `pnpm lint` → exit 0 (all 3 packages)
+- `pnpm test` → exit 0 (55 + 38 + 69 = 162 tests total)
+- `pnpm build` → exit 0 (all 3 packages)
+
+**End-to-end smoke results:**
+- `pnpm exec ledger --help` → exit 0, `usage: ledger ...` on stdout ✓
+- `pnpm exec ledger /nonexistent/path` → exit 1, `ledger: missing /nonexistent/path/.ledger/project.json` on stderr ✓
+- `pnpm exec ledger /Users/dennis/code/ledger --port notanumber` → exit 2, `ledger: invalid --port "notanumber"...` on stderr ✓
+- Boot + `/api/_health` → covered by `bin.test.ts` test 8 (boots on port 0, asserts 200 OK, SIGINT kills cleanly) ✓
+- `LEDGER_PORT=0` env var → covered by `bin.test.ts` test 9 ✓
+
+**Total test count:** 162 (55 parser + 38 server [29 pre + 9 bin] + 69 app + 0 root)
+
+**Decisions beyond spec:**
+- Root `package.json` gains `@ledger/server: workspace:*` to wire the `ledger` bin via pnpm's standard mechanism. The spec says "pnpm symlinks the compiled `dist/bin/ledger.js` into `node_modules/.bin/ledger`" — this is the required pnpm-workspace mechanism to achieve that.
+- Parser `.js` extension fix: bug in `02-parser-extraction` (extensionless imports break native Node ESM). Necessary for CLI correctness; documented here rather than raising as ISSUE_OPEN since the fix is contained and verified.
 
 ---
 

@@ -8,8 +8,9 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
+  "bin": { "ledger": "./dist/bin/ledger.js" },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/bin/ledger.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
@@ -18,7 +19,8 @@
   "dependencies": {
     "@ledger/parser": "workspace:*",
     "@hono/node-server": "^1.13.0",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "open": "^10.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
