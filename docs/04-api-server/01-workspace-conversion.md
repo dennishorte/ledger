@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/01-workspace-conversion`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
 
 **Dependencies:** —
 
@@ -128,7 +128,8 @@ A reviewer running the worktree must observe:
 7. No file under `app/src/` is modified. `git diff main..HEAD -- app/src/` is empty.
 8. No file under `app/server/` is modified. `git diff main..HEAD -- app/server/` is empty.
 9. `git diff main..HEAD -- docs/` shows only the status-transition edits to `04-api-server/01-workspace-conversion.md` and `04-api-server.md` (the children manifest row); no other doc changes.
-10. Resolved versions in the new root `pnpm-lock.yaml` match the resolved versions in the old `app/pnpm-lock.yaml` for every shared dep. (Mechanical diff; if drift, investigate.)
+10. **No untouched root-level tracked files** are modified: `git diff main..HEAD -- CLAUDE.md .gitignore` is empty. (Spec Review N2 — explicit gate for zero-diff on non-`docs/`, non-`app/`, non-`packages/`, non-`server/` root files.)
+11. Resolved versions in the new root `pnpm-lock.yaml` match the resolved versions in the old `app/pnpm-lock.yaml` for every shared dep. (Mechanical diff; if drift, investigate. Implementer confirms `pnpm --version` matches the pinned `9.15.0` before running `pnpm install`, or records the actual version used in Implementation Notes — see D7's Corepack note.)
 
 ---
 
@@ -142,7 +143,7 @@ A reviewer running the worktree must observe:
 | D4 | Declare `packages/*` and `server` in `pnpm-workspace.yaml` up front, even though they don't exist yet | pnpm warns but does not error on declared-but-missing workspace dirs. Declaring them now means later children (`02-parser-extraction`, `03-server-package`) touch only their own directory; the workspace config is stable. If we deferred the declarations, every child would need to revisit `pnpm-workspace.yaml`, multiplying merge conflicts and review surface. |
 | D5 | Workspace-level scripts limited to `typecheck` / `lint` / `test` / `build`, no `dev` | A workspace `dev` script needs to orchestrate two long-running processes (`app/` Vite + `server/` Hono) — that requires `concurrently` or similar, which would be the first non-pnpm orchestrator we add. Deferred per `04-api-server` Open Issues. Today the operator runs `pnpm -C app dev` and `pnpm -C server dev` in two terminals; if that friction becomes painful, a polish pass adds the unified runner. |
 | D6 | Delete `app/pnpm-lock.yaml` and regenerate `pnpm-lock.yaml` at the root in the same commit | A workspace requires the lockfile at the root; pnpm does not consult per-package lockfiles in workspace mode. Leaving `app/pnpm-lock.yaml` in place would either be ignored (silent dead file) or — if a future contributor naively runs `pnpm install` inside `app/` — cause confusion. The clean answer is to remove it. The regenerated root lockfile must show zero version drift from the old lockfile (Acceptance check item 10). |
-| D7 | Keep `app/package.json`'s `packageManager` field; **do not** move it to the root | pnpm respects the nearest `package.json`'s `packageManager` field; having it on every package is harmless and ensures any contributor running `pnpm` from inside `app/` (e.g. via an IDE shortcut) gets the right version. The root `package.json` also carries `packageManager: "pnpm@9.15.0"` (same version) so workspace-level operations resolve identically. Two declarations, one value, no drift risk. |
+| D7 | Keep `app/package.json`'s `packageManager` field; **do not** move it to the root | pnpm respects the nearest `package.json`'s `packageManager` field; having it on every package is harmless and ensures any contributor running `pnpm` from inside `app/` (e.g. via an IDE shortcut) gets the right version. The root `package.json` also carries `packageManager: "pnpm@9.15.0"` (same version) so workspace-level operations resolve identically. Two declarations, one value, no drift risk. **Note on Corepack:** if Corepack is enabled on the operator's machine, the pinned `pnpm@9.15.0` is binding — `pnpm` invocations download/use exactly that version. If Corepack is disabled (the common default), the pin is informational and the system-installed `pnpm` (currently 10.x on the operator's machine) actually runs. The implementer must verify `pnpm --version` matches the pinned value before relying on lockfile-format stability; if mismatch, either enable Corepack or update the pin to the installed version. The Verification gate (item 9) for zero-drift in the lockfile is the canary for this. |
 | D8 | Do not touch `app/server/` or any file under `app/src/` | The whole point of this child is the smallest workspace boundary that can host the later children. Source moves belong to `02-parser-extraction`. Adding source changes here would couple two separable concerns and bloat the review surface. Verification items 7 and 8 enforce zero diff under `app/src/` and `app/server/`. |
 
 ---
@@ -154,6 +155,22 @@ A reviewer running the worktree must observe:
 - **Renovate / Dependabot for the workspace.** Both tools handle pnpm workspaces but want their config tweaked (`pnpm-lock.yaml` at the root, not per-package). v1 has no automated dep updates configured; if added, the config must point at the root lockfile. *(Priority: TRIVIAL.)*
 - **`engines` declaration.** Neither the root `package.json` nor any package declares an `engines.node` minimum. The `tsx` and `vitest` versions pinned implicitly require Node 18+. Declaring `engines.node: ">=20"` at the root would catch contributors on too-old Node early, but adds maintenance for a single-operator project. *(Priority: LOW — add when a second contributor onboards.)*
 - **Workspace-aware import paths.** Once `@ledger/parser` exists, the parser's tests reach into `docs/_schemas/*.json` via a path alias (per parent's S6). pnpm's workspace symlinking makes this work, but the resolution depth is fragile to package moves. If `packages/parser/` ever moves (e.g. to `packages/core/parser/`), every relative `../../docs/_schemas/` reference breaks. v1 keeps the layout flat; if depth grows, the right fix is a TS `paths` alias rather than relative paths everywhere. *(Priority: LOW — defer until layout changes.)*
+
+---
+
+## Spec Review (2026-05-26)
+
+Independent spec review run in a clean Sonnet context against the DRAFT. Verdict: READY_FOR_APPROVAL, no blockers. Two should-fixes (one operator-judgment about pnpm/Corepack, one mechanical Verification gap) and three nits (two minor, one cosmetic — no action). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | pnpm 9.15.0 pinned in `packageManager` but operator's machine has pnpm 10.28.0 installed. With Corepack disabled (common default) the pin is silently ignored — system pnpm runs, lockfile-format compatibility between pnpm 9 and 10 is the canary for whether this matters. | Added explicit Corepack-aware note to D7: the implementer must verify `pnpm --version` matches the pin before relying on lockfile stability, or update the pin to the installed version. Verification item 11 (was 10) now references this. |
+| S2 | Reviewer claimed `app/pnpm-lock.yaml` doesn't exist on main and root `pnpm-lock.yaml` is already present. | **DISMISSED — operator verified the actual state on main: `app/pnpm-lock.yaml` does exist (147 KB, May 25); root `pnpm-lock.yaml`, `package.json`, and `pnpm-workspace.yaml` do NOT exist. The spec's "Lockfile migration" section is correct as written. The reviewer was likely confused by a different worktree or repo state.** No edit. |
+| N1 | Verification item 3 says pnpm warns on missing `server`/`packages/*` but doesn't quote the exact warning text. | No edit — exact warning text is pnpm-version-dependent and would drift; the prose ("warnings about missing patterns are expected and acceptable") is sufficient. |
+| N2 | No Verification gate for zero-diff on non-`docs/`, non-`app/` root files (e.g. `CLAUDE.md`, `.gitignore`). | Added Verification item 10: `git diff main..HEAD -- CLAUDE.md .gitignore` must be empty. |
+| N3 | Cosmetic: `README.md` capitalization inline in Out-of-scope reads inconsistent with rest of doc. | No action — cosmetic only, no clarity gain from change. |
+
+Nothing punted. The S1 Corepack note adds a real implementer obligation; the dismissal of S2 is recorded explicitly so a future reader knows the reviewer's claim was verified and rejected, not silently ignored.
 
 ---
 

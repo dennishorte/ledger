@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/02-parser-extraction`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
 
 **Dependencies:** `04-api-server/01-workspace-conversion`
 
@@ -66,10 +66,8 @@ ledger/
 │       │   ├── index.ts                               # public surface
 │       │   ├── schema/
 │       │   │   ├── parseDocNode.ts                    # MOVED from app/src/lib/schema/
-│       │   │   ├── validateDocNode.ts                 # MOVED (uses @schemas/document-node.schema.json)
-│       │   │   ├── types.ts                           # MOVED — re-exports NodeId, NodeStatus from app's src/lib/types.ts
-│       │   │   │                                       # **BUT** — see D5 — re-export source becomes packages/parser/src/coreTypes.ts
-│       │   │   │                                       # to avoid a parser→app dep cycle. app/src/lib/types.ts re-exports from there.
+│       │   │   ├── validateDocNode.ts                 # MOVED (schema import: ../../../../docs/_schemas/document-node.schema.json)
+│       │   │   ├── types.ts                           # MOVED — NodeId/NodeStatus re-exported from ../coreTypes (see D5)
 │       │   │   └── fixtures/*.md                      # MOVED
 │       │   ├── project/
 │       │   │   ├── validateProjectMetadata.ts         # NEW EXTRACT — pure validator, no I/O
@@ -86,18 +84,21 @@ ledger/
 │           └── docs/buildDocGraph.test.ts             # NEW
 └── app/
     ├── package.json                                   # modified — adds "@ledger/parser": "workspace:*"
+    ├── tsconfig.app.json                              # modified — adds references: [{ path: "../packages/parser" }] for tsc -b ordering (D8, Spec Review SF3)
     ├── src/
     │   ├── lib/
-    │   │   ├── types.ts                               # MODIFIED — NodeId/NodeStatus now re-export from @ledger/parser
-    │   │   ├── parseDocs.ts                           # SLIMMED — Vite-glob wrapper around buildDocGraph
+    │   │   ├── types.ts                               # MODIFIED — three lines (NodeId/NodeStatus/DocNode) replaced by re-export from @ledger/parser; all other types unchanged
+    │   │   ├── parseDocs.ts                           # SLIMMED — Vite-glob wrapper around buildDocGraph, re-exports idForPath
     │   │   ├── parseDocs.test.ts                      # KEPT (tests the wrapper end-to-end against the real tree)
     │   │   ├── schema/                                # DELETED — moved to packages/parser/
     │   │   ├── project/
-    │   │   │   ├── loadProjectMetadata.ts             # SLIMMED — Vite-import wrapper around validateProjectMetadata
-    │   │   │   ├── loadProjectMetadata.test.ts        # SLIMMED — single smoke test of the wrapper
+    │   │   │   ├── loadProjectMetadata.ts             # SLIMMED — Vite-import wrapper, re-exports ValidationError from @ledger/parser (SF2)
+    │   │   │   ├── loadProjectMetadata.test.ts        # SLIMMED — single smoke test asserting the module-singleton `projectMetadata.ok === true` (N3)
     │   │   │   ├── types.ts                           # DELETED — re-export through @ledger/parser
     │   │   │   └── fixtures/                          # DELETED — moved to packages/parser/
     │   └── components/                                # UNCHANGED — import sites keep using @/lib/parseDocs etc.
+docs/02-schema.md                                       # UNTOUCHED — its code moved but its spec is durable provenance
+docs/01-ui/02-dag.md                                    # MODIFIED — D4 note updated to reflect new canonical home (SF4)
 ```
 
 `app/src/lib/types.ts` (the `02-dag` D4 canonical home for `NodeId` and `NodeStatus`) becomes a re-export shell so existing `@/lib/types` consumers keep working. See D5.
@@ -150,7 +151,7 @@ export { validateProjectMetadata } from "./project/validateProjectMetadata";
 export type { ProjectMetadata, ProjectMetadataResult } from "./project/types";
 
 // Docs graph
-export { buildDocGraph } from "./docs/buildDocGraph";
+export { buildDocGraph, idForPath } from "./docs/buildDocGraph";
 export type { DocNode } from "./docs/types";
 
 // Core types (canonical home — re-exported by app/src/lib/types.ts)
@@ -158,6 +159,8 @@ export type { NodeId, NodeStatus } from "./coreTypes";
 ```
 
 No internal helpers leak. Every external import goes through the package root.
+
+**`idForPath` is exported (Spec Review SF — cross-cutting from `03-server-package` S2).** Today the function lives in `app/src/lib/parseDocs.ts` and maps a docsRoot-relative file path to a nodeId. `03-server-package`'s `/api/docs/:nodeId` route handler needs the reverse: scan `rawDocs` for the entry whose key, when run through `idForPath`, matches the requested nodeId. To enable that single-source-of-truth reuse, `idForPath` moves into `packages/parser/src/docs/buildDocGraph.ts` (or a sibling `idForPath.ts` if cleaner; implementer's call) and the parser exports it. `app/src/lib/parseDocs.ts`'s thin wrapper continues to re-export `idForPath` for existing consumers (`useDocSource`, `useHealthData`).
 
 ### `packages/parser/tsconfig.json`
 
@@ -175,17 +178,25 @@ No internal helpers leak. Every external import goes through the package root.
     "skipLibCheck": true,
     "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "@schemas/*": ["../../docs/_schemas/*"]
-    }
+    "rootDir": "./src"
   },
   "include": ["src/**/*"]
 }
 ```
 
-The `paths` alias resolves `@schemas/document-node.schema.json` to `docs/_schemas/document-node.schema.json` at typecheck time. At Node runtime (when the compiled output runs from `dist/`), the import resolves via the same relative depth from the package root through the pnpm workspace symlink (`node_modules/@ledger/parser` → `packages/parser/`) back to the repo's `docs/_schemas/`. **Smoke-test this with `node -e "import('./packages/parser/dist/schema/validateDocNode.js').then(m => console.log(typeof m.validateDocNode))"` before promoting** — if Node refuses the symlink-relative JSON resolve, fall back to a `tsc -b` post-step that copies the two schema JSONs into `packages/parser/dist/_schemas/` and rewrites the import target.
+**No `paths` alias for the schemas.** TypeScript `paths` aliases are typecheck-only — they do **not** survive into emitted JS. A source-side `import schema from "@schemas/document-node.schema.json"` would emit literally `import schema from "@schemas/document-node.schema.json"` into `dist/`, which Node has no idea how to resolve. The path-alias approach was the DRAFT's proposal; spec review SF1 surfaced this and the operator chose the direct-relative-path fix.
+
+Source files import schemas via the depth-calibrated relative path: from `packages/parser/src/schema/validateDocNode.ts` to `docs/_schemas/document-node.schema.json` is **four ups** (`schema → src → packages/parser → packages → repo root → docs/_schemas`):
+
+```ts
+import schema from "../../../../docs/_schemas/document-node.schema.json" with { type: "json" };
+```
+
+At Node runtime the compiled `dist/schema/validateDocNode.js` has the same depth (`schema → dist → packages/parser → packages → repo root → docs/_schemas`), so the literal relative path resolves correctly via the pnpm workspace symlink (`node_modules/@ledger/parser/dist/schema/...` follows the symlink to `packages/parser/dist/schema/...` and resolves the relative path from there).
+
+**Smoke-test the runtime resolution** with `node -e "import('./packages/parser/dist/schema/validateDocNode.js').then(m => console.log(typeof m.validateDocNode))"` before promoting. If Node refuses the resolve (defensive — should work but Windows + symlinks have surprised before), the fallback is a `tsc -b` post-step that copies `docs/_schemas/*.json` into `packages/parser/dist/_schemas/` and the source imports become `../../_schemas/document-node.schema.json` (calibrated to `dist/schema/` → `dist/_schemas/`). Record the chosen path in Implementation Notes.
+
+The depth fragility logged as Open Issue (it has the same shape it had under the alias approach — depth changes if `packages/parser/` moves, find-and-replace covers it).
 
 ### Splitting `loadProjectMetadata.ts`
 
@@ -216,8 +227,9 @@ After:
 // packages/parser/src/project/validateProjectMetadata.ts
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
-import schema from "@schemas/project-metadata.schema.json" with { type: "json" };
+import schema from "../../../../docs/_schemas/project-metadata.schema.json" with { type: "json" };
 import type { ProjectMetadata, ProjectMetadataResult } from "./types";
+import { toValidationError, type ValidationError } from "../schema/validateDocNode";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
@@ -229,17 +241,23 @@ export function validateProjectMetadata(input: unknown): ProjectMetadataResult {
 }
 ```
 
+`toValidationError` is an internal helper that converts ajv's native `ErrorObject` to the framework's `ValidationError` shape. Today it lives inline inside `app/src/lib/project/loadProjectMetadata.ts` (and similar logic inside `validateDocNode.ts`). During extraction, the implementer factors it into `packages/parser/src/schema/validateDocNode.ts` (or a sibling `errors.ts` if both validators need it) and re-uses from both validators. Spec Review N6.
+
 ```ts
 // app/src/lib/project/loadProjectMetadata.ts
 import rawProject from "../../../../.ledger/project.json" with { type: "json" };
 import { validateProjectMetadata } from "@ledger/parser";
-import type { ProjectMetadataResult } from "@ledger/parser";
+import type { ProjectMetadataResult, ValidationError } from "@ledger/parser";
+
+export type { ValidationError };  // re-export so existing import sites keep working (Spec Review SF2)
 
 export function loadProjectMetadata(): ProjectMetadataResult {
   return validateProjectMetadata(rawProject);
 }
 export const projectMetadata: ProjectMetadataResult = loadProjectMetadata();
 ```
+
+Today's `loadProjectMetadata.ts` line 19 reads `export type { ValidationError } from "@/lib/schema/validateDocNode"`. After this extraction `app/src/lib/schema/` is deleted (Acceptance item 6), so the old re-export path breaks; the slimmed wrapper re-exports from `@ledger/parser` to keep every existing consumer's import (`import { ValidationError } from "@/lib/project/loadProjectMetadata"`) working.
 
 The wrapper keeps the Vite-imported `.ledger/project.json` (whose path is calibrated to its `app/`-relative depth) and re-exports the singleton the topbar reads. The pure validator lives in the parser package; the server's `loadProjectContext` (in `03-server-package`) will call the same `validateProjectMetadata` with `JSON.parse(fs.readFileSync(...))` instead of the Vite import.
 
@@ -270,8 +288,8 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
 
 ```ts
 // app/src/lib/parseDocs.ts (after)
-import { buildDocGraph } from "@ledger/parser";
-import type { DocNode, NodeId } from "@ledger/parser";
+import { buildDocGraph, idForPath } from "@ledger/parser";
+import type { DocNode } from "@ledger/parser";
 
 const rawDocs = import.meta.glob<string>(
   "../../../docs/**/*.md",
@@ -290,26 +308,32 @@ export const docValidationErrorPaths: string[] = (() => {
   return _built!.validationErrorPaths;
 })();
 
-export function idForPath(path: string): NodeId | null { /* unchanged */ }
+export { idForPath };  // re-export so @/lib/parseDocs consumers keep working unchanged
 ```
 
-`import.meta.glob` syntax updated to v6+ form (`query: "?raw", import: "default"`) if the current code uses the deprecated `as: "raw"` form — confirm during implementation and pick the form that matches today's `parseDocs.ts`. External signatures (`loadDocNodes`, `idForPath`, `docValidationErrorPaths`) stay identical; consumers don't notice the indirection.
+`import.meta.glob` syntax stays at the v6+ form already in use (`query: "?raw", import: "default"`) — Spec Review confirmed today's `parseDocs.ts:199-203` uses this form. External signatures (`loadDocNodes`, `idForPath`, `docValidationErrorPaths`) stay identical; consumers don't notice the indirection.
+
+The internal field name `validationErrorPaths` is canonical (matches `BuildDocGraphResult.validationErrorPaths` from the parser); the public export name `docValidationErrorPaths` stays unchanged (Topbar reads it). Spec Review N4.
 
 ### `NodeId` / `NodeStatus` canonical home (D5)
 
 Today `app/src/lib/types.ts` is the canonical home (shipped by `02-dag` D4). The parser package needs `NodeId` and `NodeStatus` too (the validator's status enum, the `DocNode.id` field). Two options considered:
 
 - (a) Parser re-exports from `app/src/lib/types.ts` → creates a `@ledger/parser → @ledger/app` cycle. Rejected.
-- (b) Canonical home moves to `@ledger/parser`; `app/src/lib/types.ts` becomes a re-export shell.
+- (b) Canonical home moves to `@ledger/parser`; `app/src/lib/types.ts` becomes a re-export shell for those three types while retaining everything else it currently defines.
 
-Chose (b). `app/src/lib/types.ts` reduces to:
+Chose (b). `app/src/lib/types.ts` today defines ~20 types beyond `NodeId`/`NodeStatus`/`DocNode` (`DocSource`, `IssueItem`, `IssuePriority`, `StalenessSignal`, `SubtreeCost`, `DepImpactResult`, `Task`, `TaskId`, `TaskStatus`, `TaskSource`, `ResourceClaim`, `LogEvent`, `LogEventId`, `ConnectionStatus`, `WorkflowStage`, `StageCompletion`, `WorkflowStageState`, `WorkflowProgress`) — **all of those stay in `app/src/lib/types.ts` unchanged**. The change is targeted: the three parser-canonical types' declarations are replaced by a re-export line at the top of the file (Spec Review N1):
 
 ```ts
+// app/src/lib/types.ts (top of file, replacing the existing NodeId/NodeStatus/DocNode declarations)
 export type { NodeId, NodeStatus, DocNode } from "@ledger/parser";
-// any app-specific types (none today; panel-specific types not added yet) stay here
+
+// everything else in this file stays unchanged: DocSource, IssueItem, Task, LogEvent, etc.
 ```
 
 All existing `import { ... } from "@/lib/types"` sites in `app/src/components/` keep working unchanged. The re-export is the boundary that lets the parser declare its own canonical types without breaking `02-dag`'s contract.
+
+**Cross-doc obligation (Spec Review SF4):** `02-dag.md`'s D4 explicitly cites `app/src/lib/types.ts` as the canonical home. After this extraction, that statement is no longer true — `@ledger/parser` is the canonical home; `app/src/lib/types.ts` is a re-export shell. `02-dag.md`'s D4 note must be updated in the same commit that promotes this child to COMPLETE (not deferred to a polish pass). Verification item 18 (below) enforces this.
 
 ### Acceptance check (manual)
 
@@ -363,6 +387,28 @@ A reviewer running the worktree must observe:
 
 ---
 
+## Spec Review (2026-05-26)
+
+Independent spec review run in a clean Sonnet context against the DRAFT. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Four should-fixes (one operator-decision about runtime schema resolution, three mechanical) and six nits. Cross-cutting finding from sibling `03-server-package`'s review (S2) also landed here: `idForPath` added to public surface. All findings applied or explicitly resolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| SF1 | TypeScript `paths` aliases (`@schemas/*` → `../../docs/_schemas/*`) are typecheck-only — they do NOT survive into emitted JS. The proposed alias approach would emit literal `import "@schemas/..."` into `dist/` that Node cannot resolve. Reviewer flagged as operator-decision: direct relative paths in source vs `tsc-alias` plugin vs copy-to-dist as primary. | **Operator chose direct relative paths in source.** Dropped the `paths` alias from `tsconfig.json` entirely. Source files import via `../../../../docs/_schemas/<name>.schema.json` (four ups from `packages/parser/src/<subdir>/file.ts` — depth-calibrated). Runtime resolution works via pnpm workspace symlink (same depth from `dist/<subdir>/file.js`). Smoke-test required before promoting; copy-to-dist remains the fallback if Node refuses the symlink-relative resolve. Updated tsconfig snippet, validator code snippets, layout tree, and Design prose accordingly. |
+| SF2 | `ValidationError` re-export chain breaks when `app/src/lib/schema/` is deleted. Today's `loadProjectMetadata.ts` line 19 reads `export type { ValidationError } from "@/lib/schema/validateDocNode"`; the spec's slimmed wrapper omitted the re-export. | Added explicit `export type { ValidationError }` to the slimmed wrapper code snippet, re-exporting from `@ledger/parser`. Every existing consumer importing `ValidationError` from `@/lib/project/loadProjectMetadata` keeps working. |
+| SF3 | `app/tsconfig.app.json` needs `references: [{ path: "../packages/parser" }]` for `tsc -b` ordering (D8), but the Files-modified list and Verification gates omitted it. An implementer might skip it and see `pnpm -C app typecheck` succeed via fallback per-file resolution, defeating composite-build correctness. | Added `app/tsconfig.app.json [modified — adds references ...]` to the Files-added/modified tree. Added Verification item 17 enforcing the diff and confirming `tsc -b` orders correctly. |
+| SF4 | D5 changes the canonical home for `NodeId`/`NodeStatus`/`DocNode` from `app/src/lib/types.ts` to `@ledger/parser`. `01-ui/02-dag.md`'s D4 explicitly cites `app/src/lib/types.ts` as canonical — this becomes false after extraction. Spec said "follow-up" but didn't tie the doc update to any concrete deliverable. | Added explicit Verification item 18 enforcing the `02-dag.md` D4 update in the same commit that promotes this child to COMPLETE. Added cross-doc obligation paragraph to D5 Design section so the implementer reads it inline. |
+| **S2 (cross)** | Reviewer of `03-server-package` flagged that `idForPath` is consumed there but not in `02-parser-extraction`'s public surface. Reviewer recommended amending this spec rather than carrying a "tiny patch commit" deliverable in `03-server-package`. | **Operator chose amend.** Added `idForPath` to `packages/parser/src/index.ts` public surface. Added explanatory paragraph below the public-surface snippet documenting why (`/api/docs/:nodeId` reverse-lookup, single source of truth). `app/src/lib/parseDocs.ts`'s slimmed wrapper now re-exports `idForPath` for its existing consumers; the file moves to `packages/parser/src/docs/buildDocGraph.ts` (or sibling `idForPath.ts` — implementer's call). |
+| N1 | D5's "`app/src/lib/types.ts` reduces to..." phrasing implies the file shrinks to three lines; the real file has ~20 non-parser type declarations that stay put. | Rewrote D5's prose: enumerated the types that stay (`DocSource`, `Task`, `LogEvent`, etc.), explicitly stated only the three parser-canonical declarations are replaced by re-exports, snippet shows the re-export at the top with "everything else unchanged." |
+| N2 | Layout tree had a stale inline comment ("re-exports from app's src/lib/types.ts") that was already corrected by the next sentence. Confusing on first read. | Deleted the stale comment; kept only the corrected pointer to `coreTypes.ts`. |
+| N3 | `loadProjectMetadata.test.ts` split — spec said "pure-validator tests move; wrapper smoke test stays" but didn't enumerate the count, leaving the 99-test invariant ambiguous. | Added Verification item 19: 31 fixture-based tests move to parser; 1 module-singleton test stays in `app/`; total ≥ 99 + 2 new. |
+| N4 | Internal field name in `BuildDocGraphResult` (`validationErrorPaths`) vs `parseDocs.ts`'s current internal field (`errorPaths`) — pick one consistent name. | Pinned `validationErrorPaths` as the canonical internal name across `BuildDocGraphResult` and the slim wrapper's `_built` variable. Public export name `docValidationErrorPaths` unchanged (Topbar contract). |
+| N5 | Verification gate for vitest version drift would tighten D10 / D7. | No edit — D10's "zero version drift for every shared dep" already covers vitest implicitly; calling it out specifically would invite enumeration of every dep, which is what `pnpm-lock.yaml` is for. |
+| N6 | `toValidationError` helper used in the `validateProjectMetadata.ts` snippet but never defined or imported. | Added explanatory paragraph after the snippet: `toValidationError` is an inline helper today (inside `app/src/lib/project/loadProjectMetadata.ts` and `app/src/lib/schema/validateDocNode.ts`); the implementer factors it into `packages/parser/src/schema/validateDocNode.ts` (or sibling `errors.ts`) and re-uses from both validators during extraction. |
+
+Nothing punted. SF1 and the cross-cutting S2 were both operator-decision; both recorded with rationale. The remaining nine findings were mechanical or factual. The cross-cutting S2 change (adding `idForPath` to the parser's public surface) is the visible coupling between this spec and `03-server-package`'s spec — by landing here, `03-server-package` can consume `idForPath` without a sibling-spec amendment in its own worktree.
+
+---
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -398,7 +444,10 @@ When this node moves to `VERIFY`, the verifier confirms:
 14. **UI renders correctly with `pnpm -C app dev`.** `/dag`, `/health`, `/docs/02-schema`, `/tasks`, `/logs` all render with no console errors. Topbar shows `"Ledger"`.
 15. **Bundle delta** vs the `01-workspace-conversion`-final build: `app/` gzip JS within ±5 KB (indirection through `@ledger/parser` is a few extra import-line bytes; otherwise identical). Reported in Implementation Notes.
 16. **Lockfile zero-drift** for every pre-existing dep: every resolved version in `pnpm-lock.yaml` matches the pre-extraction lockfile. New deps (`packages/parser/` ones that reuse `app/` versions) introduce no version changes for shared transitive deps.
-17. `04-api-server.md` §Children manifest row for `02-parser-extraction` reads the current status; final promotion to COMPLETE bumps both this spec's Status header and the parent's row in the same commit.
+17. **`app/tsconfig.app.json` has the parser reference** (Spec Review SF3): `git diff main..HEAD -- app/tsconfig.app.json` shows the added `references: [{ "path": "../packages/parser" }]` entry and no other changes. `tsc -b` builds the parser before `app/` correctly.
+18. **`01-ui/02-dag.md`'s D4 note updated** (Spec Review SF4): `git diff main..HEAD -- docs/01-ui/02-dag.md` shows D4 amended to reflect that `NodeId`/`NodeStatus`/`DocNode` canonical home is now `@ledger/parser`; `app/src/lib/types.ts` called out as a re-export shell for those three types only.
+19. **`loadProjectMetadata.test.ts` split is correct** (Spec Review N3): the single test that stays in `app/` is the one that imports the module-singleton `projectMetadata` from the Vite-import wrapper and asserts `.ok === true`. All 31 other tests (fixture-based validator tests) move to `packages/parser/test/project/validateProjectMetadata.test.ts`. Total tests across the workspace ≥ pre-extraction count (99), plus the 2 new `buildDocGraph` tests.
+20. `04-api-server.md` §Children manifest row for `02-parser-extraction` reads the current status; final promotion to COMPLETE bumps both this spec's Status header and the parent's row in the same commit.
 
 ---
 

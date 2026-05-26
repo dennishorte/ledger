@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/05-ui-hook-migration`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
 
 **Dependencies:** `04-api-server/03-server-package`
 
@@ -20,7 +20,7 @@ In scope for v1:
 
 1. **Migrate `app/src/components/dag/useDocGraph.ts`** to a TanStack Query. Endpoint: `GET /api/docs`. `placeholderData: () => loadDocNodes()` for build-time fallback (parent §Spec Review N3 — `loadDocNodes()` is module-singleton-cached so re-runs are free). `staleTime: 30_000`. `API_BASE = "/api"` (no env var — proxy-only contract per parent §Spec Review S1).
 2. **Add the Vite dev proxy** to `app/vite.config.ts`: `server.proxy: { "/api": { target: "http://127.0.0.1:4180", changeOrigin: false } }`. Same-origin from the browser's view (proxy-only contract); CORS is never exercised. No conditional proxy logic — if the proxy target is unreachable, the placeholder data covers the gap and the query retries per TanStack defaults.
-3. **Add a mocked-fetch hook test** at `app/src/components/dag/useDocGraph.test.ts`. Uses `vi.spyOn(global, "fetch")` (or `vi.stubGlobal("fetch", ...)`) to return a canned `Response` with a known `{ nodes, validation }` shape; asserts the hook returns the parsed nodes; asserts a second mock with a server-error response falls back to the placeholder data (the real `loadDocNodes()` against the actual `docs/` tree).
+3. **Add a mocked-fetch hook test** at `app/src/components/dag/useDocGraph.test.tsxx` (`.tsx` because the test wrapper uses JSX; Spec Review SF2). Uses `vi.spyOn(global, "fetch")` (or `vi.stubGlobal("fetch", ...)`) to return a canned `Response` with a known `{ nodes, validation }` shape; asserts the hook returns the parsed nodes; asserts a second mock with a server-error response falls back to the placeholder data (the real `loadDocNodes()` against the actual `docs/` tree).
 4. **Close `03-project-metadata`'s "docs path validation" Open Issue.** That Open Issue explicitly handed off to `04-api-server`. The closure has been pending across all prior children; this child files it. Strike through the Open Issue entry with a closure note: `Closed by 04-api-server (specifically 03-server-package's pathSafety.ts + the assertContained call in loadProjectContext). See packages/parser → server runtime layer.`
 5. **CLAUDE.md doc sync.** Update three lines:
    - "Running the app" section gains a `pnpm exec ledger <project-path>` invocation (the recommended end-to-end run) alongside the existing `pnpm -C app dev`.
@@ -55,7 +55,7 @@ In scope for v1:
 
 ```
 app/src/components/dag/useDocGraph.ts          [modified — TanStack Query w/ placeholderData fallback]
-app/src/components/dag/useDocGraph.test.ts     [new — mocked-fetch hook test]
+app/src/components/dag/useDocGraph.test.tsx     [new — mocked-fetch hook test]
 app/vite.config.ts                             [modified — server.proxy: "/api" → 127.0.0.1:4180]
 docs/03-project-metadata.md                    [modified — close "docs path validation" Open Issue]
 docs/04-api-server/05-ui-hook-migration.md     [this spec — status transitions]
@@ -153,10 +153,10 @@ Vite's proxy uses `http-proxy` under the hood. On the API server being unreachab
 
 **This change does not touch `server.fs.allow`, the `client`/`server` test project definitions, or the `tailwindcss` plugin** — those are settled by prior nodes. The single-property addition is the entire diff.
 
-### `useDocGraph.test.ts` — the mocked-fetch test
+### `useDocGraph.test.tsx` — the mocked-fetch test
 
 ```ts
-// app/src/components/dag/useDocGraph.test.ts
+// app/src/components/dag/useDocGraph.test.tsx
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -237,7 +237,7 @@ describe("useDocGraph", () => {
 });
 ```
 
-Test config requires JSX in `.test.ts` (or rename to `.test.tsx`). If the project's Vitest config doesn't tolerate JSX in `.test.ts`, rename to `.test.tsx` — matches the existing `LogEventRow.test.tsx` precedent.
+Test file is `useDocGraph.test.tsx` (`.tsx` extension) because the wrapper uses JSX. The existing `vite.config.ts` Vitest `client` project includes `["src/**/*.test.{ts,tsx}"]` so `.tsx` is in scope; matches the `LogEventRow.test.tsx` precedent (Spec Review SF2 — operator pinned the filename rather than leaving it conditional).
 
 `@testing-library/react` is already a dev dep (`app/package.json` line 35). `@tanstack/react-query` is a runtime dep (line 16). No new deps for the tests.
 
@@ -249,10 +249,10 @@ In `docs/03-project-metadata.md`'s §Open Issues, the entry currently reads:
 - **`docs` path validation.** The schema validates that `docs` is a non-empty string with no leading/trailing slash; it does not validate (a) that the path actually exists on disk relative to the project root, nor (b) that the string is free of `..` traversal segments. Both checks belong at API-server load time (`04-api-server`), where the filesystem and a real runtime exist. ... *(Priority: LOW for this node — surfaces as a Vite import error if `docs` is misnamed in v1, which is acceptable; MEDIUM for `04-api-server` where real filesystem reads happen.)*
 ```
 
-The closure edit prepends `~~` strikethrough and appends a closure note:
+The closure edit prepends `~~` strikethrough and appends a closure note. The "mechanism vs verification" framing is the cleaner attribution (Spec Review N1):
 
 ```markdown
-- ~~**`docs` path validation.** ...~~ **Closed by `04-api-server/03-server-package` 2026-05-26:** `server/src/pathSafety.ts` defines `assertContained(parent, candidate)` rejecting `..` segments and absolute non-descendants; `server/src/context.ts`'s `loadProjectContext` calls it on the resolved `docsRoot` at server start (and `server/src/readDocs.ts` re-asserts defensively on every file read). A `"docs": "../escape"` value fails the server's startup with a `PathContainmentError` and no port is bound. The closure was finalized in `04-api-server/05-ui-hook-migration`'s merge.
+- ~~**`docs` path validation.** ...~~ **Closed 2026-05-26.** Mechanism implemented in `04-api-server/03-server-package` (`server/src/pathSafety.ts`'s `assertContained` rejects `..` segments and absolute non-descendants; `server/src/context.ts`'s `loadProjectContext` calls it on the resolved `docsRoot` at server start; `server/src/readDocs.ts` re-asserts defensively per file read). A `"docs": "../escape"` value fails server startup with a `PathContainmentError` and no port is bound. Closure verified end-to-end in `04-api-server/05-ui-hook-migration` once the live API path renders through the DAG.
 ```
 
 The closure note lands in this child's commit so the parent's stage-10 merge sees `03-project-metadata.md`'s Open Issue already closed. (Alternative: land it in `03-server-package`'s commit when that child completes; chose to bundle here for two reasons: (a) keeps the cross-cutting administrative work in one place, (b) the Open Issue's resolution becomes "verifiable" only when the end-to-end DAG-renders-against-the-API path works, which is this child's gate.)
@@ -272,7 +272,7 @@ The exact wording is the operator's call at stage 10. This spec records the requ
 A reviewer running the worktree must observe:
 
 1. `useDocGraph.ts` exports a TanStack Query hook against `GET /api/docs` with `placeholderData: () => loadDocNodes()` and `staleTime: 30_000`. No env-var indirection; `API_BASE = "/api"` hardcoded.
-2. `useDocGraph.test.ts` exists; `pnpm -C app test` includes it in the run and reports passing tests.
+2. `useDocGraph.test.tsx` exists; `pnpm -C app test` includes it in the run and reports passing tests.
 3. `app/vite.config.ts` has the proxy block (`server.proxy: { "/api": ... }`) and nothing else changed in the file.
 4. **End-to-end DAG-renders-against-the-live-API:**
    - Terminal A: `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` (server boots).
@@ -281,9 +281,10 @@ A reviewer running the worktree must observe:
    - DevTools Network tab shows a request to `/api/docs` (same-origin, 200, JSON body).
 5. **Edit-on-disk re-render:**
    - With both servers running and the DAG visible, edit any doc's `**Status:**` header on disk to a different valid status (e.g. swap DRAFT ↔ APPROVED on a test doc — pick one and revert afterwards).
-   - Wait up to 30s (TanStack `staleTime`) OR click an empty area to trigger refetch on focus.
+   - Wait up to 30s (TanStack `staleTime`).
    - The DAG node's status pill updates **without restarting Vite or refreshing the browser**.
    - Revert the doc edit and verify the pill reverts on the next stale window.
+   - Note: window-focus refetch is disabled globally in `main.tsx:13` (`refetchOnWindowFocus: false`), so clicking/focusing the page does NOT trigger an immediate refetch — only `staleTime` does. This is by design (Spec Review SF1).
 6. **Server-down placeholder fallback:**
    - With the UI still open, stop the API server (`Ctrl-C` in Terminal A).
    - The DAG keeps rendering (last-known data or the build-time placeholder).
@@ -294,9 +295,9 @@ A reviewer running the worktree must observe:
    - The DAG renders the build-time `loadDocNodes()` tree (the placeholder is the only available data on a cold page load with no successful fetch).
    - No console error blocking render; TanStack's fetch error is logged but the placeholder data covers the UI.
 8. **No CORS errors anywhere.** DevTools Console is free of CORS-related messages because every API request is same-origin via the proxy.
-9. **Workspace gates green:** `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` from the repo root all exit zero. `app/` test count incremented by the new `useDocGraph.test.ts` (~4 tests).
+9. **Workspace gates green:** `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` from the repo root all exit zero. `app/` test count incremented by the new `useDocGraph.test.tsx` (~4 tests).
 10. **`03-project-metadata.md`'s "docs path validation" Open Issue is struck-through** with the closure note pointing at this child. `git diff main..HEAD -- docs/03-project-metadata.md` shows the strikethrough + appended note as the only change to that file.
-11. **No other UI hook is touched.** `git diff main..HEAD --stat -- app/src/components/` shows `dag/useDocGraph.ts` modified, `dag/useDocGraph.test.ts` new, and nothing else.
+11. **No other UI hook is touched.** `git diff main..HEAD --stat -- app/src/components/` shows `dag/useDocGraph.ts` modified, `dag/useDocGraph.test.tsx` new, and nothing else.
 12. **`app/server/`, `app/tsconfig*.json`, `packages/parser/`, `server/`** are untouched. `git diff main..HEAD -- app/server/ app/tsconfig.app.json app/tsconfig.node.json app/tsconfig.json packages/parser/ server/` is empty.
 13. **Bundle delta** reported in Implementation Notes: `app/` gzip JS increases by < 1 KB (the hook gains ~10 lines + one `@tanstack/react-query` import that's already in the bundle).
 14. **CLAUDE.md content edits** are deferred to the parent's stage-10 merge per leaf-workflow; this child's spec documents the required content but does not commit it.
@@ -325,11 +326,28 @@ A reviewer running the worktree must observe:
 
 - **Remaining UI consumers not migrated** — `useDocSource`, `useHealthData`'s remaining surface, the orchestration hooks. Each is its own follow-up commit per PRD §7.2. The orchestration hooks specifically wait for `05-task-runner`. Inherited from parent. *(Priority: MEDIUM for the docs hooks, LOW for orchestration.)*
 - **Topbar's `docValidationErrorPaths` consumer still reads build-time data.** The Topbar's dev-only banner reads from `parseDocs.ts`. The API's `/api/docs` response carries the same list in its `validation.errorPaths` envelope; wiring the Topbar to surface live errors is a small parallel migration that could land in this child but was scope-cut to keep the diff tight. Deferred. *(Priority: LOW — the dev banner is dev-only and rarely critical.)*
-- **`refetchOnWindowFocus` may be too aggressive.** TanStack Query's default refetches on every focus. During dev the operator alt-tabs frequently; this might cause more API calls than expected. Easy to override (`refetchOnWindowFocus: false` per hook); revisit if dev experience becomes painful. *(Priority: TRIVIAL — tunable.)*
+- **`refetchOnWindowFocus` posture inherited from `main.tsx` global.** Spec Review SF1 surfaced that `app/src/main.tsx:13` already sets `defaultOptions: { queries: { refetchOnWindowFocus: false } }` on the global `QueryClient` — overriding TanStack's default of `true`. After this migration, the DAG panel does **not** refetch on window focus; only the 30s `staleTime` triggers refetches. If per-hook focus-refetch is later desired (e.g. for a "freshly opened the tab → re-validate immediately" UX), override locally with `refetchOnWindowFocus: true` in the `useQuery` options. *(Priority: TRIVIAL — current behavior is correct; just clarifies the inheritance.)*
 - **No DevTools integration.** `@tanstack/react-query-devtools` is the canonical inspector for query state. Adding it as a dev dep with a `<ReactQueryDevtools />` mount in `App.tsx` would help debugging across all future query hooks. Polish; defer. *(Priority: LOW.)*
 - **Vite proxy hardcodes port 4180.** If the operator runs the API on a different port (e.g. `LEDGER_PORT=4200`), the proxy target must update too. Today this requires editing `vite.config.ts`. A future polish: read the port from an env var (`VITE_LEDGER_PROXY_PORT`) with 4180 as default. *(Priority: TRIVIAL.)*
 - **Hook test doesn't exercise the `useQuery` retry path.** D7 leaves retry at default (3 attempts with backoff); the test mocks single-shot responses. If TanStack's retry behavior ever materially changes, the test wouldn't catch it. Add a retry-specific test when that risk becomes concrete. *(Priority: TRIVIAL.)*
 - **`changeOrigin: false` in the proxy may break some servers** that inspect the `Host` header. Hono doesn't; `@hono/node-server` doesn't. If a future middleware does, flip to `true`. *(Priority: TRIVIAL.)*
+
+---
+
+## Spec Review (2026-05-26)
+
+Independent spec review run in a clean Sonnet context against the DRAFT. Verdict: READY_FOR_APPROVAL, no blockers. Two should-fixes (a factual correction about `refetchOnWindowFocus` global, a test-filename clarity issue) and four nits (one closure-attribution cleanup, three no-action confirmations). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| SF1 | Spec's Open Issue said "`refetchOnWindowFocus` may be too aggressive — TanStack default is `true`." Actually `app/src/main.tsx:13` already sets `refetchOnWindowFocus: false` globally on the `QueryClient`. The Acceptance gate's "click an empty area to trigger refetch on focus" path would not fire. | Operator verified `main.tsx:13` directly. Rewrote the Open Issue entry to reflect inheritance from the global (not "may be aggressive" but "is disabled globally, by design"). Removed the "OR click an empty area" path from Acceptance gate 5 and Verification gate 5; both now note the global is `false` and only `staleTime` triggers refetches. |
+| SF2 | Spec hedged "rename to `.test.tsx` if needed" — the project's vitest config (`include: ["src/**/*.test.{ts,tsx}"]`) requires `.tsx` for JSX, no ambiguity. | Hardcoded `useDocGraph.test.tsx` in all references (file-level diff, test snippet comment, Verification item 2). Updated the prose paragraph to confirm `.tsx` is in scope per the existing vitest config and matches the `LogEventRow.test.tsx` precedent. |
+| N1 | `03-project-metadata` Open Issue closure note had dual attribution ("Closed by `03-server-package`" + "Closure finalized in `05-ui-hook-migration`"). Future reader would wonder which to trust. | Rewrote the closure as "Mechanism implemented in `03-server-package` (`pathSafety.ts`, `assertContained`); closure verified end-to-end in `05-ui-hook-migration` once the live API path renders through the DAG." Single coherent attribution. |
+| N2 | Parent spec's `useDocGraph` snippet imports `DocNode` from `@/lib/types`; this child's after-migration snippet imports from `@ledger/parser`. Parent's snippet is stale pre-decomposition. | No edit — this child's spec is authoritative for the migration code; the parent's snippet is reference-only and the broader stage-10 doc sync covers parent updates if needed. |
+| N3 | `vi.spyOn(global, "fetch")` requires `fetch` to exist on `global` in jsdom. Node 18+ native fetch is available in Vitest with `globals: true`. The spec already mentions `vi.stubGlobal("fetch", vi.fn())` as fallback in parens. | No edit — fallback already documented. |
+| N4 | `staleTime` test comment says "Re-render in the same wrapper (same QueryClient)" — the wrapper factory creates a new client per `renderHook` call, but only ONE call per test, so the same client is used across `rerender()` calls. Comment is slightly misleading. | No edit — the test is correct as written; rewording the comment is a polish call the implementer makes at code time. |
+
+Nothing punted. SF1 was caught by reading the actual `main.tsx` global; the spec is now factually correct. SF2 is a mechanical filename pin. The remaining four findings are either confirmations or minor doc-attribution cleanup.
 
 ---
 
@@ -344,7 +362,7 @@ A reviewer running the worktree must observe:
 When this node moves to `VERIFY`, the verifier confirms:
 
 1. `app/src/components/dag/useDocGraph.ts` is a TanStack Query hook against `GET /api/docs` with `placeholderData: () => loadDocNodes()` and `staleTime: 30_000`. `API_BASE = "/api"` hardcoded; no env-var indirection.
-2. `app/src/components/dag/useDocGraph.test.ts` exists; `pnpm -C app test` includes it and reports ≥4 passing tests.
+2. `app/src/components/dag/useDocGraph.test.tsx` exists; `pnpm -C app test` includes it and reports ≥4 passing tests.
 3. `app/vite.config.ts` has `server.proxy: { "/api": { target: "http://127.0.0.1:4180", changeOrigin: false } }`; no other field changes in that file.
 4. **All workspace gates green:**
    - `pnpm -C app typecheck` → 0
@@ -357,12 +375,12 @@ When this node moves to `VERIFY`, the verifier confirms:
    - `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` (terminal A) + `pnpm -C app dev` (terminal B).
    - `http://localhost:4179/dag` renders the live data from the API.
    - DevTools shows the `/api/docs` request (same-origin via proxy, 200, JSON).
-   - Editing a doc's `**Status:**` line on disk updates the DAG within 30s without restarting the UI.
+   - Editing a doc's `**Status:**` line on disk updates the DAG within 30s without restarting the UI. (Window-focus refetch is disabled globally per `main.tsx:13` — only `staleTime` triggers refetches.)
    - Stopping the API server keeps the UI rendering (placeholder data covers the gap).
    - Hard-refreshing with the API down renders the build-time tree.
    - Restarting the API server resumes live updates on the next stale window.
 6. **`03-project-metadata.md` Open Issue closed:** the "docs path validation" entry is struck-through with a closure note pointing at this child. Verified by `git diff main..HEAD -- docs/03-project-metadata.md`.
-7. **No other UI hook is modified.** `git diff main..HEAD -- app/src/components/` shows only `dag/useDocGraph.ts` modified and `dag/useDocGraph.test.ts` new.
+7. **No other UI hook is modified.** `git diff main..HEAD -- app/src/components/` shows only `dag/useDocGraph.ts` modified and `dag/useDocGraph.test.tsx` new.
 8. **`app/server/`, `app/tsconfig*.json`, `packages/parser/`, `server/`** are all untouched. `git diff main..HEAD -- app/server/ app/tsconfig.app.json app/tsconfig.node.json app/tsconfig.json packages/parser/ server/` is empty.
 9. **Bundle delta** reported in Implementation Notes; `app/` gzip JS increases by < 1 KB.
 10. **No CORS errors** in the browser console at any point during the manual gates.

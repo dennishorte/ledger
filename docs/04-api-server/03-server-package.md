@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/03-server-package`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
 
 **Dependencies:** `04-api-server/02-parser-extraction`
 
@@ -85,14 +85,20 @@ ledger/
 │   │   ├── project.test.ts
 │   │   └── docs.test.ts
 │   └── __fixtures__/
-│       └── sample-project/
-│           ├── .ledger/project.json
-│           └── docs/
-│               ├── 00-project.md                          # minimal valid root (legacy parent-doc parse)
-│               ├── 01-leaf.md                             # conformant leaf
-│               ├── 02-broken.md                           # deliberately fails schema validation
-│               └── subdir/
-│                   └── 03-nested.md                       # nested leaf for :nodeId{.+} matcher
+│       ├── sample-project/                                # main fixture — exercises all happy + leaf-error paths
+│       │   ├── .ledger/project.json                        # conformant
+│       │   └── docs/
+│       │       ├── 00-project.md                          # minimal valid root (legacy parent-doc parse)
+│       │       ├── 01-leaf.md                             # conformant leaf
+│       │       ├── 02-broken.md                           # deliberately fails schema validation (422 test)
+│       │       ├── subdir/
+│       │       │   └── 03-nested.md                       # nested leaf for :nodeId{.+} matcher
+│       │       ├── _schemas/
+│       │       │   └── ignored.md                         # buildDocGraph must skip — appears nowhere in /api/docs (Spec Review S5)
+│       │       └── process/
+│       │           └── ignored.md                         # same skip rule (Spec Review S5)
+│       └── escape-project/                                # second fixture — bad docs field test (Spec Review S4)
+│           └── .ledger/project.json                        # contains `"docs": "../escape"` to fail assertContained at server start
 └── packages/parser/                                       # exists (02-parser-extraction)
 ```
 
@@ -363,7 +369,7 @@ The re-validate-per-request pattern catches operator edits without requiring a s
 ```ts
 // server/src/routes/docs.ts
 import { Hono } from "hono";
-import { buildDocGraph, validateDocNode, parseDocNode } from "@ledger/parser";
+import { buildDocGraph, validateDocNode, parseDocNode, idForPath } from "@ledger/parser";
 import { readDocsTree } from "../readDocs";
 import type { ServerEnv } from "../server";
 
@@ -378,22 +384,36 @@ export const docsRoute = new Hono<ServerEnv>()
     const project = c.get("project");
     const nodeId = c.req.param("nodeId");
     const rawDocs = await readDocsTree(project.docsRoot);
-    // Find the file that maps to this nodeId. parseDocs/buildDocGraph derive nodeId from path;
-    // mirror that derivation here.
     const entry = findRawDocForNodeId(rawDocs, nodeId);
     if (!entry) return c.json({ error: "node not found" }, 404);
     const candidate = parseDocNode(entry.path, entry.content);
-    if (!candidate) return c.json({ error: "node is non-leaf (parent or root)" }, 422);
+    if (!candidate) return c.json({ error: "not_a_leaf" }, 404);
     const result = validateDocNode(candidate);
     if (!result.ok) return c.json({ errors: result.errors }, 422);
     return c.json({ node: result.node });
   });
 
-function findRawDocForNodeId(rawDocs: Record<string, string>, nodeId: string):
-  { path: string; content: string } | null { /* path-to-nodeId mirror of parseDocs's idForPath */ }
+function findRawDocForNodeId(
+  rawDocs: Record<string, string>,
+  nodeId: string,
+): { path: string; content: string } | null {
+  for (const [path, content] of Object.entries(rawDocs)) {
+    if (idForPath(path) === nodeId) return { path, content };
+  }
+  return null;
+}
 ```
 
-The `findRawDocForNodeId` helper mirrors `parseDocs.ts`'s existing `idForPath` logic inverted. It belongs in `@ledger/parser` rather than re-implemented in `server/`; the `02-parser-extraction` child should already expose `idForPath` from the parser package, and this child uses it to scan `rawDocs` for the matching entry. If `02-parser-extraction` does not export it, this child adds it there in a tiny patch commit ahead of its own work (record in Implementation Notes if so).
+The `findRawDocForNodeId` helper iterates `rawDocs` and applies `idForPath` (imported from `@ledger/parser` — single source of truth, no local reimplementation) to each key, returning the first match. `idForPath` is the forward map (path → nodeId); the lookup is just a linear scan since `rawDocs` is small (~15 entries today; well under the threshold where indexing would matter). Spec Review S1.
+
+**Status code semantics (Spec Review S3 — operator-decision: 404 for non-leaf):**
+
+- `200` — id resolves to a leaf and validates: returns `{ node: DocumentNode }`.
+- `404 { error: "node not found" }` — id doesn't resolve to any `.md` file in the tree.
+- `404 { error: "not_a_leaf" }` — id resolves to a root or parent doc, which `parseDocNode` returns `null` for by design (`02-schema` S2 — leaf-only schema validation). Distinct error code from the not-found case; same 404 status because both are "no leaf-node resource at this URL." The UI's doc-viewer panel (eventual `useDocSource` migration) can branch on the `error` field to render differently.
+- `422 { errors: ValidationError[] }` — id resolves to a leaf but the leaf fails schema validation. Inherited from parent §Spec Review N2.
+
+`idForPath` is imported from `@ledger/parser`'s public surface (cross-cutting fix landed in `02-parser-extraction`'s SF2 audit row).
 
 ### Vitest config
 
@@ -431,6 +451,14 @@ describe("GET /api/docs", () => {
     const body = await res.json();
     expect(body.nodes.length).toBeGreaterThan(0);
     expect(body.validation.errorPaths).toContain("02-broken.md"); // the deliberately bad fixture
+
+    // Spec Review S5: _schemas/ and process/ subtrees are skipped by buildDocGraph
+    const nodeIds: string[] = body.nodes.map((n: { id: string }) => n.id);
+    expect(nodeIds).not.toContain("_schemas/ignored");
+    expect(nodeIds).not.toContain("process/ignored");
+    // The skipped files also do NOT appear as validation errors (skip happens before validation).
+    expect(body.validation.errorPaths).not.toContain("_schemas/ignored.md");
+    expect(body.validation.errorPaths).not.toContain("process/ignored.md");
   });
 });
 
@@ -460,6 +488,16 @@ describe("GET /api/docs/:nodeId{.+}", () => {
     expect(body.errors.length).toBeGreaterThan(0);
   });
 
+  it("returns 404 with error: not_a_leaf for a root/parent doc (Spec Review S3)", async () => {
+    const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
+    const app = createServer(project);
+    // 00-project is the fixture's root doc — intentionally not schema-validated per 02-schema S2
+    const res = await app.request("/api/docs/00-project");
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("not_a_leaf");
+  });
+
   it("handles multi-segment nodeIds via the :nodeId{.+} matcher", async () => {
     const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
     const app = createServer(project);
@@ -467,6 +505,15 @@ describe("GET /api/docs/:nodeId{.+}", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.node.nodeId).toBe("subdir/03-nested");
+  });
+});
+
+describe("loadProjectContext path containment (Spec Review S4)", () => {
+  it("rejects a docs field containing path-traversal segments", async () => {
+    const escapePath = resolve(fileURLToPath(import.meta.url), "..", "..", "__fixtures__/escape-project");
+    await expect(
+      loadProjectContext({ projectPath: escapePath, port: 0 }),
+    ).rejects.toThrowError(/path escapes/i);
   });
 });
 ```
@@ -547,6 +594,20 @@ None.
 
 `02-broken.md` is identical to `01-leaf.md` minus one required heading (e.g., omit `## Decisions`); validators reject it. `subdir/03-nested.md` is identical to `01-leaf.md` with `**Node ID:** \`subdir/03-nested\``.
 
+The `_schemas/ignored.md` and `process/ignored.md` files (Spec Review S5) exist to verify `buildDocGraph`'s skip logic runs against output from `readDocsTree` (which does not pre-skip these subtrees — that's the parser's concern). Their content is a single `# Ignored` heading; the bulk endpoint test asserts they do **not** appear in `body.nodes` and do **not** appear in `body.validation.errorPaths` (the skip happens before validation, not as a validation failure).
+
+```jsonc
+// server/__fixtures__/escape-project/.ledger/project.json (Spec Review S4)
+{
+  "schemaVersion": 1,
+  "name": "Escape Attempt",
+  "docs": "../escape",
+  "agent": "claude-code"
+}
+```
+
+The `escape-project` fixture exists solely to test `loadProjectContext`'s path-containment rejection. `context.test.ts` points `loadProjectContext` at this fixture's path and asserts it throws a `ContextError` whose message includes "path escapes" or "docs path escapes" (whichever phrasing the implementer picks for the wrapping `ContextError`). No second `docs/` directory is needed — the assertion fires before any docs read happens.
+
 ### Acceptance check (manual)
 
 A reviewer running the worktree must observe:
@@ -577,12 +638,12 @@ A reviewer running the worktree must observe:
 | D4 | Re-validate `.ledger/project.json` on every `GET /api/project`, not cached | Operator may edit the metadata mid-process; the UI should reflect the change without a server restart. Cost is one `fs.readFile` + one ajv validate per call (~1 ms total); `/api/project` is called at app load and topbar render, so the overhead is invisible. Cached version would invert this trade-off in favor of negligible latency improvements. |
 | D5 | `readDocsTree` reads on every `GET /api/docs` request; no cache | Inherited from parent §D8. ~15 docs × ~10 ms total is invisible. When latency becomes visible, an mtime-keyed in-memory cache is the answer (not a watcher). |
 | D6 | Hono multi-segment matcher `:nodeId{.+}` for nested ids | Inherited from parent §Spec Review N1. A bare `:nodeId` matches a single URL segment; nested ids (`01-ui/02-dag`) need `{.+}`. Hono decodes the full path before passing to `c.req.param`. |
-| D7 | `/api/docs/:nodeId{.+}` returns 422 on schema-validation failure (not 404 or 500) | Inherited from parent §Spec Review N2. 404 is reserved for "this id doesn't resolve to any tracked file"; 422 means "the file exists but its content doesn't match the schema." 500 is a server error (the operator's doc is not a server problem). The carried `{ errors: ValidationError[] }` lets the UI's doc-viewer panel render the failure inline when `useDocSource` eventually migrates. |
+| D7 | `/api/docs/:nodeId{.+}` returns 422 on schema-validation failure, 404 on missing OR non-leaf (with distinct error codes) | Inherited from parent §Spec Review N2 for the 422 semantic. **Updated by this child's Spec Review S3:** non-leaf docs (root, parent) are intentionally not schema-validated per `02-schema` S2 — returning 422 for them would conflate "schema-invalid" with "different doc kind." 404 with `{ error: "not_a_leaf" }` distinguishes from the not-found case (`{ error: "node not found" }`) while keeping the status code semantically honest: both are "no leaf-node resource at this URL." UI's eventual `useDocSource` migration branches on the `error` field. |
 | D8 | `ContextError` and `PathContainmentError` are typed `Error` subclasses, not plain strings or generic Errors | The CLI (`04-cli-launcher`) needs to catch them specifically and render stderr differently. `instanceof ContextError` lets the catch block branch cleanly. Plain strings or generic `Error` would force string-matching, which is brittle. The subclass `name` field makes them recognisable in stack traces too. |
 | D9 | Dev-boot block at the bottom of `server.ts` (gated by `import.meta.url === ...`) instead of a separate dev entrypoint | Lets the implementer hit live endpoints without waiting for `04-cli-launcher` to land. The gate prevents the boot from firing when the file is imported by tests or the eventual CLI. When the CLI lands, this block stays as a reference / ad-hoc dev mode or is deleted by the next implementer; either is fine. |
 | D10 | Fixture project lives under `server/__fixtures__/sample-project/`, not in a shared `__fixtures__/` workspace dir | Tests are co-located with the package that runs them. A shared fixtures dir invites cross-package coupling (server tests reaching into parser fixtures, etc.). The fixture is small (~5 files); duplicating it across packages if a future case needs it is cheaper than the abstraction cost. |
 | D11 | Server tests use `app.request(url)` (Hono's in-process test client), not a real HTTP listener | No port allocation, no async waiting on server start, no cleanup. The handler is exercised exactly as it would be over HTTP — Hono's test client builds the same `Request` object the Node adapter would build. Faster, more reliable, no flake from port collisions in parallel test runs. |
-| D12 | Re-export `idForPath` from `@ledger/parser` (extending `02-parser-extraction`'s public surface if needed) | The route handler for `/api/docs/:nodeId{.+}` needs to inverse-map a `nodeId` back to a `rawDocs` key. That logic already lives in `parseDocs.ts`'s `idForPath` (which gives the forward direction); reusing it keeps the path-to-id mapping single-sourced. If `02-parser-extraction` did not export `idForPath`, this child adds the re-export in a small patch commit ahead of its own work (recorded in Implementation Notes). |
+| D12 | Consume `idForPath` from `@ledger/parser`'s public surface | The route handler for `/api/docs/:nodeId{.+}` needs to inverse-map a `nodeId` back to a `rawDocs` key. That logic already lives in `idForPath` (forward direction: path → nodeId); reusing it keeps the path-to-id mapping single-sourced. **Cross-cutting Spec Review resolution (this child's S2 / `02-parser-extraction`'s amendment):** `02-parser-extraction` was amended to export `idForPath` from `packages/parser/src/index.ts` (rather than this child opening a sibling-spec patch commit). This child just imports it. No conditional / no fallback path. |
 
 ---
 
@@ -594,8 +655,27 @@ A reviewer running the worktree must observe:
 - **No request size limits.** Hono's default body parser has no size cap. Read-only endpoints don't take bodies, so the exposure is nil today; when write endpoints arrive (with `05-task-runner`), a `bodyLimit` middleware should land alongside them. *(Priority: TRIVIAL — surface when writes land.)*
 - **No structured logging.** Hono's `logger()` writes free-form text to stdout. For ops dashboards / log aggregation, structured JSON would be required. Defer until an ops story exists. *(Priority: LOW.)*
 - **`error` field shape on 404 isn't typed.** `{ error: "node not found" }` is ad-hoc. A typed `APIError` envelope (`{ error: { code, message, details? } }`) would tighten the contract. Inherited from parent. *(Priority: LOW.)*
-- **`assertContained` allows symlink escapes.** `node:path.relative` does not follow symlinks; a `docsRoot/symlink` that points outside the project would pass `assertContained` and then `fs.readFile` would happily read the linked target. The mitigation is `fs.realpath` on both sides before the relative check. Worth doing if the threat model ever includes hostile project metadata; today's threat model is "single-user local-only" so the operator's symlinks are trusted. *(Priority: LOW — revisit if a multi-user story emerges.)*
+- **`assertContained` allows symlink escapes.** `node:path.relative` does not follow symlinks; a `docsRoot/symlink` that points outside the project would pass `assertContained` and then `fs.readFile` would happily read the linked target. The mitigation is `fs.realpath` on both sides before the relative check. Worth doing if the threat model ever includes hostile project metadata; today's threat model is "single-user local-only" so the operator's symlinks are trusted. *(Priority: MEDIUM — matches the originating priority on `03-project-metadata`'s "docs path validation" handoff; Spec Review N1 surfaced the under-tagging.)*
 - **Dev-boot block lives in `server.ts`.** D9 makes it convenient but co-locates the entrypoint with the library factory. A purist would split them. If/when the boot block grows beyond ~20 lines, splitting is right. *(Priority: TRIVIAL.)*
+
+---
+
+## Spec Review (2026-05-26)
+
+Independent spec review run in a clean Sonnet context against the DRAFT. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Five should-fixes (one stub-implementation gap, one cross-spec coupling, one semantic fix, two test-coverage gaps) and three nits (one priority-tag, two minor). All findings applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `findRawDocForNodeId` stub body left as pseudocode comment; "mirrors `idForPath` inverted" prose was logically confused. An implementer reading the stub cold would either guess wrong or re-implement `idForPath` inline. | Replaced the stub with explicit pseudocode: linear scan over `Object.entries(rawDocs)`, apply `idForPath` to each key, return first match. Removed the "inverted" framing — `idForPath` IS the forward direction; the helper scans + matches. |
+| S2 | `idForPath` not in `02-parser-extraction`'s public surface; D12's "tiny patch commit" hedging would force this child's implementer to open a sibling-spec patch ahead of their own work. Reviewer flagged as operator-decision. | **Operator chose amend `02-parser-extraction`.** That spec's audit row (cross-cutting) added `idForPath` to `packages/parser/src/index.ts`'s public surface. D12 rewritten: this child consumes `idForPath` from the parser; no conditional, no fallback path. `routes/docs.ts` imports it directly. |
+| S3 | 422-on-non-leaf conflates with 422-on-validation-failure. Root/parent docs are intentionally not schema-validated (`02-schema` S2); returning 422 calls them "schema-invalid" when they're actually "different doc kind." Reviewer flagged as operator-decision: 404 with distinct code vs 422 with distinct body. | **Operator chose 404 + `{ error: "not_a_leaf" }`.** Status semantics: 200 (leaf, valid), 422 (leaf, schema-invalid), 404 (not found OR not-a-leaf, distinguished by `error` field). Updated `routes/docs.ts` snippet, D7 prose, and endpoint summary. Added test case at `docs.test.ts` asserting 404 + `error: "not_a_leaf"` for the fixture's `00-project` root. |
+| S4 | "Bad `docs` field" context test mentioned but no fixture or test setup specified. Implementer would have to invent the approach. Reviewer flagged as operator-decision: second fixture vs tmpdir vs in-place mutation. | **Operator chose second fixture.** Added `server/__fixtures__/escape-project/.ledger/project.json` with `"docs": "../escape"`. No `docs/` directory needed — `assertContained` rejection fires before any docs read. Added test description in `context.test.ts` excerpt asserting the `ContextError` throws with a `path escapes` message. |
+| S5 | `_schemas/` and `process/` skip logic (inside `buildDocGraph`) not exercised by the server's fixture suite. Verifying it runs correctly when called from the server's context (via `readDocsTree`'s output) is a real gap. | Added `_schemas/ignored.md` and `process/ignored.md` to the sample-project fixture. Added bulk-endpoint test assertions: `body.nodes` does NOT contain `_schemas/ignored` or `process/ignored`; `body.validation.errorPaths` does NOT contain them (skip happens before validation, not as a validation failure). |
+| N1 | `assertContained` symlink-escape Open Issue tagged LOW; the originating `03-project-metadata` handoff was MEDIUM. Under-tagging. | Bumped priority from LOW to MEDIUM; added a note that the priority matches the originating handoff. |
+| N2 | `validationErrorPaths` key format not explicitly stated (inferred from `readDocsTree`'s key format). | No edit — the type signature and the contract `buildDocGraph(rawDocs: Record<string, string>) → { validationErrorPaths: string[] }` makes it clear. The new fixture-skip assertions exercise this implicitly. |
+| N3 | `health.ts` route reads `c.get("project")` for `startedAt`; if context middleware throws, health fails. Trivial in v1 since ProjectContext is immutable + pre-validated. | No edit — by design; the dependency is intentional. Health endpoint IS dependent on the server having a valid context; without one the server doesn't boot. |
+
+Nothing punted. S2, S3, S4 were operator-decision; all recorded with rationale. The cross-cutting S2 amendment to `02-parser-extraction` is the visible coupling between this child's spec and its predecessor; landing the change in the predecessor keeps each child's implementation pass focused on its own scope.
 
 ---
 

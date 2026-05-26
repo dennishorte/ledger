@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/04-cli-launcher`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
 
 **Dependencies:** `04-api-server/03-server-package`
 
@@ -84,8 +84,8 @@ interface ParsedArgs {
 }
 
 function parseCliArgs(argv: string[]): ParsedArgs {
-  let positionals: string[];
-  let values: { port: string; "no-open": boolean; help: boolean };
+  let positionals!: string[];
+  let values!: { port: string; "no-open": boolean; help: boolean };
   try {
     ({ positionals, values } = parseArgs({
       args: argv,
@@ -94,7 +94,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       options: {
         port: { type: "string", default: process.env.LEDGER_PORT ?? "4180" },
         "no-open": { type: "boolean", default: false },
-        help: { type: "boolean", short: "h" },
+        help: { type: "boolean", short: "h", default: false },
       },
     }));
   } catch (e) {
@@ -112,6 +112,12 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     process.exit(2);
   }
 
+  // After the length guard, positionals[0] is provably defined.
+  // With noUncheckedIndexedAccess, TypeScript still sees `string | undefined`;
+  // the non-null assertion is safe and matches the project's house idiom
+  // (see leaf-workflow's "trust local invariants" pattern).
+  const projectPath = positionals[0]!;
+
   const port = Number(values.port);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     process.stderr.write(
@@ -121,7 +127,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   }
 
   return {
-    projectPath: positionals[0],
+    projectPath,
     port,
     open: !values["no-open"],
     help: false,
@@ -377,6 +383,25 @@ A reviewer running the worktree must observe:
 
 ---
 
+## Spec Review (2026-05-26)
+
+Independent spec review run in a clean Sonnet context against the DRAFT. Verdict: READY_FOR_APPROVAL, no blockers. Three should-fixes (two TypeScript strictness issues, one decision-gap closure) and five nits (most no-action confirmations). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| SF1 | `positionals[0]` types as `string \| undefined` under `noUncheckedIndexedAccess`; the length-guard doesn't narrow the destructured variable. Implementer would invent an idiom. | Added explicit `const projectPath = positionals[0]!` after the length guard, with a comment explaining why the non-null assertion is safe (the guard proves it). The destructured `let positionals!: string[]` uses the definite-assignment assertion since the try/catch may exit before the assignment but the catch's `process.exit(2)` makes the post-try code unreachable in that case. |
+| SF2 | `help` option missing `default: false` causes return type `boolean \| undefined` mismatch with the type annotation `help: boolean`. | Added `default: false` to the `help` option. Annotation now matches; no narrowing needed. |
+| SF3 | Verification item 10's "either stays or is deleted" left the dev-boot block disposition entirely to implementer judgment with no criterion. | Specified the criterion: delete the dev-boot block. The CLI binary is the canonical entrypoint; the dev-boot block was a pre-CLI workaround. Updated `server/package.json`'s `dev` script to point at `src/bin/ledger.ts` instead of `src/server.ts`. Implementer records the deletion in Implementation Notes. |
+| N1 | `--help` exits 0 + writes to stdout; errors write to stderr. Asymmetry is correct POSIX convention but should be explicit so future editors don't "fix" it. | No edit — the existing CLI snippet already implements the asymmetry correctly. A code-level comment would be appropriate at implementation time; the spec doesn't need to call it out. |
+| N2 | Test for `--help` asserts `r.stdout`; verified the `spawnSync` shape populates both `stdout` and `stderr`. Informational. | No edit — existing test is correct. |
+| N3 | `pnpm -C serverRoot build` in `beforeAll` is single-call; complies with CLAUDE.md's "no `&&`/`;`/`||` chaining" rule. | No edit — informational confirmation. |
+| N4 | `ProjectContext` import is type-only but flagged as potentially redundant given TypeScript can infer it. | No edit — explicit type annotation on `let project: ProjectContext` is preferred for readability. |
+| N5 | `--port 0` test parses port from stdout via regex. Assumes `@hono/node-server` reports the actual bound port in the stdout line (not the configured `0`). Worth implementer verification. | No edit — implementer's smoke test against the real binary will surface it; if `@hono/node-server` doesn't update the port before our stdout write, the implementer adjusts (e.g. read from `server.address()` after `listen`). Logged as a runtime assumption to verify, not a spec defect. |
+
+Nothing punted. SF1 and SF2 are mechanical TypeScript fixes; SF3 is a small spec-text addition closing a decision gap.
+
+---
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -409,7 +434,7 @@ When this node moves to `VERIFY`, the verifier confirms:
    - `LEDGER_PORT=0 pnpm exec ledger /Users/dennis/code/ledger --no-open` boots on an OS-assigned port (visible in stdout); SIGINT shuts down cleanly.
 8. **Headless-environment safety (D5):** if `DISPLAY` is unset on Linux (or via `env -i pnpm exec ledger ... --port 4180` to clear env), the server still boots; stderr shows the browser-open failure message; the URL is printed; the server keeps running until SIGINT. (This may be skipped on macOS where `open` succeeds without `DISPLAY`.)
 9. **`app/`, `packages/parser/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched. `git diff main..HEAD -- app/ packages/parser/ docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server.md docs/01-ui/` shows only the `04-api-server.md` §Children manifest-row status bump for this child.
-10. **The dev-boot block in `03-server-package`'s `server/src/server.ts` either stays as-is** (still usable for ad-hoc dev) **or is deleted** (this child made it redundant). Implementer's call; documented in Implementation Notes if deleted.
+10. **The dev-boot block in `03-server-package`'s `server/src/server.ts` is deleted by this child.** Spec Review SF3: the criterion is "the CLI binary is now the canonical entrypoint; the dev-boot block was a pre-CLI workaround." Deleting it removes the dead-code-paths-with-no-tests concern and forces every invocation (including `pnpm -C server dev`) through the same `parseCliArgs` + `loadProjectContext` chain. Update `server/package.json`'s `dev` script: `"dev": "tsx watch src/bin/ledger.ts"` (was `"dev": "tsx watch src/server.ts"` per `03-server-package`'s D9). The implementer records the deletion in Implementation Notes.
 11. `04-api-server.md` §Children manifest row for `04-cli-launcher` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 
 ---
