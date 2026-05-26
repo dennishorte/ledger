@@ -25,19 +25,34 @@ Every node in `docs/` follows the schema laid out in PRD §6.1:
 The repo is a **pnpm workspace** with three packages: `app/` (Vite UI), `packages/parser/` (shared doc/schema validator + DocGraph builder), and `server/` (Hono API + `ledger` CLI). `04-api-server` COMPLETE 2026-05-26.
 
 ```bash
-pnpm install                                                # at repo root
-pnpm -C packages/parser build                               # REQUIRED before any gate that imports @ledger/parser
-pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180   # boot the API server (terminal A)
-pnpm -C app dev                                             # boot the UI on http://localhost:4179 (terminal B)
+# One-time prereqs after a fresh clone (or whenever you touch parser source):
+pnpm install                                              # at repo root — wires workspace symlinks
+pnpm -C packages/parser build                             # @ledger/parser dist/ — gitignored
+
+# Boot the two long-running processes (separate terminals):
+pnpm -C server dev /Users/dennis/code/ledger              # terminal A — API server on :4180 (tsx watch, hot-reloads on src changes)
+pnpm -C app dev                                           # terminal B — UI on http://localhost:4179
+
+# Gates (run anytime):
 pnpm -C app typecheck
 pnpm -C app lint
 pnpm -C app build
-pnpm test                                                   # fans out across all workspace packages
+pnpm test                                                 # fans out across all workspace packages
 ```
 
 The UI's `/dag` panel consumes `GET /api/docs` live via TanStack Query (with a build-time placeholder fallback so the UI degrades gracefully if the server is down). The Vite dev proxy at `app/vite.config.ts` forwards `/api/*` → `http://127.0.0.1:4180/api/*` so every browser request is same-origin (no CORS).
 
-**Build-order quirk**: `packages/parser/dist/` is gitignored. `app/` and `server/` both resolve `@ledger/parser` via the package's `main` field (`dist/index.js`), so `dist/` must exist before `pnpm -C app|server typecheck/test/build` succeed. Run `pnpm -C packages/parser build` after a fresh clone or whenever you've touched parser source. (Logged for a future `pnpm -w build:packages` script that runs it automatically.)
+**Booting the server — three options:**
+
+| Command | When to use | Build prereq |
+|---|---|---|
+| `pnpm -C server dev <path>` | Active dev (hot-reloads on src changes) | parser only |
+| `pnpm exec ledger <path> [--port N] [--no-open]` | Canonical workspace invocation against compiled output | parser + `pnpm -C server build` |
+| `node server/dist/bin/ledger.js <path> [--port N] [--no-open]` | Direct invocation (no pnpm) | parser + `pnpm -C server build` |
+
+CLI args: `<project-path>` is required; `--port N` overrides the default 4180 (also reads `LEDGER_PORT` env var); `--no-open` skips the browser launch; `-h`/`--help` prints usage. Bare invocation exits 2 with usage on stderr.
+
+**Build-order quirk**: `packages/parser/dist/` AND `server/dist/` are both gitignored. `app/` and `server/` resolve `@ledger/parser` via the package's `main` field (`dist/index.js`); `pnpm exec ledger` resolves `server/dist/bin/ledger.js` from the package's `bin` field. Run `pnpm -C packages/parser build` after a fresh clone or any parser-source change; run `pnpm -C server build` if you want `pnpm exec ledger` instead of `pnpm -C server dev`. (Logged for a future `pnpm -w build:packages` script that runs both automatically.)
 
 Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: true` (default 5173 collides with other local projects). API server defaults to **port 4180** (`LEDGER_PORT` env var or `--port` flag to override).
 
