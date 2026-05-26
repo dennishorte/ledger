@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/02-parser-extraction`
 **Parent:** `04-api-server` (`docs/04-api-server.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26
+**Last Updated:** 2026-05-26 (DRAFT → SPEC_REVIEW)
 
 **Dependencies:** `04-api-server/01-workspace-conversion`
 
