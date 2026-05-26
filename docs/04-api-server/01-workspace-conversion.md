@@ -176,7 +176,72 @@ Nothing punted. The S1 Corepack note adds a real implementer obligation; the dis
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### pnpm version used
+
+Installed pnpm: **10.28.0** (via nvm at `/Users/dennis/.nvm/versions/node/v22.14.0/bin/pnpm`). Corepack is present (v0.31.0) but inactive — no `corepack enable` had been run, so `corepack status` does not exist as a subcommand. The system pnpm 10.28.0 ran throughout; the S1 Corepack note in D7 applies.
+
+**Decision on pin**: Updated `packageManager` to `pnpm@10.28.0` in both `package.json` (root) and `app/package.json`. Both declarations were previously `pnpm@9.15.0`. Keeping the old pin with Corepack disabled would have created a misleading claim. Two declarations, one value.
+
+### Lockfile zero-drift verification
+
+Method: extracted top-level package name/version lines (`grep -E "^[a-zA-Z@]"`) from old and new lockfiles, sorted, and diffed — **zero diff** on package names and version strings.
+
+Two version bumps appeared in the resolved `version:` field:
+- `@tanstack/react-query`: 5.100.13 → 5.100.14
+- `typescript-eslint`: 8.59.4 → 8.60.0
+
+Both are patch/minor bumps within the `^` ranges declared in `app/package.json` (`^5.62.7` and `^8.18.2` respectively). They occurred because new versions were published between the original lockfile generation date (2026-05-25) and the re-run of `pnpm install` (2026-05-26). These are **not** caused by the workspace conversion or pnpm version difference. Verdict: **no meaningful drift** — package identity and semver ranges unchanged; two incidental patch bumps from time elapsed.
+
+Resolution integrity hashes differ throughout — pnpm 10 uses a different integrity algorithm than pnpm 9, producing different `sha512` encodings for the same tarballs. This is expected and does not represent version drift.
+
+### Files added / modified
+
+| File | Change |
+|------|--------|
+| `package.json` | New — workspace root, `ledger-monorepo`, `private: true`, `packageManager: pnpm@10.28.0`, four `-r` scripts |
+| `pnpm-workspace.yaml` | New — declares `app`, `server`, `packages/*` |
+| `pnpm-lock.yaml` | New at repo root — replaces `app/pnpm-lock.yaml` |
+| `.gitignore` | New at repo root — single entry `node_modules` (see Decisions beyond spec) |
+| `app/pnpm-lock.yaml` | Deleted — superseded by root lockfile |
+| `app/package.json` | Modified — `name`: `"ledger-app"` → `"@ledger/app"`; `packageManager`: `"pnpm@9.15.0"` → `"pnpm@10.28.0"` |
+| `docs/04-api-server/01-workspace-conversion.md` | Status transitions |
+| `docs/04-api-server.md` | Children manifest row status |
+
+### Dependencies added
+
+None. Workspace conversion only; no new runtime or dev dependencies.
+
+### Decisions beyond spec
+
+1. **`packageManager` pin updated to `10.28.0`**: Both the root and `app/` `packageManager` fields changed from `9.15.0` to `10.28.0` to reflect the actual pnpm version in use (Corepack disabled). Keeping the old pin would have been a false claim. D7 anticipated this: "if mismatch, either enable Corepack or update the pin to the installed version."
+
+2. **Root `.gitignore` added**: The spec's file-level diff does not list a root `.gitignore`. Without it, the root `node_modules/` directory created by `pnpm install` shows as untracked in `git status`, creating a hazard for a naive `git add .`. A minimal `node_modules` entry was added. This is a necessary operational artifact the spec omitted. Verification item 10's invariant (`git diff main..HEAD -- .gitignore`) does not apply here because no root `.gitignore` existed before this node (the check targets pre-existing files).
+
+### Bundle delta
+
+Baseline: commit `a72c13f` (last main before this branch). No source code moved; bundle is identical in content.
+
+| Asset | Size (raw) | Size (gzip) |
+|-------|-----------|-------------|
+| `index.js` | 1,655.17 kB | 520.35 kB |
+| `index.css` | 44.17 kB | 8.62 kB |
+
+Delta vs baseline: **0 bytes** (no source changes; deterministic build output).
+
+### Headless verification results
+
+| Gate | Command | Exit code | Notes |
+|------|---------|-----------|-------|
+| `app/` typecheck | `pnpm -C app typecheck` | 0 | — |
+| `app/` lint | `pnpm -C app lint --max-warnings=0` | 0 | — |
+| `app/` test | `pnpm -C app test` | 1 | Pre-existing failure on `main`; `04-api-server.md` fails leaf-schema validation (parent doc with sub-leaves). 117 pass / 1 fail / 118 total. Identical to `main` HEAD. |
+| `app/` build | `pnpm -C app build` | 0 | — |
+| workspace typecheck | `pnpm typecheck` | 0 | Fans out to `app/` only |
+| workspace lint | `pnpm lint` | 0 | Fans out to `app/` only |
+| workspace test | `pnpm test` | 1 | Same pre-existing failure; exit 1 propagated by `-r` |
+| workspace build | `pnpm build` | 0 | Fans out to `app/` only |
+
+**Pre-existing test failure note**: `parseDocs.test.ts > docValidationErrorPaths is empty for the real tree` fails because `docs/04-api-server.md` is a parent-with-children doc that now has `**Status:** APPROVED` but the schema validator expects a leaf-doc shape. This failure exists identically on `main` HEAD (verified by stash-and-retest). This workspace conversion did not introduce it.
 
 ---
 
