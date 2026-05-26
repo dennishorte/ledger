@@ -17,6 +17,12 @@ export default defineConfig({
   server: {
     port: 4179,
     strictPort: true,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:4180",
+        changeOrigin: false,
+      },
+    },
     fs: {
       // Allow reading files outside the app/ root so we can `?raw` import
       // markdown from ../docs at module evaluation time. See 01-ui/02-dag.md

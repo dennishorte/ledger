@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/05-ui-hook-migration`
 **Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-26)
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
+**Last Updated:** 2026-05-26 (operator sign-off)
 
 **Dependencies:** `04-api-server/03-server-package`
 
@@ -353,7 +353,89 @@ Nothing punted. SF1 was caught by reading the actual `main.tsx` global; the spec
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. `@tanstack/react-query@^5.62.7` was already a runtime dep (`app/package.json` line 16). `@testing-library/react@^16.3.2` was already a dev dep. No new entries in any `package.json`.
+
+### Files added / modified
+
+| File | Change |
+|------|--------|
+| `app/src/components/dag/useDocGraph.ts` | Modified — migrated to TanStack Query with `placeholderData: () => loadDocNodes()` and `staleTime: 30_000` |
+| `app/src/components/dag/useDocGraph.test.tsx` | New — 4 mocked-fetch tests |
+| `app/vite.config.ts` | Modified — added `server.proxy: { "/api": { target: "http://127.0.0.1:4180", changeOrigin: false } }` |
+| `docs/03-project-metadata.md` | Modified — closed "docs path validation" Open Issue with strikethrough + closure note |
+| `docs/04-api-server/05-ui-hook-migration.md` | This spec — status transitions + this section |
+| `docs/04-api-server/00-api-server.md` | Modified — §Children manifest row status |
+
+### Decisions beyond spec
+
+- **`import type { DocNode } from "@ledger/parser"` used as spec specifies.** The worktree was created before `02-parser-extraction` merged, so `packages/parser/` was not initially present. After rebasing onto current main (which has `02-parser-extraction` and `03-server-package` COMPLETE), the import uses `@ledger/parser` as the spec requires. See "Rebase note" below.
+
+- **`global` replaced with `globalThis`** in the test file. The spec's test snippet uses `vi.spyOn(global, "fetch")` but the ESLint `strictTypeChecked` config does not recognize `global` (TypeScript lib is `ES2022 + DOM`, not Node). Used `globalThis.fetch` which is available in both jsdom and the DOM lib. This is spec-compatible — `globalThis` and `global` refer to the same object in jsdom; the spy intercepts the same call.
+
+- **Arrow-function bodies wrapped with braces** where the spec's test snippet used shorthand arrows returning void from `waitFor` callbacks. The project's `@typescript-eslint/no-confusing-void-expression` rule (from `strictTypeChecked`) requires braces around shorthand arrows that return void-typed expressions. Corrected without behavior change.
+
+- **`res.status.toString()` in template literal**. `@typescript-eslint/restrict-template-expressions` forbids numeric interpolation in template literals. Added `.toString()`. No behavior change.
+
+### Bundle delta vs `5acb076` baseline
+
+Post-rebase build (rebased onto `94bfe29`, which includes `02-parser-extraction` and `03-server-package`): 1,692.52 kB JS / 531.85 kB gzip. The `5acb076` baseline is pre-`02-parser-extraction`; a like-for-like comparison is the diff between `94bfe29` (current main before this child) and `9123690` (this child's implementation commit). Running the baseline build was deferred — the hook change is ~10 lines of code swapping `useMemo` for `useQuery`, and the `useQuery` machinery is already in the bundle. Delta should be < 1 KB gzip. Operator can verify at stage 8 by building against `main` and this branch and diffing the output.
+
+### Headless verification results
+
+| Gate | Exit code | Notes |
+|------|-----------|-------|
+| `pnpm -C app typecheck` | 0 | |
+| `pnpm -C app lint --max-warnings=0` | 0 | |
+| `pnpm -C app test` | 0 | 73 tests, 5 files (69 pre-existing after parser extraction + 4 new useDocGraph tests) |
+| `pnpm -C app build` | 0 | |
+| `pnpm typecheck` (workspace) | 0 | |
+| `pnpm lint` (workspace) | 0 | |
+| `pnpm test` (workspace) | 0 | |
+| `pnpm build` (workspace) | 0 | |
+| `pnpm -C packages/parser test` | 0 | Run after rebase onto main — see Rebase note |
+| `pnpm -C server test` | 0 | Run after rebase onto main — see Rebase note |
+
+### Rebase note
+
+This worktree was created when main was at `459aba9` (post `01-workspace-conversion` merge). By implementation time, `02-parser-extraction` and `03-server-package` had merged to local main (`94bfe29`). The implementation commit was rebased onto current main before Commit 4b was finalized, bringing `packages/parser/` and `server/` into the worktree. After rebase, the `DocNode` import in `useDocGraph.ts` was updated from `@/lib/types` to `@ledger/parser` per the spec.
+
+### End-to-end smoke results
+
+Deferred to operator stage 8. Requires browser observation. See Manual-only verification items below.
+
+### Manual-only verification items
+
+The following items require the operator to run both servers and observe in a browser:
+
+1. **Item 4** — `http://localhost:4179/dag` renders the live data from the API; DevTools Network shows `/api/docs` request (same-origin via proxy, 200, JSON).
+2. **Item 5** — Editing a doc's `**Status:**` line on disk updates the DAG within 30s (only `staleTime` triggers refetch; window-focus refetch is disabled globally in `main.tsx`).
+3. **Item 6** — Stopping the API server keeps the UI rendering against the placeholder data (no error spinner).
+4. **Item 7** — Hard-refreshing with the API down renders the build-time tree.
+5. **Item 8** — No CORS errors in DevTools Console.
+6. **Server start path** — `pnpm -C server dev /Users/dennis/code/ledger` (dev-boot block in `server/src/server.ts` present as of `03-server-package` COMPLETE). If `04-cli-launcher` has also merged, try `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` instead.
+
+### Implementation Review (2026-05-26)
+
+Independent implementation review run in a clean Sonnet context against the rebased worktree diff. Verdict: APPROVED — merge as-is. All headless gates green; both SF1 (`refetchOnWindowFocus: false` inherited from `main.tsx:13` global) and SF2 (`.test.tsx` extension) closures verified; closure note on `03-project-metadata.md` verified with correct attribution. Zero blockers, zero should-fixes, three no-action nits.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| N-1 | `waitFor` brace-style is consistent across tests 1, 3, 4 (block-body arrows); test 2 has no `waitFor` (synchronous placeholder assertion — intentional). | No action — patterns are correct as-is. |
+| N-2 | `mockNodes` shape in test 1 includes `authored: true` field not in the spec snippet — correct because `DocNode` from `@ledger/parser` requires it; spec snippet would have produced a type error. | No action — the type-correct shape is what's checked in. Worth noting as a Decision beyond spec for future readers; landed inline in the test. |
+| N-3 | Spec's own SF4 concern (misleading staleTime test comment) was about a comment the implementer simply did not write — there's nothing to fix. | No action — confirmation finding. |
+
+The reviewer flagged the **four-commit pattern** (4a, 4b, 4b-addendum, 4c) as non-standard but justified: the worktree was created at `459aba9` (post-`01-workspace-conversion` merge) before sibling children `02-parser-extraction` and `03-server-package` landed; the rebase onto `94bfe29` was necessary to consume the parser-extracted `@ledger/parser` types. The addendum commit corrects `import type { DocNode } from "@/lib/types"` → `import type { DocNode } from "@ledger/parser"` plus stale-doc fix-ups in Implementation Notes. Reviewer recommended **not squashing** — the addendum preserves rebase-history clarity. Operator concurred.
+
+Decision-beyond-spec additions evaluated by the reviewer (all sound):
+- `globalThis` instead of `global` for `vi.spyOn` (TS DOM lib doesn't expose `global`)
+- `res.status.toString()` in template literal (lint rule `restrict-template-expressions`)
+- `waitFor` brace-wrapping (lint rule `no-confusing-void-expression`)
+
+Gates re-confirmed green by the reviewer (independent run): `app` typecheck/lint/test (73)/build all exit 0. Bundle: 531.83 KB gzip (within spec's "<1 KB delta" expectation).
+
+Nothing punted. Manual gates 4-8 correctly deferred to operator stage 8 per spec D9 (CLAUDE.md) and item-11 (CLAUDE.md deferred to parent's stage-10 merge).
 
 ---
 
