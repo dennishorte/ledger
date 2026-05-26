@@ -370,7 +370,7 @@ None. `@tanstack/react-query@^5.62.7` was already a runtime dep (`app/package.js
 
 ### Decisions beyond spec
 
-- **`import type { DocNode } from "@/lib/types"` retained** (not `@ledger/parser`). The spec's "After" snippet imports from `@ledger/parser`, but at the time this child was implemented `packages/parser/` had already landed in `main` but was not yet in this worktree's branch (worktree branched at `01-workspace-conversion` merge, before `02-parser-extraction` was merged). After rebasing onto current `main`, `@ledger/parser` is available and the import was updated. See "Rebase note" below.
+- **`import type { DocNode } from "@ledger/parser"` used as spec specifies.** The worktree was created before `02-parser-extraction` merged, so `packages/parser/` was not initially present. After rebasing onto current main (which has `02-parser-extraction` and `03-server-package` COMPLETE), the import uses `@ledger/parser` as the spec requires. See "Rebase note" below.
 
 - **`global` replaced with `globalThis`** in the test file. The spec's test snippet uses `vi.spyOn(global, "fetch")` but the ESLint `strictTypeChecked` config does not recognize `global` (TypeScript lib is `ES2022 + DOM`, not Node). Used `globalThis.fetch` which is available in both jsdom and the DOM lib. This is spec-compatible — `globalThis` and `global` refer to the same object in jsdom; the spy intercepts the same call.
 
@@ -380,7 +380,7 @@ None. `@tanstack/react-query@^5.62.7` was already a runtime dep (`app/package.js
 
 ### Bundle delta vs `5acb076` baseline
 
-The build output is 1,664.35 kB JS / 523.54 kB gzip. The `5acb076` baseline (`02-parser-extraction` merge) requires running a build against that commit to measure delta — this is the same bundle with `useDocGraph` migrated from `useMemo(loadDocNodes)` to `useQuery(loadDocNodes as placeholderData)`. The `useQuery` machinery is already in the bundle (TanStack Query was installed in `01-ui`); the hook adds ~10 lines of code. Estimated delta: < 1 KB gzip. Operator should confirm at stage 8 by running `git stash; pnpm -C app build; git stash pop; pnpm -C app build` and diffing the gzip sizes.
+Post-rebase build (rebased onto `94bfe29`, which includes `02-parser-extraction` and `03-server-package`): 1,692.52 kB JS / 531.85 kB gzip. The `5acb076` baseline is pre-`02-parser-extraction`; a like-for-like comparison is the diff between `94bfe29` (current main before this child) and `9123690` (this child's implementation commit). Running the baseline build was deferred — the hook change is ~10 lines of code swapping `useMemo` for `useQuery`, and the `useQuery` machinery is already in the bundle. Delta should be < 1 KB gzip. Operator can verify at stage 8 by building against `main` and this branch and diffing the output.
 
 ### Headless verification results
 
@@ -388,7 +388,7 @@ The build output is 1,664.35 kB JS / 523.54 kB gzip. The `5acb076` baseline (`02
 |------|-----------|-------|
 | `pnpm -C app typecheck` | 0 | |
 | `pnpm -C app lint --max-warnings=0` | 0 | |
-| `pnpm -C app test` | 0 | 122 tests, 7 files (118 pre-existing + 4 new useDocGraph tests) |
+| `pnpm -C app test` | 0 | 73 tests, 5 files (69 pre-existing after parser extraction + 4 new useDocGraph tests) |
 | `pnpm -C app build` | 0 | |
 | `pnpm typecheck` (workspace) | 0 | |
 | `pnpm lint` (workspace) | 0 | |

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { loadDocNodes } from "@/lib/parseDocs";
-import type { DocNode } from "@/lib/types";
+import type { DocNode } from "@ledger/parser";
 
 const API_BASE = "/api";
 
