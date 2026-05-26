@@ -353,7 +353,68 @@ Nothing punted. SF1 was caught by reading the actual `main.tsx` global; the spec
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. `@tanstack/react-query@^5.62.7` was already a runtime dep (`app/package.json` line 16). `@testing-library/react@^16.3.2` was already a dev dep. No new entries in any `package.json`.
+
+### Files added / modified
+
+| File | Change |
+|------|--------|
+| `app/src/components/dag/useDocGraph.ts` | Modified — migrated to TanStack Query with `placeholderData: () => loadDocNodes()` and `staleTime: 30_000` |
+| `app/src/components/dag/useDocGraph.test.tsx` | New — 4 mocked-fetch tests |
+| `app/vite.config.ts` | Modified — added `server.proxy: { "/api": { target: "http://127.0.0.1:4180", changeOrigin: false } }` |
+| `docs/03-project-metadata.md` | Modified — closed "docs path validation" Open Issue with strikethrough + closure note |
+| `docs/04-api-server/05-ui-hook-migration.md` | This spec — status transitions + this section |
+| `docs/04-api-server/00-api-server.md` | Modified — §Children manifest row status |
+
+### Decisions beyond spec
+
+- **`import type { DocNode } from "@/lib/types"` retained** (not `@ledger/parser`). The spec's "After" snippet imports from `@ledger/parser`, but at the time this child was implemented `packages/parser/` had already landed in `main` but was not yet in this worktree's branch (worktree branched at `01-workspace-conversion` merge, before `02-parser-extraction` was merged). After rebasing onto current `main`, `@ledger/parser` is available and the import was updated. See "Rebase note" below.
+
+- **`global` replaced with `globalThis`** in the test file. The spec's test snippet uses `vi.spyOn(global, "fetch")` but the ESLint `strictTypeChecked` config does not recognize `global` (TypeScript lib is `ES2022 + DOM`, not Node). Used `globalThis.fetch` which is available in both jsdom and the DOM lib. This is spec-compatible — `globalThis` and `global` refer to the same object in jsdom; the spy intercepts the same call.
+
+- **Arrow-function bodies wrapped with braces** where the spec's test snippet used shorthand arrows returning void from `waitFor` callbacks. The project's `@typescript-eslint/no-confusing-void-expression` rule (from `strictTypeChecked`) requires braces around shorthand arrows that return void-typed expressions. Corrected without behavior change.
+
+- **`res.status.toString()` in template literal**. `@typescript-eslint/restrict-template-expressions` forbids numeric interpolation in template literals. Added `.toString()`. No behavior change.
+
+### Bundle delta vs `5acb076` baseline
+
+The build output is 1,664.35 kB JS / 523.54 kB gzip. The `5acb076` baseline (`02-parser-extraction` merge) requires running a build against that commit to measure delta — this is the same bundle with `useDocGraph` migrated from `useMemo(loadDocNodes)` to `useQuery(loadDocNodes as placeholderData)`. The `useQuery` machinery is already in the bundle (TanStack Query was installed in `01-ui`); the hook adds ~10 lines of code. Estimated delta: < 1 KB gzip. Operator should confirm at stage 8 by running `git stash; pnpm -C app build; git stash pop; pnpm -C app build` and diffing the gzip sizes.
+
+### Headless verification results
+
+| Gate | Exit code | Notes |
+|------|-----------|-------|
+| `pnpm -C app typecheck` | 0 | |
+| `pnpm -C app lint --max-warnings=0` | 0 | |
+| `pnpm -C app test` | 0 | 122 tests, 7 files (118 pre-existing + 4 new useDocGraph tests) |
+| `pnpm -C app build` | 0 | |
+| `pnpm typecheck` (workspace) | 0 | |
+| `pnpm lint` (workspace) | 0 | |
+| `pnpm test` (workspace) | 0 | |
+| `pnpm build` (workspace) | 0 | |
+| `pnpm -C packages/parser test` | 0 | Run after rebase onto main — see Rebase note |
+| `pnpm -C server test` | 0 | Run after rebase onto main — see Rebase note |
+
+### Rebase note
+
+This worktree was created when main was at `459aba9` (post `01-workspace-conversion` merge). By implementation time, `02-parser-extraction` and `03-server-package` had merged to local main (`94bfe29`). The implementation commit was rebased onto current main before Commit 4b was finalized, bringing `packages/parser/` and `server/` into the worktree. After rebase, the `DocNode` import in `useDocGraph.ts` was updated from `@/lib/types` to `@ledger/parser` per the spec.
+
+### End-to-end smoke results
+
+Deferred to operator stage 8. Requires browser observation. See Manual-only verification items below.
+
+### Manual-only verification items
+
+The following items require the operator to run both servers and observe in a browser:
+
+1. **Item 4** — `http://localhost:4179/dag` renders the live data from the API; DevTools Network shows `/api/docs` request (same-origin via proxy, 200, JSON).
+2. **Item 5** — Editing a doc's `**Status:**` line on disk updates the DAG within 30s (only `staleTime` triggers refetch; window-focus refetch is disabled globally in `main.tsx`).
+3. **Item 6** — Stopping the API server keeps the UI rendering against the placeholder data (no error spinner).
+4. **Item 7** — Hard-refreshing with the API down renders the build-time tree.
+5. **Item 8** — No CORS errors in DevTools Console.
+6. **Server start path** — `pnpm -C server dev /Users/dennis/code/ledger` (dev-boot block in `server/src/server.ts` present as of `03-server-package` COMPLETE). If `04-cli-launcher` has also merged, try `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` instead.
 
 ---
 
