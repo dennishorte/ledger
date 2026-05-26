@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/01-workspace-conversion`
 **Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-26)
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (IN_PROGRESS → VERIFY)
+**Last Updated:** 2026-05-26 (operator sign-off)
 
 **Dependencies:** —
 
