@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/document-node.schema.json",
+  "title": "DocumentNode",
+  "description": "A validated leaf implementation node in the ledger document tree. Schema version 1. The schemaVersion field (const: 1) inside the schema carries the version for validators that need it programmatically.",
+  "type": "object",
+  "required": [
+    "nodeId",
+    "parentId",
+    "title",
+    "status",
+    "created",
+    "lastUpdated",
+    "sections",
+    "schemaVersion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Injected by the validator; documents do not write this field in markdown."
+    },
+    "nodeId": {
+      "type": "string",
+      "pattern": "^(root|[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*)$",
+      "description": "Absolute node ID derived from file path."
+    },
+    "parentId": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ],
+      "description": "Absolute node ID of this node's parent, or null for the root node."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "First # heading in the document."
+    },
+    "status": {
+      "enum": [
+        "DRAFT",
+        "SPEC_REVIEW",
+        "APPROVED",
+        "IN_PROGRESS",
+        "VERIFY",
+        "COMPLETE",
+        "ISSUE_OPEN",
+        "PLANNED"
+      ],
+      "description": "Normalized lifecycle status (uppercase, hyphens replaced with underscores)."
+    },
+    "statusAnnotation": {
+      "type": "string",
+      "description": "Optional parenthetical annotation from the **Status:** line, e.g. 'v1, 2026-05-23'."
+    },
+    "created": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO 8601 date from **Created:** front-matter line."
+    },
+    "lastUpdated": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO 8601 date from **Last Updated:** front-matter line; trailing parenthetical dropped."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Backtick-delimited IDs from **Dependencies:** front-matter line. Empty for '—' or absent."
+    },
+    "sections": {
+      "type": "object",
+      "required": [
+        "Requirements",
+        "Design",
+        "Decisions",
+        "Open Issues",
+        "Implementation Notes",
+        "Verification",
+        "Children"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "Requirements":         { "type": "string" },
+        "Design":               { "type": "string" },
+        "Decisions":            { "type": "string" },
+        "Open Issues":          { "type": "string" },
+        "Implementation Notes": { "type": "string" },
+        "Verification":         { "type": "string" },
+        "Children":             { "type": "string" }
+      },
+      "description": "Map of section heading → raw markdown body. additionalProperties allows dated audit sections."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relId", "title", "dependsOn", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "relId": {
+            "type": "string",
+            "description": "Relative child ID as written in the manifest table."
+          },
+          "title": {
+            "type": "string",
+            "description": "Child title from the manifest table."
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Relative sibling IDs this child depends on."
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "SPEC_REVIEW",
+              "APPROVED",
+              "IN_PROGRESS",
+              "VERIFY",
+              "COMPLETE",
+              "ISSUE_OPEN",
+              "PLANNED"
+            ]
+          }
+        }
+      },
+      "description": "Parsed manifest rows from the ## Children section. Empty array for leaf docs with 'None.'"
+    }
+  }
+}
