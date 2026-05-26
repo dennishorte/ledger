@@ -2,9 +2,9 @@
 
 **Node ID:** `02-schema`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (spec review applied)
 
 **Dependencies:** —
 
@@ -16,15 +16,15 @@ Make the document schema a **first-class versioned artifact** in the repo, repla
 
 In scope for v1:
 
-1. **A canonical JSON Schema file** in the document tree (`docs/_schemas/document-node.schema.json`) describing the required front-matter fields, allowed status values, required section headings, and the children-manifest row shape. Schema version is declared inline and is durable across future revisions.
-2. **A TypeScript validator** that takes a markdown string + source path and returns either a typed `DocNode` (matching the schema) or a structured list of validation errors. Validator is built on `ajv` (draft 2020-12); the schema file is the single source of truth — the validator loads it, does not duplicate it.
+1. **A canonical JSON Schema file** in the document tree (`docs/_schemas/document-node.schema.json`) describing the required front-matter fields, allowed status values, required section headings, and the children-manifest row shape. Schema version is declared inline and is durable across future revisions. **Scope:** the schema describes *leaf implementation nodes* only — see Out-of-scope item below for how root (`00-project.md`) and parent docs (`01-ui/00-ui.md`) are handled in v1.
+2. **A TypeScript validator** that takes a markdown string + source path and returns either a typed `DocumentNode` (matching the schema) or a structured list of validation errors. Validator is built on `ajv` (draft 2020-12); the schema file is the single source of truth — the validator loads it, does not duplicate it.
 3. **A markdown → candidate extractor** that produces the JSON shape the schema validates. Replaces the per-field regex tangle inside today's `parseDocs.ts` with a single extraction pass whose output is then validated.
-4. **Tests** (`*.test.ts`) covering the extractor and validator against representative fixtures: a fully-conformant doc, every required-field-missing case, every status-enum edge, malformed manifest rows, and the parenthetical-annotation status cases that today's `normalizeStatus()` handles silently. This closes PRD §11's "no `parseDocs.test.ts`" finding on the same artifact that closes the implicit-schema finding (PRD §11 explicitly notes they should land together).
-5. **`parseDocs.ts` rebuilt on top of the validator.** The build-time `loadDocNodes()` entry point and `idForPath()` helper retain their current external API — every panel that imports them keeps working unchanged. Internally, they call the new extractor + validator and surface a typed error list to the console (and a single panel-level banner; see D9) for any doc that fails validation, so a malformed doc degrades visibly rather than silently.
-6. **Vitest installed and wired** as the test runner for `app/`. Today the app has no test runner; this node introduces it because the schema and validator are pointless without enforced tests.
+4. **Tests** (`*.test.ts`) covering the extractor and validator against representative fixtures: a fully-conformant doc, every required-field-missing case, every status-enum edge, malformed manifest rows, and the parenthetical-annotation status cases that today's `normalizeStatus()` handles silently. Plus a `parseDocs.test.ts` that runs `loadDocNodes()` against the real `docs/` tree and asserts zero validation errors across every leaf doc the parser surfaces. This closes PRD §11's "no `parseDocs.test.ts`" finding on the same artifact that closes the implicit-schema finding (PRD §11 explicitly notes they should land together).
+5. **`parseDocs.ts` rebuilt on top of the validator.** The build-time `loadDocNodes()` entry point and `idForPath()` helper retain their current external API — every panel that imports them (`02-dag`'s `useDocGraph`, `03-docs`'s `useDocSource`, `06-health`'s `useHealthData` via the previous two) keeps working unchanged. Internally, they call the new extractor + validator and surface a typed error list to the console (and a single dev-only topbar banner; see D9) for any doc that fails validation, so a malformed doc degrades visibly rather than silently.
 
 **Out of scope for this node:**
 
+- **Root and parent-of-decomposed-node docs.** `docs/00-project.md` (PRD root) uses numbered top-level headings (`## 1. Problem Statement`, `## 14. Children`, etc.); `docs/01-ui/00-ui.md` (UI parent) is missing `Verification` because parents don't go through implementation themselves. Neither matches the leaf-shaped section list. v1 schema validates *leaf implementation nodes only*; the extractor skips root + parent docs by `parentId === null` or "the node has children in the manifest" — those don't go through the validator at all. A v2 parent-doc schema variant is logged as an Open Issue. This honors D2 (no doc rewrites) and matches the precedent already set by `01-ui/09-workflow-progress` (parent nodes there have a two-stage variant, not the full leaf six-stage shape).
 - **Cross-document consistency checks** (cycle detection in `parentId` / `dependsOn`, manifest-row-status drift against the child doc's authored status, orphan nodes). These are tree-level invariants, not per-document schema concerns; they belong in the API server's read path (`04-api-server`) or a dedicated `validateDocTree(nodes)` pass. Listed in §Open Issues.
 - **Schema for the project metadata file** (`.ledger/project.json`). That is `03-project-metadata`'s deliverable.
 - **Schema for tasks, events, or runtime state.** Those belong in `05-task-runner`. v1 schema describes *documents only*.
@@ -131,7 +131,7 @@ The extractor (`parseDocNode.ts`) converts markdown to the candidate JSON. The e
 | `nodeId` | Derived from file path. `docs/00-project.md → root`; `docs/<dir>/00-<slug>.md → <dir>`; otherwise `docs/<rel>.md → <rel without .md>`. The `**Node ID:** \`…\`` line in the body is a redundant secondary source — extractor cross-checks the two; mismatch is a validation error. |
 | `parentId` | The `**Parent:**` front-matter line. Special case: `project root (\`docs/00-project.md\`)` → `"root"`. Otherwise the first backticked id. If absent, the extractor derives from path segments. `nodeId === "root"` ⇒ `parentId: null`. |
 | `title` | First `# …` heading. |
-| `status` | First whitespace-delimited token of the `**Status:**` line, uppercased, with `-` → `_`. Must match the enum. |
+| `status` | First whitespace-delimited token of the `**Status:**` line; normalized to uppercase and `-` → `_` before enum matching (consistent with today's `normalizeStatus()`). Case-insensitive input is accepted; enum matching always runs against the normalized form. Mixed-case inputs like `Draft` validate as `DRAFT`. |
 | `statusAnnotation` | The contents of the first `(…)` parenthetical on the `**Status:**` line, if any. Free-form string. |
 | `created` | `**Created:**` line, must be ISO date (`YYYY-MM-DD`). |
 | `lastUpdated` | `**Last Updated:**` line, ISO date — trailing `(notes)` parenthetical allowed and dropped during extraction. |
@@ -139,7 +139,7 @@ The extractor (`parseDocNode.ts`) converts markdown to the candidate JSON. The e
 | `sections` | Every `## Heading` opens a section; the section body is everything from the heading to the next `## ` (exclusive) or EOF. The seven required headings must be present (string-exact match). |
 | `children` | Inside the `## Children` section, the markdown table rows of shape `\| \`relId\` \| title \| deps \| status \|`. The literal `—` in `deps` → empty array; backticked ids in `deps` → the array. Section body literal `None.` ⇒ empty children array. |
 
-The extractor is a pure function — no React, no Vite globs, no filesystem access. It takes `(filePath: string, raw: string)` and returns `unknown` (the candidate JSON). All schema enforcement happens in the validator step.
+The extractor is a pure function — no React, no Vite globs, no filesystem access. It takes `(filePath: string, raw: string)` and returns `unknown` (the candidate JSON), or `null` when the path is outside the validation scope. `null` is returned for paths whose `docs/`-relative portion starts with `process/` or `_schemas/` (mirrors the existing `process/` skip at `parseDocs.ts:106`) and for root + parent docs (see the out-of-scope item above) — those are identified by `pathToNodeId` returning `"root"` or by the parsed doc's `**Parent:**` line. All schema enforcement happens in the validator step.
 
 ### Validator
 
@@ -166,7 +166,7 @@ const compile = ajv.compile<DocumentNode>(schema);
 export function validateDocNode(candidate: unknown): ValidationResult { … }
 ```
 
-The `DocumentNode` TS interface is hand-written in `app/src/lib/schema/types.ts` to mirror the schema. v1 keeps the schema and the TS interface in lockstep manually; codegen via `json-schema-to-typescript` is logged as Open Issue.
+The `DocumentNode` TS interface is hand-written in `app/src/lib/schema/types.ts` to mirror the schema. `NodeStatus` and `NodeId` are **re-exported from `src/lib/types.ts`** — they are already canonical there (shipped by `02-dag` D4) and the schema module must not redeclare them. `DocumentNode` is a *superset* of `DocNode`: it carries the full validated front-matter + sections + manifest-row payload; `parseDocs.ts`'s merge pass projects `DocumentNode → DocNode` for panel consumers. v1 keeps the JSON Schema and the `DocumentNode` interface in lockstep manually; codegen via `json-schema-to-typescript` is logged as Open Issue.
 
 Validator errors are returned, never thrown. `parseDocs.ts` collects them.
 
@@ -200,44 +200,42 @@ The merge / manifest pass / `dependsOn` resolution logic stays as-is; only the p
 
 A future panel (or `06-health`) can surface validation errors prominently; for v1 the console error + a single small banner in the topbar (see D9) is enough.
 
-### Vitest setup
+### Test infrastructure (Vitest already present)
+
+Vitest is already installed (`vitest ^4.1.7` in `app/package.json`) and configured in `app/vite.config.ts` with two projects (`server` and `client`); `pnpm -C app test` already exists as a script and runs `vitest run`. This node adds no new test infrastructure — the new `src/lib/schema/*.test.ts` and `src/lib/parseDocs.test.ts` files are picked up automatically by the existing `client` project's `src/**/*.test.{ts,tsx}` include pattern. The leaf-workflow's stage-4 implementation gate should run `pnpm -C app test` alongside `typecheck` / `lint` / `build`; this spec proposes that addition.
 
 ```
-app/
-  package.json                # add vitest, @vitest/ui, jsdom devDependencies
-  vitest.config.ts            # minimal: extends vite.config.ts; environment: "node"
-  src/lib/schema/
-    parseDocNode.ts
-    parseDocNode.test.ts
-    validateDocNode.ts
-    validateDocNode.test.ts
-    types.ts
-    fixtures/
-      conformant.md           # representative full doc
-      missing-status.md
-      bad-status-enum.md
-      missing-section.md
-      malformed-manifest.md
-      annotated-status.md     # exercises the parenthetical case
+app/src/lib/schema/
+  parseDocNode.ts
+  parseDocNode.test.ts
+  validateDocNode.ts
+  validateDocNode.test.ts
+  types.ts
+  fixtures/
+    conformant.md           # representative full leaf doc
+    missing-status.md
+    bad-status-enum.md
+    missing-section.md
+    malformed-manifest.md
+    annotated-status.md     # exercises the parenthetical case
+    mixed-case-status.md    # `Draft` → `DRAFT` normalization
 ```
 
-`pnpm -C app test` runs vitest in CI mode. The leaf-workflow's stage-4 implementation gate adds `pnpm -C app test` alongside `typecheck` / `lint` / `build`; this spec proposes that addition.
+`parseDocs.test.ts` lives one level up (`src/lib/parseDocs.test.ts`) and asserts that calling `loadDocNodes()` against the real `docs/` tree (via `import.meta.glob` in jsdom) returns at least the current leaf-node count with zero validation errors emitted. This is the test that closes PRD §11's "no `parseDocs.test.ts`" finding.
 
 ### Files added / modified
 
 ```
 docs/_schemas/document-node.schema.json     [new]
-app/src/lib/schema/types.ts                  [new]
+app/src/lib/schema/types.ts                  [new — DocumentNode; re-exports NodeStatus/NodeId from src/lib/types.ts]
 app/src/lib/schema/parseDocNode.ts           [new]
 app/src/lib/schema/parseDocNode.test.ts      [new]
 app/src/lib/schema/validateDocNode.ts        [new]
 app/src/lib/schema/validateDocNode.test.ts   [new]
 app/src/lib/schema/fixtures/*.md             [new]
-app/src/lib/parseDocs.ts                     [modified — internals only]
+app/src/lib/parseDocs.ts                     [modified — internals only; loadDocNodes/idForPath external API unchanged]
 app/src/lib/parseDocs.test.ts                [new — closes PRD §11 finding]
-app/package.json                             [modified — add ajv, ajv-formats, vitest, @vitest/ui]
-app/vitest.config.ts                         [new]
-app/vite.config.ts                           [modified — add `_schemas` to `server.fs.allow` if needed for json import]
+app/package.json                             [modified — add ajv, ajv-formats only; Vitest already present]
 docs/00-project.md                           [modified — §14 status row]
 ```
 
@@ -251,7 +249,7 @@ A reviewer running the worktree must observe:
 4. Every authored doc in the current tree (`00-project`, `01-ui/00-ui` through `01-ui/10-orchestration`, `02-schema` itself) passes validation. No doc in the tree is rewritten by this node — if any doc fails, the doc is fixed by hand and the change is committed alongside, with the audit table updated.
 5. The `/dag` panel still renders all current + planned nodes. The `/health` panel still surfaces issues. The `/docs/:nodeId` viewer still renders. No visible behavioral regression in any panel.
 6. A deliberate corruption (e.g. delete a `**Status:**` line from a fixture, run the test suite) produces a structured `ValidationError` with a useful `path` and `message`.
-7. The topbar (or wherever D9 places the banner — see Decisions) shows a single muted "1 doc failed validation: <id>" indicator when run against a fixture with a known-bad doc loaded; clears when the corruption is reverted.
+7. The topbar shows a single muted "1 doc failed validation: <id>" indicator when run against a fixture with a known-bad doc loaded; clears when the corruption is reverted.
 8. `parseDocs.ts` still exports `loadDocNodes()` and `idForPath()` with their existing signatures. Grep for callers confirms no import-site changes.
 
 ---
@@ -285,6 +283,27 @@ A reviewer running the worktree must observe:
 - **Validation error reporting in the UI.** D9 settles on a topbar banner. A dedicated `/health` row or `06-health` widget surfacing the failing docs and their structured errors is a natural extension; defer until validation failures actually start happening in practice. *(Priority: LOW.)*
 - **`ajv` bundle cost.** Adds ~30 KB gzip (D6). Acceptable today; revisit when the build-time validator is replaced by an API-server validator and the browser no longer needs ajv. *(Priority: LOW.)*
 - **Dependency declaration is one-directional.** The schema captures `dependencies` in the dependent's doc front-matter (used by `01-ui/06-health.md`) *and* `dependsOn` in the parent's manifest row (used by every authored child today). These can drift. Long-term, one should be derived from the other. Open question: is the parent manifest the canonical source (today's reality) and the front-matter line redundant? *(Priority: MEDIUM — affects schema clarity.)*
+- **Parent-doc schema variant.** v1 excludes root (`00-project.md`) and parent docs (`01-ui/00-ui.md`) from validation because their section structure differs from leaf nodes (root uses numbered sections; parents lack `Verification`). A v2 schema should introduce a *variant* (or three sibling schemas: root / parent / leaf) so the tree is fully covered. Precedent for the leaf/parent split already exists in `01-ui/09-workflow-progress` (two-stage parent variant). Until v2, root and parent docs are unvalidated — manifest drift on those docs is not caught. *(Priority: MEDIUM — surfaces when an operator typos a section heading on a parent doc.)*
+
+---
+
+## Spec Review (2026-05-25)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context immediately after authoring. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Five should-fixes (three mechanical, one substantive scope question raised to the operator, one factual correction) and four nits. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | Spec claimed "today the app has no test runner" and proposed `app/vitest.config.ts`. Vitest is already installed (`vitest ^4.1.7`) and configured in `vite.config.ts` with two projects; `pnpm -C app test` already exists. | Rewrote in-scope #6 → renamed §"Vitest setup" → §"Test infrastructure (Vitest already present)". Removed `app/vitest.config.ts` from the files-added list. Trimmed `app/package.json` modification to ajv + ajv-formats only. New schema test files are picked up automatically by the existing `client` project's `src/**/*.test.{ts,tsx}` include pattern. |
+| S2 | Required-sections list would reject `00-project.md` (numbered headings) and `01-ui/00-ui.md` (no `Verification`) on day one, contradicting D2's "no doc rewrites." | Substantive scope decision: operator confirmed **leaf-only validation in v1** (chose option 1 of three presented). Added an out-of-scope bullet explicitly excluding root + parent docs; logged a new Open Issue for a v2 parent-doc schema variant; added a Design > Extractor note that root + parent docs return `null` from the extractor and never reach the validator. Precedent cited: `01-ui/09-workflow-progress` already runs a two-stage parent variant alongside the leaf six-stage shape. |
+| S3 | The `_schemas/` skip rule was implied but never tied to a concrete code location an implementer could match. | Extended the extractor pure-function description: `parseDocNode` returns `null` for paths whose `docs/`-relative portion starts with `process/` or `_schemas/` — mirrors the existing `process/` skip at `parseDocs.ts:106`. |
+| S4 | `schema/types.ts` introduced `DocumentNode` but didn't reconcile with existing `NodeStatus` / `NodeId` / `DocNode` in `src/lib/types.ts`. Implementer would either redeclare (drift) or import (unexpected coupling) without guidance. | Added explicit sentence in §Validator: `NodeStatus` and `NodeId` re-export from `src/lib/types.ts` (canonical there per `02-dag` D4); `DocumentNode` is a *superset* of `DocNode`; `parseDocs.ts` projects `DocumentNode → DocNode` in the merge pass. Updated files-added line for `schema/types.ts` to note the re-export. |
+| S5 | Extractor table for `status` said "Must match the enum" but the existing parser also `.toUpperCase()`s and `-` → `_` normalizes. Implementer might handle case in code but not in the schema, or vice versa. | Rewrote the status row of the encoding table to explicitly state: normalization (uppercase + `-` → `_`) runs before enum matching; case-insensitive input is accepted; `Draft` → `DRAFT`. |
+| N1 | Reviewer cross-checked the `nodeId` regex `^(root|[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*)$` against every current node id (`root`, `02-schema`, `01-ui`, `01-ui/02-dag`, etc.). | No action — regex is correct. |
+| N2 | Verification item #7 hedged "topbar (or wherever D9 places the banner)" — undermined the decision D9 had already made. | Hedge removed; reads "The topbar shows…" |
+| N3 | Verification item #5 listed UI panels generically without naming the consumer hooks. | Each panel now names its consumer hook (`useDocGraph`, `useHealthData`, `useDocSource` + `idForPath`); `/tasks` and `/logs` flagged as non-consumers (smoke-check only). |
+| N4 | `parseDocs.test.ts` listed in files but never described — implementer might write a trivial smoke test that doesn't actually close the PRD §11 finding. | Test infrastructure section now specifies what `parseDocs.test.ts` asserts: `loadDocNodes()` against the real tree returns ≥ current leaf-node count with zero validation errors. |
+
+Nothing was punted. S2 was the only finding that required operator judgment; the operator chose the smallest scope (leaf-only validation) and the resulting Open Issue is logged. The remaining eight findings are mechanical or factual.
 
 ---
 
@@ -303,10 +322,10 @@ When this node moves to `VERIFY`, the verifier confirms:
 3. `pnpm -C app test` exits zero with the schema, validator, and parseDocs test suites passing.
 4. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. Bundle delta is reported in Implementation Notes.
 5. Every UI panel that consumes `parseDocs.ts` continues to render correctly:
-   - `/dag` shows the full graph with all current + planned nodes.
-   - `/health` lists open issues and stale nodes.
-   - `/docs/:nodeId` renders documents.
-   - `/tasks` and `/logs` continue to function (they don't consume parseDocs directly but share infra).
+   - `/dag` (`02-dag` via `useDocGraph` → `loadDocNodes`).
+   - `/health` (`06-health` via `useHealthData` → `useDocGraph`).
+   - `/docs/:nodeId` (`03-docs` via `useDocSource` + `idForPath`).
+   - `/tasks` and `/logs` (`04-tasks`, `05-logs` — do not consume `parseDocs` directly; smoke-check that they still render).
 6. Deliberately corrupting a fixture (delete a required heading, malform a status enum, drop the `**Created:**` line) produces a structured validation error with an informative `path` and `message`. Reverting the corruption clears the error.
 7. The dev-only banner (D9) shows the failing-doc count when a fixture is corrupted; clears when fixed; does not display in normal operation against the real tree.
 8. Inspect `app/src/lib/parseDocs.ts` after the refactor: external API (`loadDocNodes`, `idForPath`) unchanged; per-field regex extraction replaced by a single call into `parseDocNode` + `validateDocNode`.
