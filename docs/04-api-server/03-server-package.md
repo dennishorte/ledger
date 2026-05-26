@@ -657,6 +657,7 @@ A reviewer running the worktree must observe:
 - **`error` field shape on 404 isn't typed.** `{ error: "node not found" }` is ad-hoc. A typed `APIError` envelope (`{ error: { code, message, details? } }`) would tighten the contract. Inherited from parent. *(Priority: LOW.)*
 - **`assertContained` allows symlink escapes.** `node:path.relative` does not follow symlinks; a `docsRoot/symlink` that points outside the project would pass `assertContained` and then `fs.readFile` would happily read the linked target. The mitigation is `fs.realpath` on both sides before the relative check. Worth doing if the threat model ever includes hostile project metadata; today's threat model is "single-user local-only" so the operator's symlinks are trusted. *(Priority: MEDIUM — matches the originating priority on `03-project-metadata`'s "docs path validation" handoff; Spec Review N1 surfaced the under-tagging.)*
 - **Dev-boot block lives in `server.ts`.** D9 makes it convenient but co-locates the entrypoint with the library factory. A purist would split them. If/when the boot block grows beyond ~20 lines, splitting is right. *(Priority: TRIVIAL.)*
+- **`idForPath` key-format ambiguity** (Implementation Review follow-up). `idForPath` from `@ledger/parser` requires its input to start with `"docs/"` (it's calibrated to author-written paths like `"docs/01-leaf.md"`), but `readDocsTree`'s output keys are docs-relative (`"01-leaf.md"`). The server's `findRawDocForNodeId` helper prepends `"docs/"` before each call as a local workaround. Cleaner long-term: either (a) add a `idForDocsRelPath(sub: string): NodeId | null` overload to the parser's public surface for the docs-relative case, or (b) document `idForPath`'s expected input form in JSDoc so downstream consumers see the contract without reading the implementation. *(Priority: LOW — the workaround is correct and covered by tests; revisit when a second consumer needs the docs-relative form.)*
 
 ---
 
@@ -776,7 +777,28 @@ Server started via `pnpm -C server dev /path/to/worktree`.
 
 ### Total workspace test count
 
-153 tests across 13 test files (55 parser + 29 server + 69 app).
+153 tests across 13 test files (55 parser + 29 server + 69 app). Implementation Review SF rewrote one existing context test in-place to cover the previously-untested schema-validation branch — coverage improved, count unchanged.
+
+### Implementation Review (2026-05-26)
+
+Independent implementation review run in a clean Sonnet context against the worktree diff. Verdict: APPROVE — promote to COMPLETE. All headless gates green; live smoke covered all seven spec endpoints with correct status codes; all S1-S5 audit closures verified honored. One should-fix and two nits. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| SF | `context.test.ts`'s "rejects invalid metadata (schema validation failure)" test was misleadingly named — it actually tested path containment (using the escape-project fixture), leaving the `loadProjectContext` schema-validation branch (`if (!result.ok) throw new ContextError(..., result.errors)`) without a dedicated test. | Added `server/__fixtures__/invalid-metadata-project/.ledger/project.json` (valid JSON but missing the required `name` field). Rewrote the existing test in-place to load that fixture and assert `ContextError` is thrown with `errors.length > 0` and at least one error mentioning the `name` field. Test count unchanged (29) but the schema-validation branch is now genuinely covered. |
+| N-1 | `typecheck` script uses `tsc --noEmit` which excludes test files (per tsconfig.json's `include`). ESLint partially compensates by running on test files too. | No edit — pattern matches `packages/parser`'s sibling decision. Type-safety in tests is enforced by lint's `strictTypeChecked` config; the cost of dual-pathing tsc (`--noEmit` for src and a separate run for tests) is not worth the marginal coverage gain at this scope. |
+| N-2 | `assertContained`'s `rel === "" || rel === "."` short-circuit allowing `candidate === parent` is documented as intentional (for `readDocs`'s root self-check) but lacked an inline code comment. | Added one-line comment at `pathSafety.ts:14` explaining the carve-out. |
+
+Cross-cutting follow-up logged as Open Issue: `idForPath` key-format ambiguity (Decision-beyond-spec #3) — Recommended fix is either an `idForDocsRelPath` parser-export overload or clearer JSDoc on `idForPath`'s expected input form. Marked LOW priority since the local workaround is correct and test-covered.
+
+Re-ran gates after audit edits:
+- `pnpm -C server typecheck` → 0
+- `pnpm -C server lint --max-warnings=0` → 0
+- `pnpm -C server test` → 0 (29 tests, unchanged; the SF rewrite replaced a misleading test in-place rather than adding a new one)
+- `pnpm -C server build` → 0
+- All workspace gates re-confirmed green; total workspace test count 153 (unchanged).
+
+Nothing punted. SF and N-2 mechanical; N-1 declined with rationale.
 
 ---
 
