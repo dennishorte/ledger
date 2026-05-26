@@ -416,6 +416,27 @@ The following items require the operator to run both servers and observe in a br
 5. **Item 8** — No CORS errors in DevTools Console.
 6. **Server start path** — `pnpm -C server dev /Users/dennis/code/ledger` (dev-boot block in `server/src/server.ts` present as of `03-server-package` COMPLETE). If `04-cli-launcher` has also merged, try `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` instead.
 
+### Implementation Review (2026-05-26)
+
+Independent implementation review run in a clean Sonnet context against the rebased worktree diff. Verdict: APPROVED — merge as-is. All headless gates green; both SF1 (`refetchOnWindowFocus: false` inherited from `main.tsx:13` global) and SF2 (`.test.tsx` extension) closures verified; closure note on `03-project-metadata.md` verified with correct attribution. Zero blockers, zero should-fixes, three no-action nits.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| N-1 | `waitFor` brace-style is consistent across tests 1, 3, 4 (block-body arrows); test 2 has no `waitFor` (synchronous placeholder assertion — intentional). | No action — patterns are correct as-is. |
+| N-2 | `mockNodes` shape in test 1 includes `authored: true` field not in the spec snippet — correct because `DocNode` from `@ledger/parser` requires it; spec snippet would have produced a type error. | No action — the type-correct shape is what's checked in. Worth noting as a Decision beyond spec for future readers; landed inline in the test. |
+| N-3 | Spec's own SF4 concern (misleading staleTime test comment) was about a comment the implementer simply did not write — there's nothing to fix. | No action — confirmation finding. |
+
+The reviewer flagged the **four-commit pattern** (4a, 4b, 4b-addendum, 4c) as non-standard but justified: the worktree was created at `459aba9` (post-`01-workspace-conversion` merge) before sibling children `02-parser-extraction` and `03-server-package` landed; the rebase onto `94bfe29` was necessary to consume the parser-extracted `@ledger/parser` types. The addendum commit corrects `import type { DocNode } from "@/lib/types"` → `import type { DocNode } from "@ledger/parser"` plus stale-doc fix-ups in Implementation Notes. Reviewer recommended **not squashing** — the addendum preserves rebase-history clarity. Operator concurred.
+
+Decision-beyond-spec additions evaluated by the reviewer (all sound):
+- `globalThis` instead of `global` for `vi.spyOn` (TS DOM lib doesn't expose `global`)
+- `res.status.toString()` in template literal (lint rule `restrict-template-expressions`)
+- `waitFor` brace-wrapping (lint rule `no-confusing-void-expression`)
+
+Gates re-confirmed green by the reviewer (independent run): `app` typecheck/lint/test (73)/build all exit 0. Bundle: 531.83 KB gzip (within spec's "<1 KB delta" expectation).
+
+Nothing punted. Manual gates 4-8 correctly deferred to operator stage 8 per spec D9 (CLAUDE.md) and item-11 (CLAUDE.md deferred to parent's stage-10 merge).
+
 ---
 
 ## Verification
