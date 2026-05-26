@@ -380,6 +380,8 @@ A reviewer running the worktree must observe:
 - **No `--version` flag.** Inherited convention question. Adding `--version` that reads from `package.json` is trivial; deferred until a versioning story exists (current `0.1.0` is a placeholder for unreleased private packages). *(Priority: TRIVIAL.)*
 - **CLI test environment vs CI.** Subprocess tests work locally on the developer's machine. In a future CI environment, `pnpm -C server build` must run before `pnpm -C server test` (the `beforeAll` does this, but CI configs sometimes split `build` and `test` into separate steps and miss the order). Document in CI setup when it lands. *(Priority: LOW — no CI today.)*
 - **Test for SIGTERM shutdown.** D7 handles both SIGINT and SIGTERM, but the test suite only exercises SIGINT (the test sends `proc.kill("SIGINT")`). Adding a SIGTERM equivalent is one line; deferred to keep the test surface tight. *(Priority: TRIVIAL.)*
+- **`localhost` vs `127.0.0.1` IPv4/v6 ambiguity in the printed URL.** The server binds `127.0.0.1` explicitly (IPv4-only), but the stdout message + `open(url)` call use `http://localhost:${port}/`. On dual-stack systems where `localhost` → `::1` (IPv6 first), the browser would try the IPv6 address and fail to reach the IPv4-only listener. macOS today resolves `localhost` → `127.0.0.1` by default so this is a non-issue locally; Linux CI environments may surface it. Tests use `127.0.0.1` directly and are unaffected. Implementation Review N1. *(Priority: LOW — surfaces on dual-stack Linux; one-line fix is to use `127.0.0.1` in the URL.)*
+- **URL regex in `bin.test.ts`** matches the first `:digits/` pattern in the boot line, which would mismatch if a project's `name` ever contained `:digits/`. Current fixtures don't; low-risk. Implementation Review N3. *(Priority: TRIVIAL.)*
 
 ---
 
@@ -464,6 +466,32 @@ Nothing punted. SF1 and SF2 are mechanical TypeScript fixes; SF3 is a small spec
 - Root `package.json` gains `@ledger/server: workspace:*` to wire the `ledger` bin via pnpm's standard mechanism. The spec says "pnpm symlinks the compiled `dist/bin/ledger.js` into `node_modules/.bin/ledger`" — this is the required pnpm-workspace mechanism to achieve that.
 - Parser `.js` extension fix: bug in `02-parser-extraction` (extensionless imports break native Node ESM). Necessary for CLI correctness; documented here rather than raising as ISSUE_OPEN since the fix is contained and verified.
 
+### Implementation Review (2026-05-26)
+
+Independent implementation review run in a clean Sonnet context against the worktree diff. Verdict: APPROVED for COMPLETE (with three process-required follow-ups before promotion). All 162 workspace tests pass, every SF audit closure verified, all three decisions-beyond-spec evaluated. The reviewer flagged that Decision #1 violates `01-workspace-conversion` D2 silently and Decision #2 touches a COMPLETE-on-main sibling without a backward pointer — both real process concerns that the framework's discipline guards against. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| Process #1 | Decision #1 (root `package.json` adds `@ledger/server: workspace:*`) violates `01-workspace-conversion` D2 ("Root `package.json` carries no runtime dependencies, only workspace-level scripts"). Silent COMPLETE-node deviation is what the framework explicitly guards against. Operator-decision: amend D2 with a bin-wiring carve-out, OR move the dep to `app/`. | **Operator chose amend D2.** Updated `docs/04-api-server/01-workspace-conversion.md`'s D2 row with the carve-out: "Exception: packages that declare a `bin` entry may be listed at the root so pnpm wires `node_modules/.bin/<bin>` for workspace-wide invocation via `pnpm exec <bin>`." Rationale recorded in this commit's audit row — pnpm's actual semantics require the root to be the consumer; locating the dep in `app/` would be semantically wrong since the binary is workspace-wide. |
+| Process #2 | Decision #2 (parser `.js` extension fix) modifies code in `02-parser-extraction` (COMPLETE on main) without a backward pointer in that node. The cross-spec workflow isn't covered explicitly by leaf-workflow; default posture: document in both nodes. | Added a "Follow-up patch (2026-05-26)" subsection to `docs/04-api-server/02-parser-extraction.md` Implementation Notes recording the bug, explaining why the original SF1 smoke-test was too narrow (loaded `validateDocNode.js` directly, whose only relative import is type-only and erased at TS emit), and noting the contained fix. |
+| Process #3 | This spec's Verification item 9 reads as a hard zero-diff invariant for `packages/parser/` but Decision #2 violates it. | Rewrote item 9 to carve out the four documented changes: the parser `.js`-extension fix (5 files), the root `package.json` workspace dep, the `01-workspace-conversion.md` D2 amendment, and the `02-parser-extraction.md` backward-pointer subsection. The remaining listed paths (`app/`, `docs/_schemas/`, `.ledger/`, etc.) stay strict zero-diff. |
+| S1 | (Same as Process #3 — verification gate text.) | Resolved above. |
+| S2 | `--help` → stdout, errors → stderr asymmetry is correct POSIX convention but not called out in Implementation Notes. | No edit — informational nit. The CLI snippet implements the asymmetry correctly. |
+| S3 | 4a and 4c commits have identical file-sets (both touch only the spec doc + manifest row). | No action — this is the prescribed leaf-workflow pattern for status-only transitions. |
+| N1 | `url` variable uses `localhost` (line 106) but `serve()` binds `127.0.0.1`. On dual-stack Linux where `localhost` → `::1`, the printed URL is unreachable. macOS today is fine. | Logged as Open Issue (Priority LOW); one-line fix is to use `127.0.0.1` in the URL. Not blocking — surfaces only on Linux CI environments. |
+| N2 | Workspace `pnpm test` shows "3 of 4 workspace projects" — root is skipped because it has no `test` script. | No edit — informational, correct behavior. |
+| N3 | URL regex `/:(\d+)\//` in `bin.test.ts` would mismatch if a project's `name` contained `:digits/`. | Logged as Open Issue (Priority TRIVIAL); current fixtures don't trigger it. |
+
+Re-ran gates after the three process-required edits (all doc-only — no code touched):
+- `pnpm -C server typecheck` → 0
+- `pnpm -C server lint --max-warnings=0` → 0
+- `pnpm -C server test` → 0 (38 tests, unchanged)
+- `pnpm -C app test` → 0 (69 tests, unchanged)
+- `pnpm -C packages/parser test` → 0 (55 tests, unchanged)
+- Workspace `pnpm test` → 0 (162 total, unchanged)
+
+Nothing punted. Process #1 was operator-decision; the chosen amendment preserves the working `pnpm exec ledger` invocation and is honest about pnpm's semantics. The two new Open Issues (localhost-vs-127.0.0.1 + URL regex) capture the nits as durable follow-ups.
+
 ---
 
 ## Verification
@@ -491,7 +519,7 @@ When this node moves to `VERIFY`, the verifier confirms:
    - `pnpm exec ledger --help` exits 0; stdout contains `usage: ledger`.
    - `LEDGER_PORT=0 pnpm exec ledger /Users/dennis/code/ledger --no-open` boots on an OS-assigned port (visible in stdout); SIGINT shuts down cleanly.
 8. **Headless-environment safety (D5):** if `DISPLAY` is unset on Linux (or via `env -i pnpm exec ledger ... --port 4180` to clear env), the server still boots; stderr shows the browser-open failure message; the URL is printed; the server keeps running until SIGINT. (This may be skipped on macOS where `open` succeeds without `DISPLAY`.)
-9. **`app/`, `packages/parser/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched. `git diff main..HEAD -- app/ packages/parser/ docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server/00-api-server.md docs/01-ui/` shows only the `04-api-server/00-api-server.md` §Children manifest-row status bump for this child.
+9. **`app/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched **except**: (a) `packages/parser/src/**/*.ts` carries the `.js`-extension fix documented in §Implementation Notes (5 files; necessary for native Node ESM resolution of compiled CLI imports; bug from `02-parser-extraction`'s narrow smoke test); (b) root `package.json` adds `@ledger/server: workspace:*` per the Implementation Review's amendment to `01-workspace-conversion` D2 (bin-wiring carve-out); (c) `docs/04-api-server/01-workspace-conversion.md` D2 amended with the carve-out prose; (d) `docs/04-api-server/02-parser-extraction.md` Implementation Notes gains a backward-pointer subsection recording the `.js`-extension patch. `git diff main..HEAD` for `app/`, `docs/_schemas/`, `.ledger/`, `docs/00-project.md`, `docs/02-schema.md`, `docs/03-project-metadata.md`, `docs/01-ui/` is empty.
 10. **The dev-boot block in `03-server-package`'s `server/src/server.ts` is deleted by this child.** Spec Review SF3: the criterion is "the CLI binary is now the canonical entrypoint; the dev-boot block was a pre-CLI workaround." Deleting it removes the dead-code-paths-with-no-tests concern and forces every invocation (including `pnpm -C server dev`) through the same `parseCliArgs` + `loadProjectContext` chain. Update `server/package.json`'s `dev` script: `"dev": "tsx watch src/bin/ledger.ts"` (was `"dev": "tsx watch src/server.ts"` per `03-server-package`'s D9). The implementer records the deletion in Implementation Notes.
 11. `04-api-server/00-api-server.md` §Children manifest row for `04-cli-launcher` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 
