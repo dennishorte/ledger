@@ -62,10 +62,10 @@ export function validateProjectMetadata(parsed: unknown): ProjectMetadataResult 
 }
 
 /**
- * Load and validate .ledger/project.json.
- *
- * Exported for test use; production consumers use the module-level
- * `projectMetadata` singleton instead.
+ * Thin wrapper around `validateProjectMetadata` that passes the Vite-imported
+ * `rawProject`. Exported so future callers (e.g. the API server) can invoke
+ * directly; production consumers in the UI use the `projectMetadata` singleton
+ * below.
  */
 export function loadProjectMetadata(): ProjectMetadataResult {
   return validateProjectMetadata(rawProject);
