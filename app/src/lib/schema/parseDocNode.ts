@@ -14,7 +14,7 @@
  * Encoding rules are frozen as of schema v1; see docs/02-schema.md §Design.
  */
 
-import type { NodeId, NodeStatus } from "../types";
+import type { NodeId } from "../types";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -44,29 +44,14 @@ function pathToNodeId(docsRelPath: string): NodeId | null {
   return noExt;
 }
 
-const KNOWN_STATUSES = new Set<NodeStatus>([
-  "DRAFT",
-  "SPEC_REVIEW",
-  "APPROVED",
-  "IN_PROGRESS",
-  "VERIFY",
-  "COMPLETE",
-  "ISSUE_OPEN",
-  "PLANNED",
-]);
-
 /**
- * Normalize a raw status token: uppercase + hyphen-to-underscore.
- * Returns the normalized string if it matches a known status, else the
- * normalized string raw (let the validator reject it with a useful error).
+ * Normalize a raw status token: uppercase + hyphen-to-underscore. The
+ * resulting string is handed to the validator regardless of whether it
+ * matches a known enum value — invalid statuses are rejected there with a
+ * useful error message rather than swallowed here.
  */
 function normalizeStatus(raw: string): string {
-  const normalized = raw.trim().split(/\s+/)[0]?.toUpperCase().replace(/-/g, "_") ?? "";
-  return normalized;
-}
-
-function isKnownStatus(s: string): s is NodeStatus {
-  return KNOWN_STATUSES.has(s as NodeStatus);
+  return raw.trim().split(/\s+/)[0]?.toUpperCase().replace(/-/g, "_") ?? "";
 }
 
 /** Extract the value of a **Label:** bold front-matter line. */
@@ -240,7 +225,7 @@ export function parseDocNode(docsRelPath: string, raw: string): unknown {
     nodeId,
     parentId,
     title,
-    status: isKnownStatus(normalizedStatus) ? normalizedStatus : normalizedStatus,
+    status: normalizedStatus,
     created,
     lastUpdated,
     dependencies,

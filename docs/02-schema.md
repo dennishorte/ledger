@@ -350,22 +350,22 @@ docs/00-project.md                             [modified — §14 status row]
 
 ### Bundle delta
 
-Baseline: `01-ui/06-health.md` final build — 939,830 B JS / 40,348 B CSS uncompressed, 301.84 / 7.96 kB gzip.
+Baseline: main HEAD `114ce7e` (immediate parent of the worktree's entry commit) — 1,199.22 kB JS / 40.48 kB CSS uncompressed, 383.34 / 8.05 kB gzip.
 
-This build: 1,350,660 B JS / 43,890 B CSS uncompressed, 429.07 / 8.53 kB gzip.
+This build: 1,356.64 kB JS / 43.89 kB CSS uncompressed, 430.90 / 8.53 kB gzip.
 
-Delta: +410,830 B JS (+127.23 kB gzip), +3,542 B CSS (+0.57 kB gzip).
+Delta: **+157.42 kB JS (+47.56 kB gzip), +3.41 kB CSS (+0.48 kB gzip).**
 
-The JS delta is larger than the spec's predicted ~30 KB gzip because: (a) the baseline was from `06-health` completion, before several subsequent node specs were added; (b) ajv itself contributes the majority of the JS increase (the library is substantial at ~30 KB gzip core + format modules). The chunk-size warning pre-dates this node and is not caused by ajv.
+The gzip JS delta of +47.56 kB sits squarely inside D6's predicted range (~30 KB for ajv core, plus ajv-formats and the schema/extractor/validator/test fixture code). The original implementer-reported figure of +127.23 kB gzip used the `06-health` final build as baseline, which pre-dated subsequent doc additions to the tree; against actual main HEAD the delta is ~2.5× smaller. The chunk-size warning pre-dates this node and is not caused by ajv.
 
 ### Headless verification results
 
 - `pnpm -C app typecheck` → exit 0
 - `pnpm -C app lint --max-warnings=0` → exit 0
-- `pnpm -C app test` → exit 0 (100 tests: 85 schema + 15 parseDocs + existing LogEventRow tests)
+- `pnpm -C app test` → exit 0 (99 tests across 5 files — count reflects the implementation-review pass that removed one vacuous spy test; see Implementation Review F2 below)
 - `pnpm -C app build` → exit 0
 
-All authored docs in the current tree pass schema validation (zero console.error calls in parseDocs.test.ts).
+All authored leaf docs in the current tree pass schema validation (`docValidationErrorPaths` is empty after `loadDocNodes()` runs against the real tree).
 
 ### Manual-only verification items
 
@@ -374,6 +374,25 @@ The following acceptance check items require human verification in a browser:
 - **Item 5:** DAG panel (`/dag`), health panel (`/health`), docs viewer (`/docs/:nodeId`), tasks panel (`/tasks`), logs panel (`/logs`) render correctly with no visible regression.
 - **Item 7:** Dev-only topbar banner (D9) shows the failing-doc count when a fixture is corrupted and clears when fixed. This requires modifying a real doc to fail validation, running the dev server, and observing the topbar.
 - **Item 6 (partial):** Structured `ValidationError` with informative `path` and `message` is verified via unit tests. The browser console display of the error requires manual observation with a corrupted doc.
+
+### Implementation Review (2026-05-25)
+
+Independent implementation review was run against the rebased worktree in a clean Sonnet context. Verdict: READY_FOR_OPERATOR_VERIFICATION (one should-fix, two nits). All five Spec Review audit closures verified honored (S1 — no new Vitest config; S2 — leaf-only validation gated by `isLeafPath()`; S3 — `_schemas/` skip rule in both `parseDocNode.ts:30` and `parseDocs.ts:117`; S4 — `schema/types.ts` re-exports `NodeStatus`/`NodeId` from `../types`; S5 — `mixed-case-status.md` fixture exercises `Draft` → `DRAFT` normalization). Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F1 | Dead ternary in `parseDocNode.ts:243`: `status: isKnownStatus(normalizedStatus) ? normalizedStatus : normalizedStatus` — both branches identical, and `isKnownStatus` had no other callers. The intent (pass the normalized string through and let ajv reject invalid values) is correct but the code reads as a bug. | Simplified to `status: normalizedStatus`. Removed the dead `isKnownStatus` helper, the now-unused `KNOWN_STATUSES` set, and the now-unused `NodeStatus` import. Behavior unchanged. |
+| F2 | `parseDocs.test.ts` had a `console.error` spy test that ran after `loadDocNodes()`'s singleton cache was already populated at module evaluation. The spy would always observe zero calls vacuously — the meaningful assertion was already in the sibling `docValidationErrorPaths.length === 0` test. | Removed the vacuous spy test. Added a code comment on the surviving canonical assertion explaining the singleton behavior so a future reader doesn't re-add the spy. Test count dropped 100 → 99 — this is the right number. |
+| N1 | `docValidationErrorPaths` is exported unconditionally and included in the production bundle. The banner *display* is dev-gated in `Topbar.tsx`, so the spec's D9 intent is honored; the exported array itself is benign in prod (empty in normal operation). | No code change. Reviewer concurred with the existing implementation. |
+| Op-1 | Implementer's reported bundle delta (+127.23 kB gzip) used the wrong baseline (`06-health` final build, pre-dating subsequent doc additions). Against actual main HEAD `114ce7e`, the delta is +47.56 kB gzip — well inside D6's predicted range. | Bundle delta section above rewritten with the correct baseline and corrected numbers. |
+
+Re-ran gates after F1 + F2 fixes:
+
+- `pnpm -C app typecheck` → exit 0
+- `pnpm -C app lint --max-warnings=0` → exit 0
+- `pnpm -C app test` → exit 0 (99 tests across 5 files)
+
+Audit table stays in the doc as durable provenance. No further code changes pending operator manual verification.
 
 ---
 

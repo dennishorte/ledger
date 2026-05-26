@@ -15,35 +15,17 @@
 import { describe, it, expect } from "vitest";
 import { loadDocNodes, idForPath, docValidationErrorPaths } from "./parseDocs";
 
-// ---------------------------------------------------------------------------
-// Spy on console.error to assert zero validation errors
-// ---------------------------------------------------------------------------
-
 describe("parseDocs — loadDocNodes against real docs/ tree", () => {
   it("returns a non-empty DocNode array", () => {
     const nodes = loadDocNodes();
     expect(nodes.length).toBeGreaterThan(0);
   });
 
-  it("emits zero console.error validation errors", () => {
-    const errors: Array<unknown[]> = [];
-    const origError = console.error;
-    console.error = (...args: unknown[]) => {
-      errors.push(args);
-    };
-    try {
-      loadDocNodes();
-    } finally {
-      console.error = origError;
-    }
-    const validationCalls = errors.filter(
-      (args) => typeof args[0] === "string" && args[0].includes("[parseDocs]"),
-    );
-    expect(validationCalls).toHaveLength(0);
-  });
-
-  it("docValidationErrorPaths is empty for the real tree (zero validation errors)", () => {
-    // This is the canonical assertion: the real docs/ tree has no validation failures.
+  it("docValidationErrorPaths is empty for the real tree", () => {
+    // Canonical zero-validation-errors assertion. The console.error path is
+    // exercised at module evaluation (parseDocs caches its result in a
+    // singleton), so a per-test console.error spy would always observe zero
+    // calls vacuously — the singleton array is the meaningful surface.
     expect(docValidationErrorPaths).toHaveLength(0);
   });
 
