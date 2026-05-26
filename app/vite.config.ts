@@ -57,6 +57,12 @@ export default defineConfig({
             "@": path.resolve(__dirname, "./src"),
           },
         },
+        server: {
+          fs: {
+            // Allow reading docs/**/*.md?raw in test environment (same as dev server).
+            allow: [path.resolve(__dirname, "..")],
+          },
+        },
       },
     ],
   },

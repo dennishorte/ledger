@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { docValidationErrorPaths } from "@/lib/parseDocs";
 
 interface StatusChipProps {
   label: string;
@@ -19,6 +20,9 @@ function StatusChip({ label, value }: StatusChipProps): JSX.Element {
 }
 
 export function Topbar(): JSX.Element {
+  const errorCount = docValidationErrorPaths.length;
+  const firstErrorPath = docValidationErrorPaths[0];
+
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] px-4">
       <div className="flex items-center gap-2">
@@ -29,6 +33,20 @@ export function Topbar(): JSX.Element {
         <div className="text-sm text-[color:var(--color-muted)]">
           untitled project
         </div>
+        {import.meta.env.DEV && errorCount > 0 && (
+          <div
+            className="flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+            title={firstErrorPath ?? ""}
+          >
+            <span>⚠</span>
+            <span>
+              {errorCount} doc{errorCount > 1 ? "s" : ""} failed validation
+              {errorCount === 1 && firstErrorPath
+                ? `: ${firstErrorPath.replace(/^.*\/docs\//, "")}`
+                : ""}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

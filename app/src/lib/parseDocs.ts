@@ -1,4 +1,7 @@
 import type { DocNode, NodeId, NodeStatus } from "@/lib/types";
+import { parseDocNode } from "@/lib/schema/parseDocNode";
+import { validateDocNode } from "@/lib/schema/validateDocNode";
+import type { ValidationError } from "@/lib/schema/validateDocNode";
 
 /**
  * Build-time parser for the project's `docs/**.md` tree.
@@ -11,6 +14,12 @@ import type { DocNode, NodeId, NodeStatus } from "@/lib/types";
  * Swap-out plan: when the API server exists, replace `loadDocNodes()` with a
  * TanStack Query against the same `DocNode[]` shape. Component code never
  * touches markdown directly.
+ *
+ * Internally, leaf docs are validated against the JSON Schema in
+ * docs/_schemas/document-node.schema.json via parseDocNode + validateDocNode
+ * (02-schema). Root and parent docs bypass validation (schema validates
+ * leaf-only in v1; see 02-schema §S2). Validation errors are collected and
+ * reported via console.error; failing docs are omitted from the node set (D9).
  */
 
 const KNOWN_STATUSES: ReadonlySet<NodeStatus> = new Set<NodeStatus>([
@@ -97,6 +106,7 @@ function parseChildrenManifest(md: string): RawChildRow[] {
  *   - deeper nesting recurses the same way.
  *   - `docs/process/**`           → null              (process/operator
  *     playbooks live outside the implementation tree; see CLAUDE.md)
+ *   - `docs/_schemas/**`          → null              (machine-readable artifacts)
  */
 function pathToNodeId(filePath: string): NodeId | null {
   const idx = filePath.indexOf("/docs/");
@@ -104,6 +114,7 @@ function pathToNodeId(filePath: string): NodeId | null {
   const sub = filePath.slice(idx + "/docs/".length);
   if (!sub.endsWith(".md")) return null;
   if (sub.startsWith("process/")) return null;
+  if (sub.startsWith("_schemas/")) return null;
   if (sub === "00-project.md") return "root";
   const noExt = sub.slice(0, -3);
   const parts = noExt.split("/");
@@ -119,6 +130,19 @@ function resolveChildId(parentAbsId: NodeId, relId: string): NodeId {
   return `${parentAbsId}/${relId}`;
 }
 
+/**
+ * Returns true when a docs-relative path is a leaf implementation node
+ * (i.e. will be sent through the schema validator).
+ * Root (00-project.md) and parent (any <dir>/00-<slug>.md) docs return false.
+ */
+function isLeafPath(sub: string): boolean {
+  if (sub === "00-project.md") return false;
+  const noExt = sub.endsWith(".md") ? sub.slice(0, -3) : sub;
+  const parts = noExt.split("/");
+  const last = parts[parts.length - 1];
+  return !(parts.length >= 2 && last?.startsWith("00-"));
+}
+
 interface ParsedDoc {
   absId: NodeId;
   parentId: NodeId | null;
@@ -126,6 +150,8 @@ interface ParsedDoc {
   status: NodeStatus;
   children: RawChildRow[];
   source: string;
+  /** True when this doc was validated against the schema (leaf docs only). */
+  validated: boolean;
 }
 
 function parseOne(filePath: string, md: string): ParsedDoc | null {
@@ -164,6 +190,7 @@ function parseOne(filePath: string, md: string): ParsedDoc | null {
     status,
     children: parseChildrenManifest(md),
     source: filePath,
+    validated: false,
   };
 }
 
@@ -195,12 +222,64 @@ export function idForPath(path: string): NodeId | null {
   return pathToNodeId("/" + normalised);
 }
 
-/** Returns the full project node set: authored docs plus manifest-only children. */
-export function loadDocNodes(): DocNode[] {
+/** Build the full project node set and collect validation errors. Called once at module load. */
+function buildDocNodes(): {
+  nodes: DocNode[];
+  errorPaths: string[];
+} {
   const parsed: ParsedDoc[] = [];
-  for (const [path, body] of Object.entries(rawDocs)) {
-    const p = parseOne(path, body);
-    if (p) parsed.push(p);
+  const validationErrors: { path: string; errors: ValidationError[] }[] = [];
+
+  for (const [filePath, body] of Object.entries(rawDocs)) {
+    // Determine docs-relative sub-path for the schema extractor.
+    const idx = filePath.indexOf("/docs/");
+    if (idx === -1) continue;
+    const sub = filePath.slice(idx + "/docs/".length);
+
+    // Skip process/ and _schemas/ paths (same as pathToNodeId).
+    if (sub.startsWith("process/") || sub.startsWith("_schemas/")) continue;
+
+    if (isLeafPath(sub)) {
+      // Leaf doc: run through parseDocNode + validateDocNode.
+      const candidate = parseDocNode(sub, body);
+      if (candidate === null) {
+        // Extractor returned null — treat as non-leaf (shouldn't normally happen
+        // given the isLeafPath guard, but be defensive).
+        const p = parseOne(filePath, body);
+        if (p) parsed.push(p);
+        continue;
+      }
+      const result = validateDocNode(candidate);
+      if (!result.ok) {
+        validationErrors.push({ path: filePath, errors: result.errors });
+        // Omit from node set (D9).
+        continue;
+      }
+      // Validation passed: build ParsedDoc from the validated DocumentNode.
+      const node = result.node;
+      const children: RawChildRow[] = node.children.map((row) => ({
+        relId: row.relId,
+        dependsOnRel: row.dependsOn,
+        status: row.status,
+      }));
+      parsed.push({
+        absId: node.nodeId,
+        parentId: node.parentId,
+        title: node.title,
+        status: node.status,
+        children,
+        source: filePath,
+        validated: true,
+      });
+    } else {
+      // Root or parent doc: parse with legacy extractor, skip schema validation.
+      const p = parseOne(filePath, body);
+      if (p) parsed.push(p);
+    }
+  }
+
+  if (validationErrors.length > 0) {
+    console.error("[parseDocs] validation errors:", validationErrors);
   }
 
   const byId = new Map<NodeId, DocNode>();
@@ -241,5 +320,25 @@ export function loadDocNodes(): DocNode[] {
     }
   }
 
-  return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    nodes: Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id)),
+    errorPaths: validationErrors.map((e) => e.path),
+  };
+}
+
+// Module-level singleton — computed once at build time.
+const _built = buildDocNodes();
+
+/**
+ * Docs-relative paths of docs that failed schema validation, in the order they
+ * were encountered. Empty in normal operation.
+ *
+ * Exposed for the dev-only topbar banner (D9): a single indicator tells the
+ * operator that a doc is malformed without crashing the rest of the UI.
+ */
+export const docValidationErrorPaths: readonly string[] = _built.errorPaths;
+
+/** Returns the full project node set: authored docs plus manifest-only children. */
+export function loadDocNodes(): DocNode[] {
+  return _built.nodes;
 }
