@@ -1,7 +1,7 @@
 # Parser Package Extraction
 
 **Node ID:** `04-api-server/02-parser-extraction`
-**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
 **Status:** APPROVED
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
@@ -447,7 +447,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 17. **`app/tsconfig.app.json` has the parser reference** (Spec Review SF3): `git diff main..HEAD -- app/tsconfig.app.json` shows the added `references: [{ "path": "../packages/parser" }]` entry and no other changes. `tsc -b` builds the parser before `app/` correctly.
 18. **`01-ui/02-dag.md`'s D4 note updated** (Spec Review SF4): `git diff main..HEAD -- docs/01-ui/02-dag.md` shows D4 amended to reflect that `NodeId`/`NodeStatus`/`DocNode` canonical home is now `@ledger/parser`; `app/src/lib/types.ts` called out as a re-export shell for those three types only.
 19. **`loadProjectMetadata.test.ts` split is correct** (Spec Review N3): the single test that stays in `app/` is the one that imports the module-singleton `projectMetadata` from the Vite-import wrapper and asserts `.ok === true`. All 31 other tests (fixture-based validator tests) move to `packages/parser/test/project/validateProjectMetadata.test.ts`. Total tests across the workspace ≥ pre-extraction count (99), plus the 2 new `buildDocGraph` tests.
-20. `04-api-server.md` §Children manifest row for `02-parser-extraction` reads the current status; final promotion to COMPLETE bumps both this spec's Status header and the parent's row in the same commit.
+20. `04-api-server/00-api-server.md` §Children manifest row for `02-parser-extraction` reads the current status; final promotion to COMPLETE bumps both this spec's Status header and the parent's row in the same commit.
 
 ---
 

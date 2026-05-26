@@ -1,7 +1,7 @@
 # UI Hook Migration — `useDocGraph` → TanStack Query
 
 **Node ID:** `04-api-server/05-ui-hook-migration`
-**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
 **Status:** APPROVED
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
@@ -59,7 +59,7 @@ app/src/components/dag/useDocGraph.test.tsx     [new — mocked-fetch hook test]
 app/vite.config.ts                             [modified — server.proxy: "/api" → 127.0.0.1:4180]
 docs/03-project-metadata.md                    [modified — close "docs path validation" Open Issue]
 docs/04-api-server/05-ui-hook-migration.md     [this spec — status transitions]
-docs/04-api-server.md                          [modified — §Children manifest row status]
+docs/04-api-server/00-api-server.md                          [modified — §Children manifest row status]
 CLAUDE.md                                      [modified at parent's stage-10 merge — see Acceptance]
 ```
 
@@ -385,7 +385,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 9. **Bundle delta** reported in Implementation Notes; `app/` gzip JS increases by < 1 KB.
 10. **No CORS errors** in the browser console at any point during the manual gates.
 11. **CLAUDE.md edits** are deferred to the parent's stage-10 merge — the spec documents what content the operator updates (Running-the-app `pnpm exec ledger` line, build-order COMPLETE bump, round-2/next-focus shift), but this child's commit does **not** modify CLAUDE.md. Verified by `git diff main..HEAD -- CLAUDE.md` being empty in this child's worktree.
-12. `04-api-server.md` §Children manifest row for `05-ui-hook-migration` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
+12. `04-api-server/00-api-server.md` §Children manifest row for `05-ui-hook-migration` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 13. **Parent `04-api-server` is ready to promote APPROVED (decomposed) → COMPLETE** after this child merges, since all five children are then COMPLETE. The parent's stage-10 merge commit bundles the CLAUDE.md sync.
 
 ---

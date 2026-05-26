@@ -1,7 +1,7 @@
 # Server Package — Hono + Routes
 
 **Node ID:** `04-api-server/03-server-package`
-**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
 **Status:** APPROVED
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
@@ -623,7 +623,7 @@ A reviewer running the worktree must observe:
 9. `Ctrl-C` the server. (Graceful shutdown is `04-cli-launcher`'s responsibility; the dev-boot block can exit ungracefully.)
 10. **`app/` is untouched.** `git diff main..HEAD -- app/` is empty.
 11. **`packages/parser/` is untouched except for the possible `idForPath` re-export** mentioned in Design. If touched, recorded in Implementation Notes.
-12. **`docs/_schemas/`, `.ledger/`, and existing `docs/`** are untouched. `git diff main..HEAD -- docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server.md docs/01-ui/` shows only the manifest-row status bump for this child.
+12. **`docs/_schemas/`, `.ledger/`, and existing `docs/`** are untouched. `git diff main..HEAD -- docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server/00-api-server.md docs/01-ui/` shows only the manifest-row status bump for this child.
 13. Server bundle size reported in Implementation Notes (`du -sh server/dist`).
 
 ---
@@ -713,7 +713,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 10. **`docs/_schemas/`, `.ledger/`, and existing `docs/` content** are untouched. `git diff main..HEAD` for those paths shows only the `04-api-server.md` §Children manifest-row status bump for this child.
 11. **Server bundle size reported in Implementation Notes.** `du -sh server/dist` produces a number; recorded as an absolute baseline for later server-side additions (`05-task-runner` will grow it).
 12. **Smoke test for runtime schema resolution still passes** (from `02-parser-extraction`'s acceptance item 13): `node -e "import('./packages/parser/dist/schema/validateDocNode.js').then(m => console.log(typeof m.validateDocNode))"` prints `"function"`.
-13. `04-api-server.md` §Children manifest row for `03-server-package` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
+13. `04-api-server/00-api-server.md` §Children manifest row for `03-server-package` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 
 ---
 

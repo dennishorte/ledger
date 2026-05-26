@@ -65,7 +65,8 @@ ledger/                                          # repo root (now a pnpm workspa
 │   ├── 00-project.md                            # exists
 │   ├── 02-schema.md                             # exists
 │   ├── 03-project-metadata.md                   # exists
-│   ├── 04-api-server.md                         # this spec
+│   ├── 04-api-server/
+│   │   └── 00-api-server.md                     # this spec (parent)
 │   └── 01-ui/                                   # exists
 ├── packages/
 │   └── parser/                                  # new — shared between app/ and server/
@@ -507,7 +508,7 @@ app/src/components/dag/useDocGraph.ts                 [modified — TanStack Que
 app/src/components/dag/useDocGraph.test.ts            [new — mocked-fetch hook test]
 app/vite.config.ts                                    [modified — server.proxy: /api → 127.0.0.1:4180]
 
-docs/04-api-server.md                                 [this spec]
+docs/04-api-server/00-api-server.md                   [this spec (parent)]
 docs/00-project.md                                    [modified — §14 status row]
 docs/03-project-metadata.md                           [modified — close "docs path validation" Open Issue handoff]
 CLAUDE.md                                             [modified — "Running the app" section adds `pnpm -C server dev`; build order line updated]

@@ -1,7 +1,7 @@
 # Workspace Conversion
 
 **Node ID:** `04-api-server/01-workspace-conversion`
-**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
 **Status:** APPROVED
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
@@ -48,7 +48,7 @@ pnpm-lock.yaml                        [new at repo root — replaces app/pnpm-lo
 app/pnpm-lock.yaml                    [DELETED — superseded by root lockfile]
 app/package.json                      [modified — name: "ledger-app" → "@ledger/app"; no other changes]
 docs/04-api-server/01-workspace-conversion.md   [this spec — status transitions]
-docs/04-api-server.md                 [modified — §Children manifest row status]
+docs/04-api-server/00-api-server.md                 [modified — §Children manifest row status]
 ```
 
 The `app/node_modules/` directory reorganises silently when `pnpm install` runs at the root — pnpm symlinks workspace packages and hoists shared transitive deps into `node_modules/.pnpm`. That is a build artifact, not a tracked file; `.gitignore` already excludes it (both `app/node_modules` and the new root `node_modules`).
@@ -197,7 +197,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 7. **Zero diff under `app/src/`**: `git diff main..HEAD -- app/src/` is empty.
 8. **Zero diff under `app/server/`**: `git diff main..HEAD -- app/server/` is empty.
 9. **Zero version drift in the lockfile**: every shared dep's resolved version in the new root `pnpm-lock.yaml` matches the version that was in the old `app/pnpm-lock.yaml`. Mechanical diff; if any version moved, that's a real change to investigate.
-10. `04-api-server.md` §Children manifest row for `01-workspace-conversion` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
+10. `04-api-server/00-api-server.md` §Children manifest row for `01-workspace-conversion` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 
 ---
 

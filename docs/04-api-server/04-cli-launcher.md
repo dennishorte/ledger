@@ -1,7 +1,7 @@
 # CLI Launcher — `ledger` binary
 
 **Node ID:** `04-api-server/04-cli-launcher`
-**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Parent:** `04-api-server` (`docs/04-api-server/00-api-server.md`)
 **Status:** APPROVED
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED, audit applied)
@@ -55,7 +55,7 @@ server/test/
   bin.test.ts                                [new — subprocess tests]
 server/package.json                          [modified — adds bin field + open dep]
 docs/04-api-server/04-cli-launcher.md        [this spec — status transitions]
-docs/04-api-server.md                        [modified — §Children manifest row status]
+docs/04-api-server/00-api-server.md                        [modified — §Children manifest row status]
 ```
 
 No source code outside `server/` is touched. The `app/` and `packages/parser/` packages are untouched.
@@ -433,9 +433,9 @@ When this node moves to `VERIFY`, the verifier confirms:
    - `pnpm exec ledger --help` exits 0; stdout contains `usage: ledger`.
    - `LEDGER_PORT=0 pnpm exec ledger /Users/dennis/code/ledger --no-open` boots on an OS-assigned port (visible in stdout); SIGINT shuts down cleanly.
 8. **Headless-environment safety (D5):** if `DISPLAY` is unset on Linux (or via `env -i pnpm exec ledger ... --port 4180` to clear env), the server still boots; stderr shows the browser-open failure message; the URL is printed; the server keeps running until SIGINT. (This may be skipped on macOS where `open` succeeds without `DISPLAY`.)
-9. **`app/`, `packages/parser/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched. `git diff main..HEAD -- app/ packages/parser/ docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server.md docs/01-ui/` shows only the `04-api-server.md` §Children manifest-row status bump for this child.
+9. **`app/`, `packages/parser/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched. `git diff main..HEAD -- app/ packages/parser/ docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server/00-api-server.md docs/01-ui/` shows only the `04-api-server/00-api-server.md` §Children manifest-row status bump for this child.
 10. **The dev-boot block in `03-server-package`'s `server/src/server.ts` is deleted by this child.** Spec Review SF3: the criterion is "the CLI binary is now the canonical entrypoint; the dev-boot block was a pre-CLI workaround." Deleting it removes the dead-code-paths-with-no-tests concern and forces every invocation (including `pnpm -C server dev`) through the same `parseCliArgs` + `loadProjectContext` chain. Update `server/package.json`'s `dev` script: `"dev": "tsx watch src/bin/ledger.ts"` (was `"dev": "tsx watch src/server.ts"` per `03-server-package`'s D9). The implementer records the deletion in Implementation Notes.
-11. `04-api-server.md` §Children manifest row for `04-cli-launcher` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
+11. `04-api-server/00-api-server.md` §Children manifest row for `04-cli-launcher` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
 
 ---
 
