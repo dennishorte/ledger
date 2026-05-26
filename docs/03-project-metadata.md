@@ -2,7 +2,7 @@
 
 **Node ID:** `03-project-metadata`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25
 
@@ -20,7 +20,7 @@ In scope for v1:
 
 1. **A canonical JSON Schema file** at `docs/_schemas/project-metadata.schema.json` (draft 2020-12) describing the required fields of `.ledger/project.json`: `schemaVersion`, `name`, `docs`, `agent`. Schema version is declared inline and is durable across future revisions. Sibling of `document-node.schema.json` (D1, D3 from `02-schema`).
 2. **An authored `.ledger/project.json` at this repo root.** The first dogfooded artifact: `{ "schemaVersion": 1, "name": "Ledger", "docs": "docs", "agent": "claude-code" }`. Committed to source; not generated.
-3. **A TypeScript loader + validator** (`app/src/lib/project/loadProjectMetadata.ts`) that reads `.ledger/project.json` via Vite's `import.meta.glob` (same bootstrap pattern as `parseDocs.ts`'s `import.meta.glob<string>("../../../docs/**/*.md")` at `parseDocs.ts:199`), validates against the schema using the same `ajv@8` / `ajv-formats` / draft-2020 chain installed by `02-schema`, and exports a typed `ProjectMetadata` value (or a structured error). Pure build-time validation; no Node-only imports leak into the browser bundle.
+3. **A TypeScript loader + validator** (`app/src/lib/project/loadProjectMetadata.ts`) that reads `.ledger/project.json` via a direct Vite JSON import (`import x from "../../../../.ledger/project.json" with { type: "json" }` — the same pattern `02-schema`'s `validateDocNode.ts` uses to import its schema artifact), validates against the schema using the same `ajv@8` / `ajv-formats` / draft-2020 chain installed by `02-schema`, and exports a typed `ProjectMetadata` value (or a structured error). Pure build-time validation; no Node-only imports leak into the browser bundle.
 4. **Tests** (`*.test.ts`) covering the validator against fixtures: a fully-conformant config, every required-field-missing case, an unknown `agent` value, malformed JSON, and a wrong `schemaVersion`. Test infrastructure is the existing Vitest setup that `02-schema` already established — no new test runner work.
 5. **Topbar consumer wired up.** Replace the hardcoded `"untitled project"` literal at `Topbar.tsx:34` with `projectMetadata.name`. Falls back to `"untitled project"` only when validation fails (and surfaces the failure in the existing dev-only validation banner introduced by `02-schema` D9). Closes the `01-ui/01-shell.md` Open Issue "Topbar shows 'untitled project' — no project metadata source".
 
@@ -57,6 +57,8 @@ app/src/lib/project/
   fixtures/
     conformant.json
     missing-name.json
+    missing-docs.json
+    missing-agent.json
     bad-schema-version.json
     malformed.json                          # not valid JSON
     empty-agent.json
@@ -89,7 +91,7 @@ app/src/lib/project/
       "type": "string",
       "minLength": 1,
       "pattern": "^[^/].*[^/]$|^[^/]$",
-      "description": "Relative path from the project root to the docs tree, e.g. \"docs\". No leading or trailing slash."
+      "description": "Relative path from the project root to the docs tree, e.g. \"docs\". No leading or trailing slash. Path-traversal segments (..) are NOT rejected by this schema; the API server consuming this field must treat it as untrusted operator input and reject .. segments + assert containment under the project root before any filesystem read. See 03-project-metadata Open Issues for the delegation."
     },
     "agent": {
       "type": "string",
@@ -128,29 +130,23 @@ This is the file authored at this repo's root as part of this node's implementat
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import schema from "../../../../docs/_schemas/project-metadata.schema.json" with { type: "json" };
+import rawProject from "../../../../.ledger/project.json" with { type: "json" };
 import type { ProjectMetadata } from "./types";
 
-const ajv = new Ajv2020({ allErrors: true, strict: true });
-addFormats(ajv);
-const compile = ajv.compile<ProjectMetadata>(schema);
-
-export interface ValidationError {
-  path: string;
-  message: string;
-  keyword: string;
-}
+// ValidationError is the same shape used by 02-schema's document-node validator.
+// Re-exported here so a single error type spans every schema-validated artifact
+// in the framework (see Spec Review S2 — explicit decision to share the shape
+// rather than redeclare).
+export type { ValidationError } from "@/lib/schema/validateDocNode";
+import type { ValidationError } from "@/lib/schema/validateDocNode";
 
 export type ProjectMetadataResult =
   | { ok: true; metadata: ProjectMetadata }
   | { ok: false; errors: ValidationError[] };
 
-// Vite eager-glob: there is exactly one .ledger/project.json at the repo root.
-// Path is relative to this source file: app/src/lib/project/loadProjectMetadata.ts → ../../../../.ledger/project.json.
-const raw = import.meta.glob<string>("../../../../.ledger/project.json", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-});
+const ajv = new Ajv2020({ allErrors: true, strict: true });
+addFormats(ajv);
+const compile = ajv.compile<ProjectMetadata>(schema);
 
 export function loadProjectMetadata(): ProjectMetadataResult { … }
 
@@ -160,11 +156,15 @@ export function loadProjectMetadata(): ProjectMetadataResult { … }
 export const projectMetadata: ProjectMetadataResult = loadProjectMetadata();
 ```
 
-Mirrors `02-schema`'s `validateDocNode.ts` shape — same ajv version, same `Result<T, ValidationError[]>` discipline (D7 from `02-schema`), same build-time glob bootstrap. The `ProjectMetadata` TS interface is hand-written in `types.ts` and kept in lockstep with the JSON Schema (D8 from `02-schema`: no codegen in v1; codegen is logged as a sibling Open Issue here too).
+Mirrors `02-schema`'s `validateDocNode.ts` shape — same ajv version, same `Result<T, ValidationError[]>` discipline (D7 from `02-schema`), same direct JSON import for the schema artifact (`validateDocNode.ts` at the import-schema line is the precedent). The `ProjectMetadata` TS interface is hand-written in `types.ts` and kept in lockstep with the JSON Schema (D8 from `02-schema`: no codegen in v1; codegen is logged as a sibling Open Issue here too).
 
-Loader behavior on missing file: `import.meta.glob` returns an empty object when no file matches. The loader treats this as `{ ok: false, errors: [{ path: "/", message: ".ledger/project.json is missing", keyword: "required" }] }`. The build does not fail — same posture as `02-schema` D9 (omit + visible banner, never crash the tree).
+**Why direct JSON import, not `import.meta.glob`:** the file is a singleton at a known path. Vite's `import.meta.glob` requires a glob *pattern* (with a wildcard) — a bare literal path silently matches nothing. The `parseDocs.ts` analog uses `import.meta.glob` because it matches many markdown files; here there is exactly one config file. A direct import is the idiomatic Vite pattern and matches `02-schema`'s precedent for importing the schema JSON file itself.
 
-Loader behavior on malformed JSON: the raw glob result is a string; `JSON.parse` failure is caught and surfaced as a single `ValidationError` with `keyword: "parse"`. Again, build does not fail.
+**Loader behavior on missing file:** `.ledger/project.json` is a hard requirement of this node — it is committed to source and validated at every build. Vite fails the build with a clear module-not-found error if the file is absent. This is the correct posture: a missing required config file is a real error (PRD §7.1: "the launcher reads `.ledger/project.json`"), not a degradation case. Operator authoring a new project: copy the canonical sample (see above) before first build.
+
+**Loader behavior on malformed JSON:** Vite's JSON import fails the build at parse time. Same posture as missing file. Not a runtime-degradation case.
+
+**Loader behavior on schema-validation failure:** the parsed JSON is shape-validated against the schema by ajv. Failure produces `{ ok: false, errors: ValidationError[] }`, the build proceeds, and the topbar falls back to `"untitled project"` with the dev-only banner surfacing the error. This is the only runtime-degradation path — same posture as `02-schema` D9 (omit + visible banner, never crash the tree).
 
 ### Topbar consumer
 
@@ -180,17 +180,37 @@ After this node:
 
 ```tsx
 import { projectMetadata } from "@/lib/project/loadProjectMetadata";
+import { docValidationErrorPaths } from "@/lib/parseDocs";
 
 const name = projectMetadata.ok ? projectMetadata.metadata.name : "untitled project";
+
+// Unified error count: doc paths (string[]) + 1 if project metadata failed.
+const metadataFailed = !projectMetadata.ok;
+const totalErrors = docValidationErrorPaths.length + (metadataFailed ? 1 : 0);
+const firstErrorPath = metadataFailed
+  ? ".ledger/project.json"
+  : docValidationErrorPaths[0];
+
 // …
 <div className="text-sm text-[color:var(--color-muted)]">
   {name}
 </div>
+{import.meta.env.DEV && totalErrors > 0 && (
+  <div className="…banner classes unchanged…" title={firstErrorPath ?? ""}>
+    <span>⚠</span>
+    <span>
+      {totalErrors} validation error{totalErrors > 1 ? "s" : ""}
+      {totalErrors === 1 && firstErrorPath
+        ? `: ${firstErrorPath.replace(/^.*\/docs\//, "")}`
+        : ""}
+    </span>
+  </div>
+)}
 ```
 
-Validation failures are surfaced in the same dev-only banner that `02-schema` D9 introduced — `Topbar.tsx` already imports `docValidationErrorPaths` and renders the banner; this node extends the banner to also count `projectMetadata.ok === false` cases. The banner message changes from "1 doc failed validation" to a unified "N validation errors" once the project metadata is wired in (one-line edit to the existing banner copy).
+The banner copy changes from "1 doc failed validation" to "N validation errors" — a strict superset that covers both doc validation and project-metadata validation under one counter. When the failing artifact is `.ledger/project.json`, the hover title shows the path directly (no `docs/` prefix to strip); when it's a doc, the existing `replace(/^.*\/docs\//, "")` behavior continues.
 
-The fallback string `"untitled project"` stays as a last-resort default for the "validation failed" path — it remains visible, but the dev banner makes the failure cause obvious.
+The fallback string `"untitled project"` stays as a last-resort default for the metadata-validation-failed path — it remains visible in the topbar, but the dev banner makes the failure cause obvious. The two pieces of UI (the name slot and the banner) move in lockstep: metadata fails → both the fallback name and the banner increment fire together.
 
 ### Test infrastructure
 
@@ -211,6 +231,8 @@ app/src/lib/project/loadProjectMetadata.ts        [new — loader + validator]
 app/src/lib/project/loadProjectMetadata.test.ts   [new — fixture suite]
 app/src/lib/project/fixtures/conformant.json      [new]
 app/src/lib/project/fixtures/missing-name.json    [new]
+app/src/lib/project/fixtures/missing-docs.json    [new]
+app/src/lib/project/fixtures/missing-agent.json   [new]
 app/src/lib/project/fixtures/bad-schema-version.json  [new]
 app/src/lib/project/fixtures/malformed.json       [new — not valid JSON]
 app/src/lib/project/fixtures/empty-agent.json     [new]
@@ -250,7 +272,7 @@ A reviewer running the worktree must observe:
 | D7 | Build-time validation via Vite's `import.meta.glob` (no fetch) | Mirrors `02-schema`'s D6 and `parseDocs.ts:199`. The artifact is small (~100 bytes), static, and present at build time; runtime fetch adds complexity (loading state, error UI) for no gain. When the API server lands, validation moves server-side, same migration path as `02-schema`. |
 | D8 | Loader returns `Result<ProjectMetadata, ValidationError[]>`, never throws | Mirrors `02-schema`'s D7. A bad config file should degrade visibly (fallback name + dev banner), not crash the whole UI. The validator surfaces errors; the topbar decides how to render them. |
 | D9 | TS interface `ProjectMetadata` is hand-written, kept in lockstep with the schema | Mirrors `02-schema`'s D8. Four fields; drift risk is small enough to manage manually for v1. Codegen is logged as a sibling Open Issue here too — same trigger (third hand-edit). |
-| D10 | Missing file is a validation error, not a build failure | `import.meta.glob` returns `{}` when nothing matches. The loader treats this as `errors: [{ ".ledger/project.json is missing" }]` and the build proceeds. Rationale: a developer who clones the repo and runs `pnpm dev` before authoring `.ledger/project.json` should see the framework's normal fallback ("untitled project" + dev banner pointing at the missing file), not a cryptic Vite import error. |
+| D10 | Missing `.ledger/project.json` is a build-time error, not a runtime fallback | Direct JSON import (D7's chosen mechanism) fails the build if the file is absent. This is the correct posture: PRD §7.1 makes the file a hard requirement, not an optional convenience. A clone missing this file has a real problem and should fail loudly at first build. Only *schema-validation* failures (and JSON-syntax errors, which also fail the build) go through the topbar fallback path — not file presence. *Updated from the DRAFT, which proposed a graceful-missing-file path; spec review B1 surfaced that the proposed `import.meta.glob` literal-path mechanism could not actually implement that path. Re-thinking made the build-time-error posture the right answer regardless of mechanism.* |
 | D11 | Topbar's existing dev-only validation banner (introduced by `02-schema` D9) extends to count metadata errors | Reuse the banner that already exists. Two parallel banners would be visual noise; one unified counter ("N validation errors") with the first failing path on hover is sufficient. The banner copy moves from "doc failed validation" to "validation error" — a one-line change. |
 | D12 | `docs` is a relative path string in v1, not an array | One docs root per project in v1 (PRD §7.1). Multi-root is a v2 concern; bumping `schemaVersion` is the migration story. Keeping it a string keeps the consumer code (`path.join(projectRoot, projectMetadata.docs)`) trivial. |
 
@@ -264,8 +286,27 @@ A reviewer running the worktree must observe:
 - **Multi-project recents chooser.** PRD §13 defers the recents chooser UI; PRD §7.1 commits to one-project-per-instance for v1. This node ships the per-project artifact; the chooser is a follow-up that reads `~/.ledger/recent.json` (a separate, user-scoped artifact with its own schema, out of this node's scope). *(Priority: LOW — defer per PRD §13.)*
 - **Migration tooling.** PRD §13's `ledger migrate /path/to/existing/project` would scaffold this file from an existing repo's READMEs and structure. v1 expects hand authoring. Validated path per PRD §13: dogfood manually first, then CLI, then LLM-assist. This node is the "dogfood manually" step. *(Priority: LOW — defer per PRD §13.)*
 - **Secrets management.** `.ledger/project.json` is committed to source and therefore must not carry secrets. Today the only candidate secret is the agent's API key, and that already lives in the agent's own env (e.g. `ANTHROPIC_API_KEY` for Claude Code). If a future field needs a project-scoped secret (e.g. a custom MCP server's auth token), the right pattern is a separate `.ledger/secrets.json` excluded by gitignore, with a third schema artifact. v1 does not introduce this; logging it so future-me does not silently add a secret field to `project.json`. *(Priority: MEDIUM — comes up the first time MCP-based dispatch needs project-scoped auth.)*
-- **`docs` path validation.** The schema validates that `docs` is a non-empty string with no leading/trailing slash; it does not validate that the path actually exists on disk relative to the project root. That check belongs at API-server load time (`04-api-server`), where the filesystem is available. For now, the build-time validator is content-shape-only. *(Priority: LOW — surfaces as a Vite import error if `docs` is misnamed, which is fine for v1.)*
+- **`docs` path validation.** The schema validates that `docs` is a non-empty string with no leading/trailing slash; it does not validate (a) that the path actually exists on disk relative to the project root, nor (b) that the string is free of `..` traversal segments. Both checks belong at API-server load time (`04-api-server`), where the filesystem and a real runtime exist. Today's build-time validator is content-shape-only. **Explicit handoff to the `04-api-server` spec author:** treat `docs` as untrusted operator input for path-construction purposes; reject `..` segments and assert the resolved absolute path is a descendant of the project root before any filesystem read. The schema's `description` field for `docs` mentions this delegation so the next reader cannot miss it. *(Priority: LOW for this node — surfaces as a Vite import error if `docs` is misnamed in v1, which is acceptable; MEDIUM for `04-api-server` where real filesystem reads happen.)*
 - **No `parentId` / no document-tree membership.** `.ledger/project.json` is not a document node; it is project-level config that *contains* a pointer to the document tree. The schema therefore omits `parentId`, `nodeId`, and the `## Children` manifest shape. This is correct, but worth flagging so a future contributor does not try to retrofit `document-node.schema.json`'s shape onto this artifact. The two schemas are siblings, not parent/child. *(Priority: TRIVIAL — design clarification, not a problem.)*
+
+---
+
+## Spec Review (2026-05-25)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context immediately after authoring. Verdict: NEEDS_MINOR_REVISIONS. Two blockings (one functional, one contract under-specification), three should-fixes (one tagged operator-decision), three nits. All findings applied or explicitly resolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | The Loader proposal used `import.meta.glob<string>("../../../../.ledger/project.json", …)` against a literal path. Vite's glob requires a wildcard; a bare literal silently matches nothing, so the loader would always report "missing file" regardless of whether the file existed. Operator-decision component: keep the graceful-missing-file path (via a real glob like `*.json`) vs. switch to direct JSON import (fail-fast on absence). | **Operator chose direct JSON import** (matches `02-schema`'s precedent for importing schema JSON; `.ledger/project.json` is a hard requirement of this node, so build-time failure on absence is correct posture). Rewrote the Loader section: now uses `import rawProject from "../../../../.ledger/project.json" with { type: "json" }` and `import schema from "../../../../docs/_schemas/project-metadata.schema.json" with { type: "json" }`. D10 rewritten to "missing file is a build-time error, not a runtime fallback." Verification item 6 updated to clarify that file-deletion + JSON-syntax breakage are build-time errors (correct behavior), and only schema-violating-but-parseable corruption goes through the topbar fallback path. Requirements §3 updated to cite the direct-import pattern. |
+| B2 | The Topbar consumer section claimed "one-line edit" for unifying the existing doc-validation banner with project-metadata errors. The existing banner reads off `docValidationErrorPaths: string[]` from `parseDocs.ts`, which cannot carry a `ProjectMetadataResult`. The integration shape was not specified, leaving the implementer to invent it. | Rewrote the Topbar consumer section with explicit pseudocode showing how `projectMetadata.ok === false` increments `totalErrors`, how the banner title falls through to `.ledger/project.json` when the failure is metadata-side, and how the existing `replace(/^.*\/docs\//, "")` path-stripping behavior is preserved for doc errors while being skipped for the metadata path. |
+| S1 | Fixture list claimed coverage of "every required-field-missing case" but omitted `missing-docs.json` and `missing-agent.json`. Only `name` had a missing-field fixture; `docs` had none; `agent` had only an `empty-agent.json`. | Added `missing-docs.json` and `missing-agent.json` to the Design > Where files live tree and to the Files added / modified table. Test-suite claim is now consistent with the fixture list. |
+| S2 | `ValidationError` was redeclared locally in `loadProjectMetadata.ts` with the same shape as `02-schema`'s `ValidationError` from `validateDocNode.ts`. Reviewer tagged this as operator-decision: tolerate duplication vs. couple `project/` to `schema/`. | **Operator chose re-export** (`export type { ValidationError } from "@/lib/schema/validateDocNode"`). Rationale: a single error type across all schema-validated artifacts means the topbar's unified banner can render either source through one code path, and there is no drift risk. Coupling concern is real but small — `project/` already depends on `_schemas/` indirectly via the JSON Schema artifact; this just makes the dependency type-level explicit. |
+| S3 | `docs` regex `^[^/].*[^/]$|^[^/]$` rejects leading/trailing slashes but does NOT reject `..` path-traversal segments. The Open Issues item about API-server-side path validation did not explicitly call out the traversal gap, so the `04-api-server` author could miss it. | Expanded the Open Issues entry into a two-part check (existence + traversal), added explicit handoff language ("treat `docs` as untrusted operator input"), and copied the delegation into the schema's `docs.description` field so a future reader of the JSON Schema sees it without having to find the spec. Priority on the `04-api-server` side bumped from implied LOW to explicit MEDIUM in the Open Issues entry. |
+| N1 | Cited `parseDocs.ts:199` by line number, which drifts with future edits. | Replaced with "the `import.meta.glob` block in `parseDocs.ts`" — no line number. |
+| N2 | D10's missing-file `ValidationError` used `{ path: "/", message: ".ledger/project.json is missing" }`, mixing JSON Pointer semantics for `path` with filesystem-path semantics for `message`. | Folded into B1's resolution — D10 no longer constructs a `ValidationError` for missing-file (build-time error instead). |
+| N3 | Verification item 6 used `schemaVersion: 2` as a corruption example, which reads like "a future valid version" rather than "intentionally wrong." | Changed to `schemaVersion: "1"` (string instead of number) — unambiguously a type violation. |
+
+Nothing was punted. B1 and S2 required operator judgment; both calls are recorded in the resolution column with the rationale. The remaining six findings were mechanical or factual.
 
 ---
 
@@ -284,7 +325,7 @@ When this node moves to `VERIFY`, the verifier confirms:
 3. `pnpm -C app test` exits zero with the new `project/*.test.ts` suite passing.
 4. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. Bundle delta is reported in Implementation Notes.
 5. The topbar shows `"Ledger"` (from the metadata `name`) on every page, replacing the previous `"untitled project"` literal.
-6. Deliberately corrupting `.ledger/project.json` (delete `name`, break JSON syntax, or set `schemaVersion: 2`) produces a structured `ValidationError`, the topbar falls back to `"untitled project"`, and the dev-only banner counts the failure.
+6. Deliberately corrupting `.ledger/project.json` in a schema-violating way (e.g., delete the `name` field, or set `schemaVersion: "1"` as a string) produces a structured `ValidationError`, the topbar falls back to `"untitled project"`, and the dev-only banner counts the failure. (Note: deleting the file entirely or breaking JSON syntax is a build-time error per D10, not a topbar-fallback case — that is correct behavior, not a regression.)
 7. Reverting the corruption clears the banner and restores the project name in the topbar.
 8. `01-ui/01-shell.md`'s "untitled project" Open Issue is closed in this node's commit, with a closure note pointing back at `03-project-metadata`.
 9. `ajv` and `ajv-formats` versions are unchanged in `app/package.json` — no new runtime dependencies added by this node.
