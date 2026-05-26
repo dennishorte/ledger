@@ -1,0 +1,419 @@
+# CLI Launcher — `ledger` binary
+
+**Node ID:** `04-api-server/04-cli-launcher`
+**Parent:** `04-api-server` (`docs/04-api-server.md`)
+**Status:** DRAFT
+**Created:** 2026-05-26
+**Last Updated:** 2026-05-26
+
+**Dependencies:** `04-api-server/03-server-package`
+
+---
+
+## Requirements
+
+Ship the **`ledger` CLI binary** — a thin wrapper around `@ledger/server`'s `createServer` + `loadProjectContext` exports that adds argument parsing, browser launch, graceful shutdown, and structured stderr error reporting. PRD §7.1 explicitly anchors this binary: `ledger /path/to/project [--port 4180] [--no-open]`. Without it, the API server is invoked via the dev-boot block (parent §D9) which works for ad-hoc development but lacks the polish of a real CLI (no `--help`, no `--port` flag, no `--no-open`, no proper stderr on misuse, no SIGINT handling).
+
+This child is the smallest of the five. It depends entirely on `03-server-package`'s exports and adds ~80 LOC of CLI orchestration. The justification for splitting it out: the first implementer dispatch wall-clocked partly because it tried to land both the server library AND the CLI binary AND the workspace conversion in one pass. Each stays separable; the CLI lives at the top of its dependency chain and any future CLI evolution (interactive prompts, recents-chooser integration, daemon mode) lands here without disturbing the server library.
+
+In scope for v1:
+
+1. **`server/src/bin/ledger.ts`** — the CLI entrypoint. Argument shape: `ledger <project-path> [--port N] [--no-open] [-h|--help]`. `parseArgs` from `node:util` with `strict: true`; try/catch around the parse so unknown flags exit 2 with usage instead of throwing (parent §Spec Review S2). `Number.isInteger(port) && 0 <= port <= 65535` guard with explicit stderr on invalid `--port` or `LEDGER_PORT` env. Single `USAGE` constant so the help text is single-sourced.
+2. **`bin` field in `server/package.json`** — `"bin": { "ledger": "./dist/bin/ledger.js" }`. After `pnpm install && pnpm -C server build`, pnpm symlinks the compiled `dist/bin/ledger.js` into `node_modules/.bin/ledger`, callable via `pnpm exec ledger <path>` from any workspace directory.
+3. **Browser launch wrapped in try/catch** — `await open(url)` from the `open` package. On failure (headless box, no `DISPLAY` on Linux, `xdg-open` exits non-zero) the URL is already printed to stdout; a stderr line notes the browser-open failure and the server continues running (parent §Spec Review S7).
+4. **Graceful SIGINT shutdown** — `process.on("SIGINT", ...)` calls the `serve()` adapter's `close()` (or equivalent), drains in-flight requests, then exits 0. No PID file, no daemonization, no `--detach`.
+5. **Structured stderr on `ContextError`** — catches `ContextError` from `loadProjectContext`, formats the structured `errors: ValidationError[]` into readable lines (`<path>: <message>` per error), exits 1. Other exceptions propagate as crashes with their stack trace (the right behavior for unexpected errors).
+6. **Tests via spawned subprocess** at `server/test/bin.test.ts`. Each test spawns `node dist/bin/ledger.js <args>` with `node:child_process.spawn`, captures stdout/stderr/exitCode, asserts the expected combination. Tests cover: `--help` (exit 0, usage on stderr), bare invocation (exit 2, usage), nonexistent path (exit 1, ContextError formatted), bad metadata (exit 1, ValidationError list formatted), invalid `--port` (exit 2, port-error message), `--no-open` + healthy boot (port-bound, no browser attempt — checked via opening `/api/_health` then SIGINT-ing).
+7. **New dependencies in `server/package.json`** — `open@^10.0.0` as a runtime dep. `tsx` already listed as devDep by `03-server-package`. No other additions.
+
+**Out of scope for v1:**
+
+- **Daemonization, PID file, `--detach`, log file.** Parent §"Out of scope". Operator's terminal scrollback is the log; `Ctrl-C` is the stop signal.
+- **Recents chooser** when invoked without a path. PRD §7.1 commits to "explicit path argument or error" for v1; the chooser UI is deferred per PRD §13. Bare `ledger` exits 2 with usage.
+- **Interactive prompts** (e.g., "no `.ledger/project.json` found — create one?"). Hand-author the file per `03-project-metadata`'s scaffolding posture. Interactive setup is deferred to a future `ledger init` subcommand.
+- **`ledger migrate /path/to/existing-project`** — PRD §13 defers this.
+- **`ledger init /path/to/new-project`** — same deferral.
+- **Production-style binary distribution** — `pkg`, `bun build --compile`, Docker image. Parent §"Out of scope". v1 ships TS source compiled to `dist/`; `pnpm exec ledger` is the invocation.
+- **`npm install -g @ledger/server`** packaging for global install. Parent Open Issues §"CLI launcher is non-isolated". The package is workspace-local and not published.
+- **`--host` flag for binding non-localhost.** Parent §D4 — `127.0.0.1` only in v1; remote-access stories need auth first.
+- **`--ui-port` flag.** Parent §Spec Review S1 — CORS dropped, proxy-only contract; the UI's port is the Vite dev server's, configured in `app/vite.config.ts`, irrelevant to the API server.
+- **`--config` flag** to point at a non-default project-metadata file. The convention is `<project>/.ledger/project.json`; if a future use case needs an override, it's a small addition.
+- **Hot-reload of the running server when `.ledger/project.json` changes.** The server re-validates per request (`03-server-package` D4), so config edits surface without restart for `/api/project`'s shape. Other context fields (`projectRoot`, `docsRoot`, `port`) are immutable for the process lifetime; changing them means restart.
+- **`--quiet` / `--verbose` flags.** Hono's logger middleware is on; stdout is moderately chatty. Add log-level controls when an ops story requires them.
+- **A Hono mounting of the UI's static `dist/`** so a single process serves both UI and API. Different concern; deferred. v1 keeps the two-process model.
+
+---
+
+## Design
+
+### File-level diff
+
+```
+server/src/bin/
+  ledger.ts                                  [new — the CLI binary]
+server/test/
+  bin.test.ts                                [new — subprocess tests]
+server/package.json                          [modified — adds bin field + open dep]
+docs/04-api-server/04-cli-launcher.md        [this spec — status transitions]
+docs/04-api-server.md                        [modified — §Children manifest row status]
+```
+
+No source code outside `server/` is touched. The `app/` and `packages/parser/` packages are untouched.
+
+### `server/src/bin/ledger.ts`
+
+```ts
+#!/usr/bin/env node
+import { parseArgs } from "node:util";
+import { serve } from "@hono/node-server";
+import open from "open";
+import {
+  createServer,
+  loadProjectContext,
+  ContextError,
+  type ProjectContext,
+} from "../index";
+
+const USAGE = "usage: ledger <project-path> [--port N] [--no-open] [-h|--help]\n";
+
+interface ParsedArgs {
+  projectPath: string;
+  port: number;
+  open: boolean;
+  help: boolean;
+}
+
+function parseCliArgs(argv: string[]): ParsedArgs {
+  let positionals: string[];
+  let values: { port: string; "no-open": boolean; help: boolean };
+  try {
+    ({ positionals, values } = parseArgs({
+      args: argv,
+      strict: true,
+      allowPositionals: true,
+      options: {
+        port: { type: "string", default: process.env.LEDGER_PORT ?? "4180" },
+        "no-open": { type: "boolean", default: false },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (e) {
+    process.stderr.write(`ledger: ${(e as Error).message}\n${USAGE}`);
+    process.exit(2);
+  }
+
+  if (values.help) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
+
+  if (positionals.length !== 1) {
+    process.stderr.write(USAGE);
+    process.exit(2);
+  }
+
+  const port = Number(values.port);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    process.stderr.write(
+      `ledger: invalid --port "${values.port}" (expected integer 0..65535)\n`
+    );
+    process.exit(2);
+  }
+
+  return {
+    projectPath: positionals[0],
+    port,
+    open: !values["no-open"],
+    help: false,
+  };
+}
+
+function formatContextError(e: ContextError): string {
+  const lines = [`ledger: ${e.message}`];
+  for (const err of e.errors) {
+    lines.push(`  ${err.path}: ${err.message}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+async function main() {
+  const args = parseCliArgs(process.argv.slice(2));
+
+  let project: ProjectContext;
+  try {
+    project = await loadProjectContext({
+      projectPath: args.projectPath,
+      port: args.port,
+    });
+  } catch (e) {
+    if (e instanceof ContextError) {
+      process.stderr.write(formatContextError(e));
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const app = createServer(project);
+  const server = serve({ fetch: app.fetch, port: args.port, hostname: "127.0.0.1" });
+  const url = `http://localhost:${args.port}/`;
+  process.stdout.write(`ledger: ${project.project.name} on ${url}\n`);
+
+  if (args.open) {
+    try {
+      await open(url);
+    } catch (e) {
+      process.stderr.write(
+        `ledger: could not open browser (${(e as Error).message}); ${url} is ready\n`
+      );
+    }
+  }
+
+  // Graceful shutdown.
+  const shutdown = () => {
+    process.stdout.write("ledger: shutting down\n");
+    server.close(() => process.exit(0));
+    // Force-exit if drain takes longer than 5s.
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main().catch((e) => {
+  process.stderr.write(`ledger: unexpected error: ${(e as Error).stack ?? e}\n`);
+  process.exit(1);
+});
+```
+
+The shebang (`#!/usr/bin/env node`) is required for `pnpm exec ledger`-style invocation. The `tsc` build preserves it (TypeScript leaves the shebang on emitted JS when the source has one).
+
+Three exit codes:
+- **0** — clean shutdown via SIGINT or `--help`.
+- **1** — runtime failure (`ContextError`, browser-open failure does NOT exit 1, an unexpected throw does).
+- **2** — usage error (bad args, bad port, missing path).
+
+### `server/package.json` additions
+
+```diff
+   "exports": { ... },
++  "bin": { "ledger": "./dist/bin/ledger.js" },
+   "scripts": { ... },
+   "dependencies": {
+     "@ledger/parser": "workspace:*",
+     "@hono/node-server": "^1.13.0",
+-    "hono": "^4.6.0"
++    "hono": "^4.6.0",
++    "open": "^10.0.0"
+   },
+```
+
+After `pnpm install`, the binary is callable via:
+- `pnpm exec ledger <path>` from any workspace dir
+- `node server/dist/bin/ledger.js <path>` (direct)
+- `pnpm -C server start <path>` if a `start` script is added (optional polish)
+
+The `pnpm exec` path is the canonical invocation in v1.
+
+### Subprocess test shape
+
+```ts
+// server/test/bin.test.ts (excerpt)
+import { describe, expect, it, beforeAll } from "vitest";
+import { spawn, spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const serverRoot = resolve(fileURLToPath(import.meta.url), "..", "..");
+const binPath = resolve(serverRoot, "dist/bin/ledger.js");
+const fixturePath = resolve(serverRoot, "__fixtures__/sample-project");
+
+beforeAll(() => {
+  // Ensure the binary is built before tests run.
+  const build = spawnSync("pnpm", ["-C", serverRoot, "build"], { stdio: "inherit" });
+  if (build.status !== 0) throw new Error("server build failed");
+});
+
+function runSync(args: string[], env: Record<string, string> = {}) {
+  return spawnSync(process.execPath, [binPath, ...args], {
+    env: { ...process.env, ...env },
+    encoding: "utf8",
+  });
+}
+
+describe("ledger CLI", () => {
+  it("prints usage on --help and exits 0", () => {
+    const r = runSync(["--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/usage: ledger/);
+  });
+
+  it("exits 2 with usage on bare invocation", () => {
+    const r = runSync([]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/usage: ledger/);
+  });
+
+  it("exits 1 with formatted ContextError on nonexistent path", () => {
+    const r = runSync(["/definitely/does/not/exist"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/missing.*project\.json/);
+  });
+
+  it("exits 2 with port-error on invalid --port", () => {
+    const r = runSync([fixturePath, "--port", "notanumber"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/invalid --port/);
+  });
+
+  it("exits 2 with port-error on out-of-range --port", () => {
+    const r = runSync([fixturePath, "--port", "99999"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/0\.\.65535/);
+  });
+
+  it("exits 2 on unknown flag", () => {
+    const r = runSync([fixturePath, "--unknown-flag"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/usage: ledger/);
+  });
+
+  it("boots the server with --no-open and serves /api/_health", async () => {
+    const proc = spawn(process.execPath, [binPath, fixturePath, "--port", "0", "--no-open"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    try {
+      const port = await new Promise<number>((res, rej) => {
+        const timer = setTimeout(() => rej(new Error("boot timeout")), 5000);
+        proc.stdout.on("data", (chunk: Buffer) => {
+          const m = /:(\d+)\//.exec(chunk.toString());
+          if (m) { clearTimeout(timer); res(Number(m[1])); }
+        });
+      });
+      const res = await fetch(`http://127.0.0.1:${port}/api/_health`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+    } finally {
+      proc.kill("SIGINT");
+      await new Promise<void>((res) => proc.on("exit", () => res()));
+    }
+  });
+
+  it("respects LEDGER_PORT env var when --port absent", async () => {
+    const proc = spawn(process.execPath, [binPath, fixturePath, "--no-open"], {
+      env: { ...process.env, LEDGER_PORT: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    try {
+      const port = await new Promise<number>((res, rej) => {
+        const timer = setTimeout(() => rej(new Error("boot timeout")), 5000);
+        proc.stdout.on("data", (chunk: Buffer) => {
+          const m = /:(\d+)\//.exec(chunk.toString());
+          if (m) { clearTimeout(timer); res(Number(m[1])); }
+        });
+      });
+      expect(port).toBeGreaterThan(0);
+    } finally {
+      proc.kill("SIGINT");
+      await new Promise<void>((res) => proc.on("exit", () => res()));
+    }
+  });
+});
+```
+
+`--port 0` lets the OS assign a free ephemeral port — the test parses the assigned port from the boot stdout line (`ledger: <name> on http://localhost:<port>/`). This avoids port collisions in parallel test runs and CI environments.
+
+The `beforeAll` build ensures the binary exists; tests then spawn the compiled JS, not the TS source (which would require a TS loader and complicate the invocation chain).
+
+### Acceptance check (manual)
+
+A reviewer running the worktree must observe:
+
+1. `server/package.json` has a `bin` field mapping `ledger` to `./dist/bin/ledger.js`, and `open` as a new dependency.
+2. `pnpm install` at the repo root succeeds; `node_modules/.bin/ledger` exists and is a symlink to `server/dist/bin/ledger.js` (after `pnpm -C server build`).
+3. `pnpm -C server build` succeeds and emits `server/dist/bin/ledger.js` with the shebang preserved.
+4. `pnpm -C server typecheck`, `pnpm -C server lint --max-warnings=0`, `pnpm -C server test` exit zero. Test count from this child: ≥8 tests in `bin.test.ts`.
+5. **End-to-end invocations work against the real ledger project:**
+   - `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` boots the server; `curl http://127.0.0.1:4180/api/_health` returns 200; `Ctrl-C` gracefully shuts down.
+   - `pnpm exec ledger /Users/dennis/code/ledger` (no `--no-open`) boots the server AND opens the browser to `http://localhost:4180/`.
+   - `pnpm exec ledger /nonexistent/path` exits 1 with stderr like `ledger: missing /nonexistent/path/.ledger/project.json`.
+   - `pnpm exec ledger` (no args) exits 2 with usage on stderr.
+   - `pnpm exec ledger /Users/dennis/code/ledger --port notanumber` exits 2 with `invalid --port`.
+   - `pnpm exec ledger --help` exits 0 with usage on stdout.
+6. **`app/` and `packages/parser/` are untouched.** `git diff main..HEAD -- app/ packages/parser/` is empty.
+7. **`server/src/`, `server/test/`, `server/package.json` are the only changed files in this child's scope.** `git diff main..HEAD --stat -- server/` shows changes only to `src/bin/`, `test/bin.test.ts`, and `package.json`.
+
+---
+
+## Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D1 | `node:util.parseArgs` over `commander` / `yargs` / `mri` | Built into Node; no dep. The argument grammar is trivial enough (one positional, two flags, one `-h` alias) that a full CLI framework is unnecessary. Inherited from parent. |
+| D2 | `parseArgs({ strict: true })` with try/catch around the parse call | Parent §Spec Review S2. Default `strict: true` rejects unknown flags by throwing; without the catch, an unknown flag crashes with a stack trace instead of a usage message. The catch converts the throw into a clean exit-2-with-usage. |
+| D3 | Single `USAGE` constant for help text | Parent §Spec Review S2 (extracted constant). Three exit paths print usage (help, bare invocation, parseArgs failure); duplicating the string risks drift. One source of truth. |
+| D4 | `Number.isInteger(port) && 0 <= port <= 65535` guard with explicit stderr | Parent §Spec Review S2. `Number(values.port)` silently produces `NaN` for non-numeric input, then `serve({ port: NaN })` fails with an obscure node-level error. The early guard names the bad value clearly. |
+| D5 | `open` package for browser launch, wrapped in try/catch | Parent §Spec Review S7. `open` handles cross-platform invocation; the try/catch keeps the server running when there's no browser to open (headless CI, SSH-only boxes, Linux without `DISPLAY`). |
+| D6 | `ContextError` is the only typed-error catch in the CLI | Parent §D8 logged that `ContextError` and `PathContainmentError` are typed subclasses. The CLI catches `ContextError` and formats stderr — `PathContainmentError` is wrapped inside `ContextError` by `loadProjectContext` (so the CLI sees only one error type for the "config problem" category). Other exceptions are programmer errors and propagate with their stack trace. |
+| D7 | Graceful SIGINT shutdown via `server.close()` with a 5s force-exit timer | The `serve()` adapter returns a node `http.Server` whose `close()` stops accepting new connections and waits for in-flight requests to drain. The 5s timer (with `.unref()`) prevents hanging on a stuck request. `process.exit(0)` on clean drain; `process.exit(1)` on force-timer. SIGTERM gets the same handler — pnpm and most process managers send SIGTERM, so handling both keeps Ctrl-C and pnpm kill behaving identically. |
+| D8 | Tests via `child_process.spawn` against compiled output, not via `tsx` against TS source | Subprocess tests should exercise the exact same invocation chain a user would run. `tsx` adds a layer (and a dep) that isn't in the production path. `beforeAll` builds the binary once so the test suite measures the real artifact. |
+| D9 | `--port 0` for tests (OS-assigned free port) | Eliminates port-collision flake in parallel test runs and CI environments. The test parses the assigned port from the boot stdout line. |
+| D10 | The `bin` field is added in this child, not in `03-server-package` | `03-server-package` ships the server as a library (createServer + loadProjectContext). The `bin` field implies "this package is invocable as a CLI" — which is only true once the launcher exists. Splitting keeps the abstractions clean: `@ledger/server` is a library + a binary, not a library disguised as one. |
+| D11 | No `start` script in `package.json` | The canonical invocation is `pnpm exec ledger <path>` (or `node server/dist/bin/ledger.js <path>` for direct invocation). A `start` script that wraps either would invite confusion ("which one runs?"). `pnpm -C server dev <path>` is `tsx watch` for development; `pnpm exec ledger <path>` is the compiled binary for everything else. |
+| D12 | Exit code 0 for `--help`, 2 for bad usage, 1 for runtime failures | Matches POSIX convention: 0 = success, 1 = generic error, 2 = misuse of shell command. `--help` is success — the user asked for help and got it. |
+
+---
+
+## Open Issues
+
+- **No `--host` flag.** Parent §D4 — `127.0.0.1` only in v1. Adding `--host 0.0.0.0` later must land with an auth layer in the same node, not as a v1 quiet default. *(Priority: LOW — by-design constraint.)*
+- **No daemonization story.** D7's SIGINT/SIGTERM handler is the entire process-management surface. Operators wanting a long-running ledger across terminal sessions today use `nohup` / `tmux` / `screen` / their OS's user-service tool (systemd-user, launchd). A future packaging concern (out of scope for v1) might add a `--detach` flag or a service-file generator. *(Priority: LOW.)*
+- **No log file output.** Server logs go to stdout via Hono's `logger()` middleware. Redirecting to a file is the operator's shell concern (`pnpm exec ledger ... >> ~/.ledger/server.log 2>&1`). Adding `--log-file` is small but defers to ops needs. *(Priority: LOW.)*
+- **`open` package portability assumptions.** D5 documents the headless fallback. On macOS and Windows `open` works reliably; on Linux it depends on `xdg-open`/`gnome-open`/`kde-open` availability. The fallback (print URL, keep running) handles all failure modes safely; the operator can still hit the URL manually. *(Priority: TRIVIAL — already mitigated.)*
+- **Subprocess tests are slow** — each spawns a Node process and waits for boot. Total `bin.test.ts` runtime: ~5–10s. If the count grows past ~20, consider grouping or moving the "boot + curl" tests to a smaller fixture project. *(Priority: TRIVIAL — wait until measured pain.)*
+- **No `--version` flag.** Inherited convention question. Adding `--version` that reads from `package.json` is trivial; deferred until a versioning story exists (current `0.1.0` is a placeholder for unreleased private packages). *(Priority: TRIVIAL.)*
+- **CLI test environment vs CI.** Subprocess tests work locally on the developer's machine. In a future CI environment, `pnpm -C server build` must run before `pnpm -C server test` (the `beforeAll` does this, but CI configs sometimes split `build` and `test` into separate steps and miss the order). Document in CI setup when it lands. *(Priority: LOW — no CI today.)*
+- **Test for SIGTERM shutdown.** D7 handles both SIGINT and SIGTERM, but the test suite only exercises SIGINT (the test sends `proc.kill("SIGINT")`). Adding a SIGTERM equivalent is one line; deferred to keep the test surface tight. *(Priority: TRIVIAL.)*
+
+---
+
+## Implementation Notes
+
+*(none yet — pre-implementation)*
+
+---
+
+## Verification
+
+When this node moves to `VERIFY`, the verifier confirms:
+
+1. `server/src/bin/ledger.ts` exists, shape matches Design (shebang, `parseArgs` strict + try/catch, USAGE constant, port guard, `open()` try/catch, SIGINT + SIGTERM handlers).
+2. `server/package.json` declares `bin: { ledger: "./dist/bin/ledger.js" }` and adds `open: "^10.0.0"` to `dependencies`. No other field changes.
+3. `pnpm install` at the repo root succeeds.
+4. `pnpm -C server build` succeeds and emits `server/dist/bin/ledger.js` with the shebang intact (first line reads `#!/usr/bin/env node`).
+5. `node_modules/.bin/ledger` exists after install + build (pnpm symlinks the bin).
+6. **All workspace gates green:**
+   - `pnpm -C server typecheck` → 0
+   - `pnpm -C server lint --max-warnings=0` → 0
+   - `pnpm -C server test` → 0, **`bin.test.ts` contributes ≥8 tests**
+   - `pnpm -C server build` → 0
+   - All `app/` and `packages/parser/` gates still green (unchanged from `03-server-package`)
+   - `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` from repo root → all 0
+7. **End-to-end smoke tests against the real ledger project:**
+   - `pnpm exec ledger /Users/dennis/code/ledger --no-open --port 4180` boots; `curl http://127.0.0.1:4180/api/_health` returns 200; SIGINT shuts down cleanly (server exits 0 within 5s).
+   - `pnpm exec ledger /Users/dennis/code/ledger` (no `--no-open`) boots AND opens the browser (verify by watching the operator's default browser open the URL).
+   - `pnpm exec ledger /nonexistent/path` exits 1; stderr contains `missing` and the metadata path.
+   - `pnpm exec ledger` exits 2; stderr contains `usage: ledger`.
+   - `pnpm exec ledger /Users/dennis/code/ledger --port notanumber` exits 2; stderr contains `invalid --port`.
+   - `pnpm exec ledger --help` exits 0; stdout contains `usage: ledger`.
+   - `LEDGER_PORT=0 pnpm exec ledger /Users/dennis/code/ledger --no-open` boots on an OS-assigned port (visible in stdout); SIGINT shuts down cleanly.
+8. **Headless-environment safety (D5):** if `DISPLAY` is unset on Linux (or via `env -i pnpm exec ledger ... --port 4180` to clear env), the server still boots; stderr shows the browser-open failure message; the URL is printed; the server keeps running until SIGINT. (This may be skipped on macOS where `open` succeeds without `DISPLAY`.)
+9. **`app/`, `packages/parser/`, `docs/_schemas/`, `.ledger/`, existing `docs/`** are untouched. `git diff main..HEAD -- app/ packages/parser/ docs/_schemas/ .ledger/ docs/00-project.md docs/02-schema.md docs/03-project-metadata.md docs/04-api-server.md docs/01-ui/` shows only the `04-api-server.md` §Children manifest-row status bump for this child.
+10. **The dev-boot block in `03-server-package`'s `server/src/server.ts` either stays as-is** (still usable for ad-hoc dev) **or is deleted** (this child made it redundant). Implementer's call; documented in Implementation Notes if deleted.
+11. `04-api-server.md` §Children manifest row for `04-cli-launcher` reads the current status; final promotion to COMPLETE bumps both the spec's Status header and the parent's row in the same commit.
+
+---
+
+## Children
+
+None.
