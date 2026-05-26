@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/project-metadata.schema.json",
+  "title": "ProjectMetadata",
+  "description": "Top-level config for a ledger-managed project. Lives at .ledger/project.json. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "name", "docs", "agent"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Authored explicitly by the operator; bumps on breaking schema changes."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable project name shown in the topbar."
+    },
+    "docs": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/].*[^/]$|^[^/]$",
+      "description": "Relative path from the project root to the docs tree, e.g. \"docs\". No leading or trailing slash. Path-traversal segments (..) are NOT rejected by this schema; the API server consuming this field must treat it as untrusted operator input and reject .. segments + assert containment under the project root before any filesystem read. See 03-project-metadata Open Issues for the delegation."
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the agent runtime used to dispatch tasks. v1 recommends \"claude-code\"; no enum enforced."
+    }
+  }
+}
