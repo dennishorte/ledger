@@ -233,10 +233,6 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
     }
   }
 
-  if (validationErrors.length > 0) {
-    console.error("[buildDocGraph] validation errors:", validationErrors);
-  }
-
   const byId = new Map<NodeId, DocNode>();
   for (const p of parsed) {
     byId.set(p.absId, {

@@ -12,4 +12,20 @@ describe("projectMetadata singleton (real .ledger/project.json)", () => {
   it("validates successfully", () => {
     expect(projectMetadata.ok).toBe(true);
   });
+
+  it("has name 'Ledger'", () => {
+    expect(projectMetadata.ok && projectMetadata.metadata.name).toBe("Ledger");
+  });
+
+  it("has docs 'docs'", () => {
+    expect(projectMetadata.ok && projectMetadata.metadata.docs).toBe("docs");
+  });
+
+  it("has agent 'claude-code'", () => {
+    expect(projectMetadata.ok && projectMetadata.metadata.agent).toBe("claude-code");
+  });
+
+  it("has schemaVersion 1", () => {
+    expect(projectMetadata.ok && projectMetadata.metadata.schemaVersion).toBe(1);
+  });
 });

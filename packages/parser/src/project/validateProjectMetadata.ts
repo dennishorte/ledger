@@ -9,7 +9,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import schema from "../../../../docs/_schemas/project-metadata.schema.json" with { type: "json" };
 import type { ProjectMetadata, ProjectMetadataResult } from "./types";
-import type { ValidationError } from "../schema/validateDocNode";
+import { toValidationErrors } from "../schema/validateDocNode";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
@@ -17,12 +17,5 @@ const compile = ajv.compile<ProjectMetadata>(schema);
 
 export function validateProjectMetadata(input: unknown): ProjectMetadataResult {
   if (compile(input)) return { ok: true, metadata: input };
-
-  const errors: ValidationError[] = (compile.errors ?? []).map((e) => ({
-    path: e.instancePath || "/",
-    message: e.message ?? "validation failed",
-    keyword: e.keyword,
-  }));
-
-  return { ok: false, errors };
+  return { ok: false, errors: toValidationErrors(compile.errors) };
 }

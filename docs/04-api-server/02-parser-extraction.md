@@ -493,7 +493,34 @@ Direct relative paths work. `node -e "import('./packages/parser/dist/schema/vali
 
 ### Total test count verification
 
-Pre-extraction: 118 tests (all in `app/`). Post-extraction: 65 (app) + 55 (parser) = **120 total** ≥ 118+2=120. Zero regression; 2 new buildDocGraph tests added.
+Pre-extraction: 118 tests (all in `app/`). Post-extraction (after Implementation Review N-2 restored 4 dropped field-assertion tests): **69 (app) + 55 (parser) = 124 total**. Exceeds the 120 invariant (118 + 2 new buildDocGraph). The 4 restored tests assert the real `.ledger/project.json` carries the expected `name`/`docs`/`agent`/`schemaVersion` values — useful smoke checks against the dogfooded metadata.
+
+### Implementation Review (2026-05-26)
+
+Independent implementation review run in a clean Sonnet context against the worktree diff. Verdict: CONDITIONAL PASS — promote to COMPLETE after fixes. All headless gates green, 120 tests pass, all zero-diff invariants hold, all Spec Review audit closures (SF1, SF2, SF3, SF4, cross-cutting S2, D5) verified honored. Two should-fixes and five nits. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| SF-1 | `packages/parser/dist/` committed to git without `.gitignore`. Would silently go stale and pollute future diffs. | Added `packages/parser/.gitignore` with `dist`, `node_modules`, `*.tsbuildinfo`. Uncommitted the dist tree via `git rm -rf --cached packages/parser/dist`. Verification item 1 updated to enforce the gitignore presence. |
+| SF-2 | `console.error` left in library code at `packages/parser/src/docs/buildDocGraph.ts:237`. Inherited from original `parseDocs.ts` but inappropriate for library code — data is already returned in `validationErrorPaths`; callers decide how to surface. | Removed the `console.error` call. Library reports validation failures only via `BuildDocGraphResult.validationErrorPaths` (the documented contract). |
+| N-1 | Verification item 1 referenced stale `@schemas/*` paths alias text contradicting SF1's resolution. | Rewrote item 1 to say "no paths alias — schemas resolved via direct relative paths per Spec Review SF1." Also added `.gitignore` to the items the verifier checks. |
+| N-2 | Implementation Notes incorrectly claimed "5 singleton tests remain in app" but only 1 actually did; 4 field-assertion smoke tests (`name === "Ledger"`, etc.) were silently dropped. | Restored the 4 field-assertion tests in `app/src/lib/project/loadProjectMetadata.test.ts`. Total tests now 124 (69 app + 55 parser), exceeding the 120 invariant. Notes corrected to reflect actual split: 14 fixture tests moved, 5 singleton-style tests remain in app (1 ok-check + 4 field assertions). |
+| N-3 | `toValidationError` not factored despite spec N6 stating it would be. Three-line lambda duplicated in `validateDocNode.ts` and `validateProjectMetadata.ts`. | Extracted `toValidationErrors(errors)` helper in `packages/parser/src/schema/validateDocNode.ts` (exported). `validateProjectMetadata.ts` imports and uses it. Both validators now share one mapping path. |
+| N-4 | Three-commit discipline minor inversion: code landed in commit 4b instead of 4c (leaf-workflow 4c says code + status bump bundle together). Process observation only. | No edit — functionally fine; the doc-only 4c commit is cleaner anyway. Logged for awareness; will revisit pattern if it causes confusion. |
+| N-5 | `packages/parser/package.json` typecheck uses `tsc -b --noEmit` (vs `app/`'s decision-beyond-spec to drop `-b`). | No edit — parser is a leaf composite project (no `references` entries); TS6310 only triggers on configs that have `references`. The parser's typecheck passes. |
+
+Re-ran gates after audit edits:
+- `pnpm -C packages/parser typecheck` → 0
+- `pnpm -C packages/parser lint --max-warnings=0` → 0
+- `pnpm -C packages/parser test` → 0 (55 tests, unchanged)
+- `pnpm -C packages/parser build` → 0
+- `pnpm -C app typecheck` → 0
+- `pnpm -C app lint --max-warnings=0` → 0
+- `pnpm -C app test` → 0 (69 tests — +4 from restored field assertions)
+- `pnpm -C app build` → 0
+- `pnpm test` (workspace) → 0 (124 total)
+
+Nothing punted. SF-1 and SF-2 mechanical; N-1 through N-3 mechanical doc/code fixes; N-4 and N-5 no-action. All Spec Review audit closures remain honored after the fixes.
 
 ---
 
@@ -501,7 +528,7 @@ Pre-extraction: 118 tests (all in `app/`). Post-extraction: 65 (app) + 55 (parse
 
 When this node moves to `VERIFY`, the verifier confirms:
 
-1. `packages/parser/` exists with `package.json`, `tsconfig.json` (composite, with `@schemas/*` paths alias), `eslint.config.js`, `vitest.config.ts` (Node env), and the `src/` + `test/` directories matching the Design layout.
+1. `packages/parser/` exists with `package.json`, `tsconfig.json` (composite, **no `paths` alias** — schemas resolved via direct relative paths per Spec Review SF1), `eslint.config.js`, `vitest.config.ts` (Node env), `.gitignore` (`dist`, `node_modules`, `*.tsbuildinfo`), and the `src/` + `test/` directories matching the Design layout.
 2. `packages/parser/package.json` declares `@ledger/parser`, `private: true`, `type: "module"`, exports map gated through `dist/index.js` + `dist/index.d.ts`, and deps reuse `ajv@^8.20.0` + `ajv-formats@^3.0.1` (same versions as `app/`).
 3. `pnpm install` at the repo root succeeds; `app/node_modules/@ledger/parser` resolves to the workspace package (symlink check).
 4. **All workspace gates green:**
