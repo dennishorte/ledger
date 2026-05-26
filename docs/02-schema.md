@@ -2,9 +2,9 @@
 
 **Node ID:** `02-schema`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (implementation complete)
 
 **Dependencies:** —
 
