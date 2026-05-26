@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (DRAFT → SPEC_REVIEW)
 
 **Dependencies:** `02-schema`, `03-project-metadata`
 
