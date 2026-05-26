@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-25 (SPEC_REVIEW → APPROVED, spec-review audit landed)
 
 **Dependencies:** `02-schema`, `03-project-metadata`
 
@@ -27,7 +27,7 @@ In scope for v1:
 4. **A `ledger` CLI launcher** (`server/bin/ledger.ts` compiled to `dist/bin/ledger.js`, exposed via the workspace package's `bin` field). Argument shape: `ledger /path/to/project [--port 4180] [--no-open]`. Behavior: validates the path exists and contains `.ledger/project.json`, starts the API server, opens the browser at `http://localhost:<port>/` (using `open` package or platform-appropriate `child_process.spawn`), prints the URL to stdout. No-path invocation prints a usage message and exits 2 (matches the PRD §7.1 contract: "explicit path argument or error"). Process lifecycle is the obvious one (SIGINT → graceful shutdown, no PID file, no daemonization).
 5. **One UI consumer migrated** (`useDocGraph`). Per PRD §7.2's per-endpoint migration discipline, the UI's `useDocGraph` hook flips from `loadDocNodes()` (build-time) to a TanStack Query against `GET /api/docs` (runtime). The rest of the UI (`useDocSource`, `useHealthData`, the orchestration hooks) stays on its current bootstrap — those migrate in their own follow-up commits. Per §7.2 this is **the** way the API gets validated by a real consumer; landing the server with no migrated consumer is explicitly rejected.
 6. **A shared workspace package** (`packages/parser/`) extracted from `app/src/lib/` so the server can reuse the schema validator (`02-schema`), the project-metadata loader (`03-project-metadata`), the markdown extractor, and the `DocNode[]` projection without duplicating code or paying the cost of a `app/` → `server/` relative-path import. v1 extracts the minimum: `schema/` (parseDocNode, validateDocNode, types, schema JSON), `project/` (loadProjectMetadata, types), and the pure `parseDocs.ts` core (`buildDocGraph(rawDocs)` factored out of `loadDocNodes()` so the server can hand it a runtime-read map of `path → content` while the UI still calls `loadDocNodes()` with `import.meta.glob` results). The Vite-import-time fallback path in `loadProjectMetadata.ts` stays for the build-time use case but is no longer the only loader; the server adds a runtime variant that reads from `fs` against `projectRoot`.
-7. **Tests** covering: endpoint-level request/response for all three endpoints (against a fixture project under `server/__fixtures__/sample-project/`), CLI launcher argument parsing (`--port`, `--no-open`, missing-path, bad-path, missing-metadata-file), path containment enforcement (a `docs` field set to `"../escape"` is rejected at server start, with the exact error path), and the migrated `useDocGraph` hook against a mocked server response. Vitest is reused from `app/`; the new `server/` package picks it up via the workspace.
+7. **Tests** covering: endpoint-level request/response for all three endpoints (against a fixture project under `server/__fixtures__/sample-project/`), CLI launcher argument parsing (`--port`, `--no-open`, missing-path, bad-path, missing-metadata-file), path containment enforcement (a `docs` field set to `"../escape"` is rejected at server start, with the exact error path), and the migrated `useDocGraph` hook against a mocked server response. Each workspace package owns its `vitest.config.ts` (`app/` keeps its existing jsdom-client + node-server projects; `server/` adds a Node-environment config; `packages/parser/` adds a Node-environment config). The `vitest` binary is hoisted by the workspace; only the per-package config files are new.
 
 **Out of scope for v1:**
 
@@ -40,7 +40,7 @@ In scope for v1:
 - **Git integration beyond `fs.readFile`.** The server reads markdown files via `node:fs/promises`. It does *not* shell out to git, does not use `simple-git`, does not parse `git log` for version history, does not implement `git revert` for rollback (PRD §8.5). Those land with the task runner / a dedicated `git-ops` node that sits between the runner and the repo. v1's read path is `fs` only; if the file is `git checkout`'d to a different revision externally, the server sees the new content on the next request (modulo the cache below).
 - **Document caching, watch, or invalidation.** v1 reads `docs/**/*.md` on every `GET /api/docs` request. At today's scale (~15 docs, ~10 ms total) this is fine. If latency becomes visible the answer is an in-memory cache keyed on `mtime`, not a file-watcher chain. Logged as an Open Issue; not built in v1.
 - **OpenAPI / Swagger spec.** A typed contract between client and server is valuable but in v1 the type-sharing is direct: both `app/` and `server/` import the same `packages/parser/` types, so the contract is enforced at compile time within the workspace. An OpenAPI artifact becomes useful once non-TS consumers exist (the `06-agent-dispatcher` MCP server, possibly written in a different language) — defer until then.
-- **Hot reload of the API server during development.** The server is small enough that restart-on-change via `tsx watch` (a one-line `dev` script) is the v1 answer. No `nodemon`, no orchestrated UI+server runner. The operator runs `pnpm -C server dev` in one terminal and `pnpm -C app dev` in another for now; a unified `pnpm dev` from the workspace root that runs both is a small polish item but not strictly in scope.
+- **Hot reload of the API server during development.** The server is small enough that restart-on-change via `tsx watch` is the v1 answer. The `server/package.json` `dev` script is exactly: `"dev": "tsx watch src/bin/ledger.ts"` (positional arguments and flags are appended at invocation: `pnpm -C server dev /Users/dennis/code/ledger --port 4180`). No `nodemon`, no orchestrated UI+server runner. The operator runs `pnpm -C server dev` in one terminal and `pnpm -C app dev` in another for now; a unified `pnpm dev` from the workspace root that runs both is a small polish item but not strictly in scope.
 - **Production packaging.** v1 ships source + `tsc` build; the `ledger` binary runs against the compiled output. No bundled standalone binary (no `pkg`, no `bun build --compile`, no Docker image). Packaging is its own concern; revisit once a distribution story is in scope.
 - **Telemetry / structured logging.** Server logs request lines to stdout in a simple format (`method path → status duration`). No JSON logs, no metrics export, no OpenTelemetry. Add when an operations story needs it.
 - **Rate limiting / request size limits.** Single-user local-only — no abuse vector. Hono's default limits are fine.
@@ -139,7 +139,6 @@ Hono (D1) is a TypeScript-first, fetch-style HTTP framework. The chosen shape:
 // server/src/server.ts
 import { Hono } from "hono";
 import { logger } from "hono/logger";
-import { cors } from "hono/cors";
 import type { ProjectContext } from "./context";
 import { projectRoute } from "./routes/project";
 import { docsRoute } from "./routes/docs";
@@ -149,7 +148,6 @@ type Env = { Variables: { project: ProjectContext } };
 export function createServer(project: ProjectContext) {
   const app = new Hono<Env>();
   app.use("*", logger());
-  app.use("/api/*", cors({ origin: `http://localhost:${project.uiPort ?? 4179}` }));
   app.use("*", async (c, next) => { c.set("project", project); await next(); });
 
   app.get("/api/_health", (c) => c.json({ ok: true, startedAt: project.startedAt }));
@@ -160,7 +158,9 @@ export function createServer(project: ProjectContext) {
 }
 ```
 
-Why Hono: TS-first (no `@types/*` second-step), zero-config, native fetch-Request/Response so handlers are testable without an HTTP client (Hono's `app.request()` is the test surface), small bundle (~30 KB), and a credible portability story for Phase 3 if we ever move the API to a Worker/edge runtime. Fastify would be a heavier swap and its plugin model is overkill at this surface area; Express's lack of first-class TS and SSE story is the strongest argument against it; vanilla `node:http` would require us to write the routing + body-parsing layer ourselves at no real saving for a project this size.
+No CORS middleware: the UI reaches the API via Vite's dev proxy (`server.proxy: { "/api": "http://127.0.0.1:4180" }`), so every request is same-origin from the browser's perspective and CORS is never exercised. Production deployments serve the UI and API from the same origin (the UI's static build is served *by* the API server in a follow-up node, but v1 keeps them separate processes joined by the dev proxy). If a future cross-origin need surfaces, the right answer is `cors()` *plus* an auth layer landed in the same node — not a v1 default. (Spec Review S1 — operator-decision: proxy-only contract.)
+
+Rationale for Hono lives in D1.
 
 ### Endpoints in v1
 
@@ -189,10 +189,14 @@ GET /api/docs
 GET /api/docs/:nodeId
   → 200 { node: DocumentNode }                            // the full schema-validated shape
   → 404 if nodeId does not resolve to a tracked file
+  → 422 if the requested node exists but fails schema validation
+        (body: { errors: ValidationError[] })
   nodeId is the dotted/slashed id from parseDocs (e.g. "01-ui/02-dag", "02-schema", "root").
 ```
 
-`nodeId` URL-encoding: the `/` in nested ids is URL-encoded as `%2F` in the path. Hono's router treats path segments as decoded values, so the handler receives `"01-ui/02-dag"` directly. Alternative considered: replace `/` with `--` in the URL (more reader-friendly); rejected because the UI already passes the canonical id form through its existing routes.
+The asymmetry is deliberate (Spec Review N2): `/api/docs` is a tree-survey endpoint that must succeed even with a few broken nodes (it carries the error list alongside the good ones for the topbar banner); `/api/docs/:nodeId` is a single-resource lookup where a validation failure is the answer, not a footnote. The 422 carries the structured `ValidationError[]` so the doc-viewer panel (eventual migration of `useDocSource`) can render the failure inline.
+
+`nodeId` URL-encoding: the `/` in nested ids is URL-encoded as `%2F` in the path. Hono's router treats path segments as decoded values, but a bare `:nodeId` parameter only matches a single segment — the route must be declared with a multi-segment constraint: `app.get('/:nodeId{.+}', ...)`. With that constraint, the handler receives `"01-ui/02-dag"` directly via `c.req.param('nodeId')`. Alternative considered: replace `/` with `--` in the URL (more reader-friendly); rejected because the UI already passes the canonical id form through its existing routes. (Spec Review N1.)
 
 ### Project scoping and path safety
 
@@ -208,14 +212,12 @@ export interface ProjectContext {
   docsRoot: string;          // absolute, asserted descendant of projectRoot
   project: ProjectMetadata;  // the validated .ledger/project.json
   port: number;
-  uiPort?: number;           // if set, CORS allows it
   startedAt: string;         // ISO8601 of server start
 }
 
 export async function loadProjectContext(opts: {
   projectPath: string;
   port: number;
-  uiPort?: number;
 }): Promise<ProjectContext> {
   const projectRoot = resolve(opts.projectPath);
   const metadataPath = resolve(projectRoot, ".ledger/project.json");
@@ -231,7 +233,6 @@ export async function loadProjectContext(opts: {
     docsRoot,
     project: result.metadata,
     port: opts.port,
-    uiPort: opts.uiPort,
     startedAt: new Date().toISOString(),
   };
 }
@@ -239,7 +240,7 @@ export async function loadProjectContext(opts: {
 
 ```ts
 // server/src/pathSafety.ts
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 export class PathContainmentError extends Error {}
 
@@ -303,34 +304,48 @@ import open from "open";
 import { createServer } from "../server";
 import { loadProjectContext, ContextError } from "../context";
 
-const { positionals, values } = parseArgs({
-  allowPositionals: true,
-  options: {
-    port: { type: "string", default: process.env.LEDGER_PORT ?? "4180" },
-    "ui-port": { type: "string", default: "4179" },
-    "no-open": { type: "boolean", default: false },
-    help: { type: "boolean", short: "h" },
-  },
-});
+const USAGE = "usage: ledger <project-path> [--port N] [--no-open]\n";
+
+let positionals: string[];
+let values: { port: string; "no-open": boolean; help: boolean };
+try {
+  ({ positionals, values } = parseArgs({
+    strict: true,
+    allowPositionals: true,
+    options: {
+      port: { type: "string", default: process.env.LEDGER_PORT ?? "4180" },
+      "no-open": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (e) {
+  process.stderr.write(`ledger: ${(e as Error).message}\n${USAGE}`);
+  process.exit(2);
+}
 
 if (values.help || positionals.length !== 1) {
-  process.stderr.write("usage: ledger <project-path> [--port N] [--ui-port N] [--no-open]\n");
+  process.stderr.write(USAGE);
   process.exit(values.help ? 0 : 2);
 }
 
 const port = Number(values.port);
-const uiPort = Number(values["ui-port"]);
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  process.stderr.write(`ledger: invalid --port "${values.port}" (expected integer 0..65535)\n`);
+  process.exit(2);
+}
+
 try {
-  const project = await loadProjectContext({
-    projectPath: positionals[0],
-    port,
-    uiPort,
-  });
+  const project = await loadProjectContext({ projectPath: positionals[0], port });
   const app = createServer(project);
   serve({ fetch: app.fetch, port, hostname: "127.0.0.1" });
   const url = `http://localhost:${port}/`;
   process.stdout.write(`ledger: ${project.project.name} on ${url}\n`);
-  if (!values["no-open"]) await open(url);
+  if (!values["no-open"]) {
+    try { await open(url); } catch (e) {
+      // Headless environment (no DISPLAY on Linux, etc.). The URL is already printed.
+      process.stderr.write(`ledger: could not open browser (${(e as Error).message}); ${url} is ready\n`);
+    }
+  }
 } catch (e) {
   if (e instanceof ContextError) {
     process.stderr.write(`ledger: ${e.message}\n${formatErrors(e.errors)}\n`);
@@ -340,7 +355,7 @@ try {
 }
 ```
 
-`@hono/node-server` is Hono's Node adapter. `open` is the cross-platform browser opener used by countless dev tools. Both are small, popular, no-frills.
+`@hono/node-server` is Hono's Node adapter. `open` is the cross-platform browser opener used by countless dev tools. Both are small, popular, no-frills. The `open()` call is wrapped in try/catch so headless environments (CI, SSH-only boxes, Linux without `DISPLAY`) get a printed-URL fallback instead of an unhandled rejection — Spec Review S7.
 
 Process management is intentionally absent: no daemonization, no PID file, no `--detach`, no log file (logs go to stdout/stderr and the operator's terminal scrollback handles them). `Ctrl-C` sends SIGINT; the Hono server stops accepting new connections, drains in-flight requests, and the process exits. Re-launching is `^C` then `↑↵` in the same terminal. v1 is single-operator; complicated process plumbing is YAGNI.
 
@@ -382,9 +397,11 @@ export function useDocGraph(): DocNode[] {
 }
 ```
 
-The fallback paths matter: setting `VITE_LEDGER_API=""` (the default) makes the hook behave exactly like today, which lets the UI keep working during the transition for anyone who hasn't started the server yet. Setting `VITE_LEDGER_API=http://localhost:4180` (the value in `app/.env.development` after this node) flips it to the live API. The Vite dev proxy (`server.proxy: { "/api": "http://localhost:4180" }` in `vite.config.ts`) is the alternative wiring that avoids the env var entirely; both are fine and we use the proxy approach so production builds don't bake in a hostname. Updated final shape: `API_BASE` is `"/api"` (proxied in dev, served by the same origin in any eventual hosted deployment).
+`API_BASE` is `"/api"` — the Vite dev proxy (`server.proxy: { "/api": "http://127.0.0.1:4180" }` in `vite.config.ts`) makes the request same-origin from the browser's view, so the URL is hostname-free and production builds carry no baked-in API host. The env-var alternative (`VITE_LEDGER_API=http://localhost:4180`) was rejected for that reason.
 
-The `placeholderData` returning `loadDocNodes()` keeps the first paint instant against the build-time tree, then the query updates to the live data when it arrives. Same memoized data on the first frame, live data on the second frame — net effect is a small flicker on edits but no loading spinner on app load. Acceptable for v1; refinable later.
+The `placeholderData` returning `loadDocNodes()` keeps the first paint instant against the build-time tree, then the query updates to the live data when it arrives. Same memoized data on the first frame, live data on the second frame — net effect is a small flicker on edits but no loading spinner on app load. `loadDocNodes()` is module-singleton-cached (`parseDocs.ts:_built`) so the repeated calls TanStack Query triggers via `placeholderData` on every render are free. Acceptable for v1; refinable later.
+
+**Where `import.meta.glob` lives after the workspace split (Spec Review S4):** `loadDocNodes()` and its `import.meta.glob('../../../docs/**/*.md', { eager: true, as: 'raw' })` call **stay inside `app/src/lib/parseDocs.ts`** — the relative path is calibrated to that file's location in the repo, and Vite's glob is a build-time primitive that only runs through Vite's pipeline (not Node's). `@ledger/parser` exports only the pure `buildDocGraph(rawDocs: Record<string, string>): DocNode[]` function (and the schema/project validators). `app/`'s `parseDocs.ts` becomes a 5-line wrapper: `import.meta.glob(...)` to produce `rawDocs`, then `return buildDocGraph(rawDocs)`. The server's `readDocsTree(docsRoot)` produces the same `Record<string, string>` shape from `fs` and feeds it to the same `buildDocGraph()`.
 
 **Other consumers do not migrate in this node.** `useHealthData` still calls `useDocGraph` (now backed by the API), so it inherits the migration for free; the rest of `useHealthData`'s logic is unchanged. `useDocSource` (the doc-viewer panel's hook) keeps reading via Vite's `?raw` import for now — its migration to `GET /api/docs/:nodeId` is a follow-up commit, tracked as an Open Issue here so it doesn't get lost. The orchestration hooks (`useTask`, `useTaskList`, `useLogStream`) keep their transcript bootstrap; they migrate with `05-task-runner` per the build order.
 
@@ -392,7 +409,24 @@ The `placeholderData` returning `loadDocNodes()` keeps the first paint instant a
 
 The server-side validator instance is a second `new Ajv2020(...)` constructed inside `@ledger/parser`'s server-runtime entrypoint. The browser-side validator instance still exists in the build (until the API migration is complete across all consumers and the validation is fully server-side, at which point the import drops naturally per `02-schema`'s D6 and `03-project-metadata`'s Op-2). This v1 has both instances live simultaneously — UI for the unmigrated panels (`useDocSource` etc.) and server for `/api/docs`. The bundle delta sits unchanged for the UI; the server pays a small startup cost (~10 ms) to compile its validator on boot. Logged as TRIVIAL.
 
-The `_schemas/` directory is a **shared resource** — both the browser (still) and the server import `document-node.schema.json` and `project-metadata.schema.json` from `docs/_schemas/`. The location is correct per PRD §9 ("stored in the document tree root"); the parser package imports them by relative path (`../../../docs/_schemas/...`). The server's `tsconfig.json` allows the `resolveJsonModule` import; no copy step, no build-time codegen.
+The `_schemas/` directory is a **shared resource** — both the browser (still) and the server import `document-node.schema.json` and `project-metadata.schema.json` from `docs/_schemas/`. The location is correct per PRD §9 ("stored in the document tree root"); the parser package references them through a `tsconfig.json` `paths` alias so the depth of the relative path is greppable and changes only in one place:
+
+```jsonc
+// packages/parser/tsconfig.json
+{
+  "compilerOptions": {
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@schemas/*": ["../../docs/_schemas/*"]
+    }
+  }
+}
+```
+
+Validators then `import schema from "@schemas/document-node.schema.json" with { type: "json" }`.
+
+**Runtime resolution.** The server runs against compiled output (`server/dist/bin/ledger.js` invokes compiled `packages/parser/dist/...`). The `with { type: "json" }` import compiles to a Node-runtime `import` against the JSON path. With pnpm's workspace symlink, `node_modules/@ledger/parser` is a link to `packages/parser/`, which resolves `../../docs/_schemas/*.json` correctly back to the repo's `docs/_schemas/` tree. The implementer must smoke-test this with `node packages/parser/dist/.../validateDocNode.js` before finalizing — if symlink-relative resolution surprises Node, the fallback is to copy the schema JSONs into `packages/parser/dist/_schemas/` as a `tsc -b`-adjacent step. (Spec Review S6: pin the runtime-resolution story; the smoke test is on the stage-4 implementer's checklist.)
 
 ### Test infrastructure
 
@@ -420,7 +454,7 @@ expect(code).toBe(0);
 expect(stderr).toMatch(/usage: ledger/);
 ```
 
-The fixture project under `server/__fixtures__/sample-project/` has a minimal but conformant tree: a root doc, a leaf doc, and a `.ledger/project.json` with the four required fields. Both schemas validate it cleanly. The fixture is **not** the real `ledger` project itself — it's an independent minimal tree so the tests don't break every time a real doc transitions status.
+The fixture project under `server/__fixtures__/sample-project/` has a minimal but conformant tree: a root doc (`00-project.md`, parsed via the legacy parent-doc path per `02-schema`'s S2 leaf-only-validation decision — root + parent docs bypass schema validation by design), a leaf doc (`01-leaf.md`, validated against `document-node.schema.json`), and a `.ledger/project.json` (validated against `project-metadata.schema.json`). The fixture is **not** the real `ledger` project itself — it's an independent minimal tree so the tests don't break every time a real doc transitions status. (Spec Review N5: only the leaf doc and the metadata file are validated; the root parses via the legacy path.)
 
 The migrated `useDocGraph` hook gets a test in `app/src/components/dag/useDocGraph.test.ts` that mocks `fetch` and asserts the query shape — same pattern as the existing `LogEventRow.test.tsx` test setup.
 
@@ -549,6 +583,35 @@ A reviewer running the worktree must observe:
 
 ---
 
+## Spec Review (2026-05-25)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context immediately after authoring. Verdict: NEEDS_MINOR_REVISIONS, no blockers. Nine should-fixes (eight mechanical, one operator-decision) and seven nits (five mechanical, two no-action stylistic confirmations). Coverage matrix returned by the reviewer marked every PRD §7 / §7.1 / §7.2 commitment as Addressed; one item (git plumbing) flagged as Partial-by-deferral with explicit handoff. All findings applied or explicitly resolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | CORS-and-Vite-proxy posture internally inconsistent: server factory sets `cors({ origin: ui-port })` but UI consumer migration commits to proxy-only `API_BASE = "/api"`. `--ui-port` flag and `uiPort` field on `ProjectContext` become dead weight under the proxy contract. Reviewer flagged as operator-decision. | **Operator chose drop-CORS + drop-uiPort (proxy-only contract).** Rewrote §"HTTP framework: Hono" to remove the `cors` middleware import and the `app.use("/api/*", cors(...))` line. Removed `uiPort?` from the `ProjectContext` interface and from `loadProjectContext`'s opts. Removed `--ui-port` from the CLI launcher's `parseArgs` options and from the usage string. Added a paragraph below the Hono code block explaining why CORS is absent (proxy makes everything same-origin from the browser's view; future cross-origin need must land with auth). |
+| S2 | CLI launcher's `parseArgs` has unhandled-throw risk on unknown options; `Number(values.port)` silently produces `NaN` for non-numeric `LEDGER_PORT` env values. | Rewrote the CLI snippet: wrapped `parseArgs` in try/catch with a usage-message stderr + exit 2; added `Number.isInteger(port) && port >= 0 && port <= 65535` guard with an explicit stderr message naming the invalid value; explicit `strict: true` in `parseArgs` options. Extracted `USAGE` constant so usage text is single-sourced. |
+| S3 | Requirements §7 said "Vitest is reused from `app/`; the new `server/` package picks it up via the workspace" but Design §"Test infrastructure" says `server/` gets its own `vitest.config.ts`. Contradiction. | Rewrote Requirements §7 to say each workspace package owns its `vitest.config.ts` (`app/` keeps its existing config; `server/` and `packages/parser/` add Node-env configs); only the binary is hoisted by the workspace. Matches the Design block now. |
+| S4 | `placeholderData: () => loadDocNodes()` referenced `@/lib/parseDocs`'s `loadDocNodes`, but the file-list moves `parseDocs.ts` content into `@ledger/parser`. Implementer could plausibly try to move `loadDocNodes()` itself into the parser package, which would break `import.meta.glob` (Vite-only primitive, relative-path-calibrated to `app/src/lib/`). | Added explicit paragraph to §"UI consumer migration": `import.meta.glob('../../../docs/**/*.md', ...)` and `loadDocNodes()` **stay inside `app/src/lib/parseDocs.ts`**; `@ledger/parser` exports only the pure `buildDocGraph(rawDocs)` function. The server's `readDocsTree(docsRoot)` produces the same `Record<string, string>` shape from `fs` and feeds it to the same `buildDocGraph()`. Added Spec Review citation. |
+| S5 | `app/server/` shares a name with the new top-level `server/` and is actively imported from `vite.config.ts:6` and `tsconfig.node.json:23`. Open Issue understated the coupling. No Verification gate ensures the node doesn't accidentally rewrite that directory. | Added Verification items 11a (`git diff` of `app/server/`, `app/vite.config.ts`, `app/tsconfig.node.json` must be empty) and 11b (all 99 pre-existing `app/` tests still pass without source changes). Open Issue text stays as-is; the rename is still deferred to the post-`06-agent-dispatcher` cleanup. |
+| S6 | Schema relative-path import depth was wrong (`"../../../docs/_schemas/..."` should be `"../../../../docs/_schemas/..."` from `packages/parser/src/schema/`); runtime resolution at `node dist/bin/ledger.js` time was not pinned. | Replaced the relative-path approach with a `tsconfig.json` `paths` alias (`"@schemas/*": ["../../docs/_schemas/*"]`) in `packages/parser/tsconfig.json`, depth-calibrated from the parser package root rather than per-file. Pinned runtime story: pnpm workspace symlink makes `../../docs/_schemas/` resolve from the parser's `dist/` correctly; implementer smoke-tests with `node -e` before finalizing; fallback is a copy step into `packages/parser/dist/_schemas/`. |
+| S7 | `await open(url)` rejects on headless Linux (no `DISPLAY`, `xdg-open` warns + exits non-zero). | Wrapped `await open(url)` in try/catch; on failure the URL is already printed to stdout and a stderr line notes the browser-open failure. Server keeps running. |
+| S8 | Hono CORS fallback origin when `uiPort` is unset reads `http://localhost:4179` even if no UI is configured. | Resolved by S1 — CORS middleware removed entirely. |
+| S9 | `pathSafety.ts` snippet used `isAbsolute(rel)` but did not import `isAbsolute` from `node:path`. | Added `isAbsolute` to the `import { ... } from "node:path"` line. |
+| N1 | Spec claimed Hono's `:nodeId` parameter receives `"01-ui/02-dag"` directly, but a bare `:nodeId` matches a single segment; the multi-segment form needs `:nodeId{.+}`. | Updated §"Endpoints in v1" paragraph to specify `app.get('/:nodeId{.+}', ...)` and to mention `c.req.param('nodeId')` returns the full decoded path. |
+| N2 | `/api/docs` carries a `validation: { errorPaths }` envelope; `/api/docs/:nodeId` was 404-on-validation-failure with no envelope. Asymmetry was undocumented. | Made the asymmetry deliberate: `/api/docs/:nodeId` returns `422` on validation failure with `{ errors: ValidationError[] }`; 404 only when the id doesn't resolve to a tracked file. Added explanatory paragraph: bulk endpoint is a tree survey (carries errors alongside data); single-resource lookup treats validation failure as the answer. |
+| N3 | `placeholderData: () => loadDocNodes()` re-runs on every render; spec didn't note that `loadDocNodes()` is module-singleton-cached so the calls are free. | Added one sentence to §"UI consumer migration" noting the `_built` singleton cache. |
+| N4 | `tsx watch` referenced but the exact `dev` script line was missing. | Added: `"dev": "tsx watch src/bin/ledger.ts"` (positional args appended at invocation). |
+| N5 | "Both schemas validate it cleanly" in §"Test infrastructure" was inaccurate: per `02-schema` S2, root + parent docs bypass schema validation entirely; only the leaf doc and the metadata file get schema-validated. | Reworded the fixture-project paragraph: root parses via the legacy parent-doc path; only `01-leaf.md` and `.ledger/project.json` are schema-validated. Cited Spec Review N5. |
+| N6 | Decisions table format matches sibling specs. | No action — confirmation finding. |
+| N7 | `Last Updated` parenthetical matches the leaf-workflow stage-2 commit convention. | No action — confirmation finding. |
+
+The "Why Hono" paragraph that duplicated D1's rationale was also dropped during the S1 rewrite, matching sibling specs' convention of keeping rationale only in the Decisions table (reviewer's house-style alignment note).
+
+Nothing was punted. S1 was the only operator-decision finding; the chosen resolution (drop CORS + drop uiPort) is recorded above. Reviewer's Confidence note flagged three unverified claims (Hono "~30 KB", `~10 ms` for fs-reading 15 docs, the workspace migration's effect on every existing test import) — the bundle size and timing are estimates that the stage-4 implementer will replace with measured values in Implementation Notes; the test-import claim is now a Verification gate (item 11b).
+
+---
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -570,6 +633,8 @@ When this node moves to `VERIFY`, the verifier confirms:
 9. Path containment enforcement: setting `"docs": "../escape"` in `.ledger/project.json` and re-launching causes the server to exit 1 at start with a `PathContainmentError`; no port is bound. Setting `"docs": "/etc"` likewise fails.
 10. `03-project-metadata.md`'s "docs path validation" Open Issue is closed in this node's commit, with a closure note pointing back at `04-api-server.md`.
 11. The migrated `useDocGraph` is the only UI hook touched. `git diff main..HEAD --stat -- app/src/components` shows no other hooks modified beyond the new test file.
+11a. `git diff main..HEAD -- app/server/ app/vite.config.ts app/tsconfig.node.json` shows **no changes** to the `app/server/` transcript-bootstrap directory, the Vite config's `./server/middleware.js` import, or the tsconfig.node.json include for `./server/**/*.ts`. This node deliberately does not touch the (confusingly-named) existing `app/server/` directory; that cleanup is deferred per Open Issues. (Spec Review S5.)
+11b. **All 99 pre-existing tests in `app/` still pass post-workspace-migration without source changes** — the only `app/` test additions are the new `useDocGraph.test.ts`. The 32 tests from `03-project-metadata` and the 67 from `02-schema` continue to pass against their (now relocated) implementations under `@ledger/parser`.
 12. Bundle delta is reported in Implementation Notes against a named baseline (likely commit `a72c13f`, `03-project-metadata` COMPLETE). The UI bundle change is small (~1–5 KB gzip net); the server bundle is reported separately as an absolute size.
 13. No new runtime dependencies beyond `hono`, `@hono/node-server`, `open` in `server/package.json`. No new runtime deps in `app/package.json` (TanStack Query is already there).
 14. `CLAUDE.md` updated: "Running the app" gains a `pnpm -C server dev` line; "Hard constraints" line about the build order is synced; the round-2 / round-3 status sentence reflects the new `04-api-server` state.
