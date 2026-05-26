@@ -133,7 +133,7 @@ A reviewer running `pnpm dev` must be able to:
 - **Command-palette implementation.** Stub button only here. A later node integrates `cmdk` once the command surface is defined. *(Defer.)*
 - **Keyboard shortcut registry.** Only `Esc`-to-close-inspector in this node. A future node introduces a global shortcut registry. *(Defer.)*
 - **Responsive behavior.** This is a desktop operator tool; mobile/tablet support is explicitly not required. Confirm with stakeholder, then close. *(Priority: LOW.)*
-- **Topbar shows "untitled project" — no project metadata source.** The topbar's project-name slot is hardcoded to a fallback string because nothing currently provides project identity. Needs to read from a project metadata file at the project root (e.g., `.ledger/project.json` with `name`, `docs`, `agent` fields — see PRD §11). Blocks on the metadata file's spec; UI work is a one-line fetch + render. *(Priority: MEDIUM — visible to every user on every page; fix follows the metadata-artifact node.)*
+- ~~**Topbar shows "untitled project" — no project metadata source.** The topbar's project-name slot is hardcoded to a fallback string because nothing currently provides project identity. Needs to read from a project metadata file at the project root (e.g., `.ledger/project.json` with `name`, `docs`, `agent` fields — see PRD §11). Blocks on the metadata file's spec; UI work is a one-line fetch + render. *(Priority: MEDIUM — visible to every user on every page; fix follows the metadata-artifact node.)*~~ **Closed by `03-project-metadata`**: `Topbar.tsx` now reads `projectMetadata.name` from `.ledger/project.json` via a direct Vite JSON import; falls back to `"untitled project"` only when schema validation fails.
 
 ---
 

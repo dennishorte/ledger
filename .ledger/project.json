@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "name": "Ledger",
+  "docs": "docs",
+  "agent": "claude-code"
+}

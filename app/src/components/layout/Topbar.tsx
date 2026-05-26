@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { docValidationErrorPaths } from "@/lib/parseDocs";
+import { projectMetadata } from "@/lib/project/loadProjectMetadata";
 
 interface StatusChipProps {
   label: string;
@@ -20,8 +21,12 @@ function StatusChip({ label, value }: StatusChipProps): JSX.Element {
 }
 
 export function Topbar(): JSX.Element {
-  const errorCount = docValidationErrorPaths.length;
-  const firstErrorPath = docValidationErrorPaths[0];
+  const name = projectMetadata.ok ? projectMetadata.metadata.name : "untitled project";
+  const metadataFailed = !projectMetadata.ok;
+  const totalErrors = docValidationErrorPaths.length + (metadataFailed ? 1 : 0);
+  const firstErrorPath = metadataFailed
+    ? ".ledger/project.json"
+    : docValidationErrorPaths[0];
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] px-4">
@@ -31,18 +36,18 @@ export function Topbar(): JSX.Element {
         </div>
         <span className="text-[color:var(--color-faint)]">/</span>
         <div className="text-sm text-[color:var(--color-muted)]">
-          untitled project
+          {name}
         </div>
-        {import.meta.env.DEV && errorCount > 0 && (
+        {import.meta.env.DEV && totalErrors > 0 && (
           <div
             className="flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
             title={firstErrorPath ?? ""}
           >
             <span>⚠</span>
             <span>
-              {errorCount} doc{errorCount > 1 ? "s" : ""} failed validation
-              {errorCount === 1 && firstErrorPath
-                ? `: ${firstErrorPath.replace(/^.*\/docs\//, "")}`
+              {totalErrors} validation error{totalErrors > 1 ? "s" : ""}
+              {totalErrors === 1 && firstErrorPath
+                ? `: ${metadataFailed ? firstErrorPath : firstErrorPath.replace(/^.*\/docs\//, "")}`
                 : ""}
             </span>
           </div>

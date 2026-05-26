@@ -2,7 +2,7 @@
 
 **Node ID:** `03-project-metadata`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-25
 
@@ -312,7 +312,63 @@ Nothing was punted. B1 and S2 required operator judgment; both calls are recorde
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. `ajv@8.20.0` and `ajv-formats@3.0.1` were already installed by `02-schema`. No new entries in `app/package.json`.
+
+### Files added / modified
+
+| File | Change |
+|------|--------|
+| `docs/_schemas/project-metadata.schema.json` | New — canonical JSON Schema (draft 2020-12) |
+| `.ledger/project.json` | New — first dogfooded project config |
+| `app/src/lib/project/types.ts` | New — `ProjectMetadata` interface |
+| `app/src/lib/project/loadProjectMetadata.ts` | New — loader + validator + module-level singleton |
+| `app/src/lib/project/loadProjectMetadata.test.ts` | New — fixture-based test suite (32 tests) |
+| `app/src/lib/project/fixtures/conformant.json` | New |
+| `app/src/lib/project/fixtures/missing-name.json` | New |
+| `app/src/lib/project/fixtures/missing-docs.json` | New |
+| `app/src/lib/project/fixtures/missing-agent.json` | New |
+| `app/src/lib/project/fixtures/bad-schema-version.json` | New |
+| `app/src/lib/project/fixtures/malformed.json` | New — intentionally invalid JSON |
+| `app/src/lib/project/fixtures/empty-agent.json` | New |
+| `app/src/components/layout/Topbar.tsx` | Modified — consume `projectMetadata.name`; unified error banner |
+| `docs/01-ui/01-shell.md` | Modified — "untitled project" Open Issue struck through and closed |
+| `docs/03-project-metadata.md` | Modified — status transitions + this section |
+| `docs/00-project.md` | Modified — §14 manifest row status |
+
+### Decisions beyond spec
+
+- **`as ProjectMetadata` cast removed.** The spec's pseudocode used `parsed as ProjectMetadata` in the success branch, but `ajv.compile<T>` returns a `ValidateFunction<T>` type guard — after `_validate(parsed)` returns `true`, TypeScript already narrows `parsed` to `ProjectMetadata`. The cast was redundant and triggered `@typescript-eslint/no-unnecessary-type-assertion`. Removed. No behavior change.
+- **Test for malformed JSON avoids `any` return.** The test callback wrapping `JSON.parse` was rewritten to assign the result to `const _ignored: unknown` before returning it, sidestepping `@typescript-eslint/no-unsafe-return`. The behavior (asserting `SyntaxError` is thrown) is identical.
+- **Total test count is 32 new tests (118 total).** The spec said "every fixture, plus the real `.ledger/project.json`" — the 32 tests cover the five field assertions on the real artifact, conformant fixture, three missing-field fixtures (name/docs/agent), bad schema version, empty agent, and the two malformed-JSON cases.
+
+### Bundle delta
+
+Baseline: `02-schema` final build (commit `dc320c9`, `02-schema` COMPLETE) — 1,356.64 kB JS / 43.89 kB CSS uncompressed, 430.90 / 8.53 kB gzip.
+
+This build: 1,397.03 kB JS / 44.17 kB CSS uncompressed, 443.42 / 8.62 kB gzip.
+
+Delta: **+40.39 kB JS (+12.52 kB gzip), +0.28 kB CSS (+0.09 kB gzip).**
+
+The +12.52 kB gzip JS delta is larger than the ~1–3 kB estimated in the spec's Verification item 4. The additional cost comes from a second `new Ajv2020()` instantiation in `loadProjectMetadata.ts` (the ajv compiler's internal state is not shared across module-level instances even when the same ajv package is loaded). The loader + schema JSON alone is ~1 kB; the remaining ~11 kB is the second ajv compile-call overhead. When the API server lands and validation moves server-side, both instantiations drop from the browser bundle simultaneously.
+
+### Headless verification results
+
+| Gate | Exit code |
+|------|-----------|
+| `pnpm -C app typecheck` | 0 |
+| `pnpm -C app lint --max-warnings=0` | 0 |
+| `pnpm -C app test` | 0 (118 tests, 6 files) |
+| `pnpm -C app build` | 0 |
+
+### Manual-only verification items
+
+The following Verification items from the spec require browser observation and cannot be confirmed headlessly:
+
+- **Item 5** — Topbar shows `"Ledger"` (not `"untitled project"`) on every page in the running dev server.
+- **Item 6** — Deliberately corrupting `.ledger/project.json` (delete the `name` field or set `schemaVersion: "1"` as a string) causes the topbar to fall back to `"untitled project"` and the dev-only banner to increment. (File deletion or JSON syntax breakage is a build-time error per D10 — correct behavior, not a regression.)
+- **Item 7** — Reverting the corruption clears the banner and restores `"Ledger"` in the topbar.
 
 ---
 
