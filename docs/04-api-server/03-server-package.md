@@ -681,7 +681,102 @@ Nothing punted. S2, S3, S4 were operator-decision; all recorded with rationale. 
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+| Package | Version | Role |
+|---------|---------|------|
+| `hono` | `^4.6.0` | HTTP framework (installed: 4.7.11) |
+| `@hono/node-server` | `^1.13.0` | Node adapter for Hono (installed: 1.14.4) |
+
+### Files added / modified
+
+| Path | Change |
+|------|--------|
+| `server/package.json` | New — `@ledger/server`, no `bin` field, `@eslint/js` and `globals` added to devDeps (required for eslint config to resolve — not included in spec's devDeps list) |
+| `server/.gitignore` | New — `dist`, `node_modules`, `*.tsbuildinfo` |
+| `server/tsconfig.json` | New — composite, references `../packages/parser` |
+| `server/tsconfig.test.json` | New — extends tsconfig, adds test files + vitest config |
+| `server/eslint.config.js` | New — mirrors parser package config |
+| `server/vitest.config.ts` | New — Node env, `include: ["test/**/*.test.ts"]` |
+| `server/src/index.ts` | New — public surface exports |
+| `server/src/server.ts` | New — `createServer` factory + dev-boot block |
+| `server/src/context.ts` | New — `ProjectContext`, `ContextError`, `loadProjectContext` |
+| `server/src/pathSafety.ts` | New — `assertContained`, `PathContainmentError` |
+| `server/src/readDocs.ts` | New — `readDocsTree` fs walk |
+| `server/src/routes/health.ts` | New — `GET /` health route |
+| `server/src/routes/project.ts` | New — `GET /` project route |
+| `server/src/routes/docs.ts` | New — `GET /` and `GET /:nodeId{.+}` docs routes |
+| `server/test/pathSafety.test.ts` | New — 9 tests |
+| `server/test/context.test.ts` | New — 6 tests |
+| `server/test/health.test.ts` | New — 2 tests |
+| `server/test/project.test.ts` | New — 2 tests |
+| `server/test/docs.test.ts` | New — 10 tests |
+| `server/__fixtures__/sample-project/.ledger/project.json` | New |
+| `server/__fixtures__/sample-project/docs/00-project.md` | New |
+| `server/__fixtures__/sample-project/docs/01-leaf.md` | New |
+| `server/__fixtures__/sample-project/docs/02-broken.md` | New — missing `## Decisions` |
+| `server/__fixtures__/sample-project/docs/subdir/03-nested.md` | New |
+| `server/__fixtures__/sample-project/docs/_schemas/ignored.md` | New — S5 skip test |
+| `server/__fixtures__/sample-project/docs/process/ignored.md` | New — S5 skip test |
+| `server/__fixtures__/escape-project/.ledger/project.json` | New — S4 containment test |
+| `docs/04-api-server/03-server-package.md` | Status transitions |
+| `docs/04-api-server/00-api-server.md` | Manifest row status bumps |
+
+### Decisions beyond spec
+
+1. **`@eslint/js` and `globals` added to devDependencies** — the spec's devDeps list didn't include them, but the eslint config imports them. The parser package had them; the server package needs its own entries since pnpm doesn't hoist by default across packages.
+
+2. **`tsc --noEmit` for typecheck** — per the spec's recommendation from the 02-parser-extraction lesson. `tsc -b --noEmit` causes TS6310; `--noEmit` without `-b` avoids it.
+
+3. **`findRawDocForNodeId` prefixes keys with `"docs/"` before calling `idForPath`** — `readDocsTree` returns docs-relative keys like `"01-leaf.md"`, but `idForPath` expects `"docs/01-leaf.md"` format. The `"docs/"` prefix is added in the helper to make the call work correctly. Recorded as a decision because the spec's S2 callout just said "import from `@ledger/parser`" without noting the key-format mismatch.
+
+4. **Root doc test uses `/api/docs/root`** — the spec's test excerpt used `/api/docs/00-project`, but `idForPath("docs/00-project.md")` returns `"root"` (not `"00-project"`), so the lookup using `"00-project"` would return `node not found`, not `not_a_leaf`. Changed the test to use `/api/docs/root` which correctly finds the root doc and hits the `parseDocNode → null → not_a_leaf` path.
+
+5. **Dev-boot block uses `String(process.argv[1])` in template literal** — eslint's `@typescript-eslint/restrict-template-expressions` rejects `process.argv[1]` directly (type is `string | undefined`). Cast via `String()` is the minimal fix.
+
+### Bundle delta
+
+- `server/dist`: **96K** (source maps included; types + compiled JS for 7 source files + routes)
+- `app/dist`: unchanged (this child does not touch `app/`)
+
+### Headless verification results
+
+| Gate | Command | Exit code | Notes |
+|------|---------|-----------|-------|
+| Parser build | `pnpm -C packages/parser build` | 0 | Required before server typecheck |
+| Server typecheck | `pnpm -C server typecheck` | 0 | `tsc --noEmit` |
+| Server lint | `pnpm -C server lint --max-warnings=0` | 0 | |
+| Server tests | `pnpm -C server test` | 0 | 29 tests, 5 files |
+| Server build | `pnpm -C server build` | 0 | Emits `dist/` (96K) |
+| Parser typecheck | `pnpm -C packages/parser typecheck` | 0 | |
+| Parser tests | `pnpm -C packages/parser test` | 0 | 55 tests, 4 files |
+| Parser build | `pnpm -C packages/parser build` | 0 | |
+| App typecheck | `pnpm -C app typecheck` | 0 | |
+| App lint | `pnpm -C app lint --max-warnings=0` | 0 | |
+| App tests | `pnpm -C app test` | 0 | 69 tests, 4 files |
+| App build | `pnpm -C app build` | 0 | |
+| Workspace typecheck | `pnpm typecheck` | 0 | |
+| Workspace lint | `pnpm lint` | 0 | |
+| Workspace tests | `pnpm test` | 0 | 153 total (55 + 29 + 69) |
+| Workspace build | `pnpm build` | 0 | |
+
+### Live smoke test results (against real ledger worktree)
+
+Server started via `pnpm -C server dev /path/to/worktree`.
+
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `GET /api/_health` | 200 | `{"ok":true,"startedAt":"..."}` |
+| `GET /api/project` | 200 | Returns `{"project":{"name":"Ledger",...},"server":{...}}` |
+| `GET /api/docs` | 200 | 20 nodes, 0 error paths |
+| `GET /api/docs/02-schema` | 200 | Returns `{"node":{"nodeId":"02-schema",...}}` |
+| `GET /api/docs/01-ui/02-dag` | 200 | Multi-segment matcher works |
+| `GET /api/docs/nonexistent` | 404 | `{"error":"node not found"}` |
+| `GET /api/docs/root` | 404 | `{"error":"not_a_leaf"}` |
+
+### Total workspace test count
+
+153 tests across 13 test files (55 parser + 29 server + 69 app).
 
 ---
 
