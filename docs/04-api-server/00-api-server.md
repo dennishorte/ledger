@@ -635,7 +635,7 @@ The Spec Review (2026-05-25) audit table stays in this parent as durable provena
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-workspace-conversion` | Convert repo to pnpm workspace — root `package.json` + `pnpm-workspace.yaml` declaring `app`, `server`, `packages/*`; rename `app` package to `@ledger/app`; no source code moves | — | IN_PROGRESS |
+| `01-workspace-conversion` | Convert repo to pnpm workspace — root `package.json` + `pnpm-workspace.yaml` declaring `app`, `server`, `packages/*`; rename `app` package to `@ledger/app`; no source code moves | — | VERIFY |
 | `02-parser-extraction` | New `packages/parser/` package containing the schema validator (`02-schema`), the project-metadata validator (`03-project-metadata`'s pure half), `buildDocGraph(rawDocs)` extracted from `parseDocs.ts`, types, tests, and fixtures; slim `app/src/lib/{schema,project,parseDocs}` to thin Vite-glob/import wrappers around the new package | `01-workspace-conversion` | APPROVED |
 | `03-server-package` | New top-level `server/` package: Hono app, `ProjectContext` + `loadProjectContext`, `pathSafety`, `readDocs`, three v1 routes (`/api/_health`, `/api/project`, `/api/docs`, `/api/docs/:nodeId{.+}`), Vitest config (Node env), endpoint + path-safety + context tests, fixture project under `__fixtures__/sample-project/` | `02-parser-extraction` | APPROVED |
 | `04-cli-launcher` | `ledger` CLI binary at `server/src/bin/ledger.ts` exposed via the package's `bin` field; `parseArgs` strict + try/catch + `Number.isInteger` port guard; headless-safe `open(url)` wrap; SIGINT graceful shutdown; CLI tests via spawned subprocess | `03-server-package` | APPROVED |
