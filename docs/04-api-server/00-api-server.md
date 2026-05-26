@@ -2,7 +2,7 @@
 
 **Node ID:** `04-api-server`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** APPROVED (decomposed 2026-05-26 — parent of five sub-leaves; see §Children)
+**Status:** COMPLETE (v1, 2026-05-26 — all five children COMPLETE; substrate ready for `05-task-runner`)
 **Created:** 2026-05-25
 **Last Updated:** 2026-05-26 (decomposed into 5 children after first implementer dispatch wall-clocked out)
 
@@ -639,7 +639,7 @@ The Spec Review (2026-05-25) audit table stays in this parent as durable provena
 | `02-parser-extraction` | New `packages/parser/` package containing the schema validator (`02-schema`), the project-metadata validator (`03-project-metadata`'s pure half), `buildDocGraph(rawDocs)` extracted from `parseDocs.ts`, types, tests, and fixtures; slim `app/src/lib/{schema,project,parseDocs}` to thin Vite-glob/import wrappers around the new package | `01-workspace-conversion` | COMPLETE (v1) |
 | `03-server-package` | New top-level `server/` package: Hono app, `ProjectContext` + `loadProjectContext`, `pathSafety`, `readDocs`, three v1 routes (`/api/_health`, `/api/project`, `/api/docs`, `/api/docs/:nodeId{.+}`), Vitest config (Node env), endpoint + path-safety + context tests, fixture project under `__fixtures__/sample-project/` | `02-parser-extraction` | COMPLETE (v1) |
 | `04-cli-launcher` | `ledger` CLI binary at `server/src/bin/ledger.ts` exposed via the package's `bin` field; `parseArgs` strict + try/catch + `Number.isInteger` port guard; headless-safe `open(url)` wrap; SIGINT graceful shutdown; CLI tests via spawned subprocess | `03-server-package` | COMPLETE (v1) |
-| `05-ui-hook-migration` | Migrate `useDocGraph` to TanStack Query against `/api/docs` with `placeholderData: () => loadDocNodes()` build-time fallback; add Vite dev proxy `server.proxy: { "/api": "http://127.0.0.1:4180" }`; add mocked-fetch hook test; close `03-project-metadata`'s "docs path validation" Open Issue with a pointer here | `03-server-package` | VERIFY |
+| `05-ui-hook-migration` | Migrate `useDocGraph` to TanStack Query against `/api/docs` with `placeholderData: () => loadDocNodes()` build-time fallback; add Vite dev proxy `server.proxy: { "/api": "http://127.0.0.1:4180" }`; add mocked-fetch hook test; close `03-project-metadata`'s "docs path validation" Open Issue with a pointer here | `03-server-package` | COMPLETE (v1) |
 
 Build order is determined by the dependency edges above. Sequential dispatch: each child waits on its predecessor. `04-cli-launcher` and `05-ui-hook-migration` could in principle run in parallel after `03-server-package` lands (they share no files), but for the manual workflow today the operator is single-threaded so they'll serialize.
 
