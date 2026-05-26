@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** APPROVED
+**Status:** APPROVED (decomposed 2026-05-26 — parent of five sub-leaves; see §Children)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25 (SPEC_REVIEW → APPROVED, spec-review audit landed)
+**Last Updated:** 2026-05-26 (decomposed into 5 children after first implementer dispatch wall-clocked out)
 
 **Dependencies:** `02-schema`, `03-project-metadata`
 
@@ -16,18 +16,20 @@ Stand up the **project-scoped HTTP API** that the UI consumes for document-tree 
 
 This is the **substrate hinge node.** `02-schema` and `03-project-metadata` ship the validated artifacts; this node ships the runtime that reads them under a project-path argument and serves them over HTTP. Subsequent backend nodes (`05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`) all mount onto the server defined here.
 
-In scope for v1:
+The end-state contract — what "this node done" looks like across all children:
 
-1. **An HTTP API server** as a new top-level pnpm workspace package (`server/`). Hono as the HTTP framework (D1). Runs as a Node process on a port the operator can pin via CLI flag or `LEDGER_PORT` env var; defaults to **4180** (one above the UI's 4179, deliberately adjacent so both ports cluster in the operator's `lsof` view). Exposes a small JSON-over-HTTP surface (endpoints listed below). No SSE in v1 — the only consumer that needs streaming is the eventual log endpoint, which is `05-task-runner`'s deliverable.
-2. **Three v1 endpoints**, each backed by code that already exists in `app/src/lib/`:
-   - `GET /api/project` — returns the loaded `.ledger/project.json` (validated against `03-project-metadata`'s schema) plus a small server-status envelope (`{ projectRoot, docsRoot, port, startedAt }`). Replaces the build-time `projectMetadata` singleton for runtime consumers.
-   - `GET /api/docs` — returns the full `DocNode[]` set the UI's `useDocGraph` currently consumes from `parseDocs.ts`, plus the validation error list (the same `docValidationErrorPaths` array `Topbar.tsx` reads today, surfaced now via JSON so the dev-only banner can lift off build-time data).
-   - `GET /api/docs/:nodeId` — returns the full validated `DocumentNode` (the `02-schema` superset shape, including raw section bodies and parsed manifest rows) for one node. The document-viewer panel (`03-docs`) currently slices this out of `loadDocNodes()` plus a raw-markdown re-fetch via `?raw`; this collapses both into one server-side read.
-3. **A project-scoped runtime.** The server takes a project path at startup (CLI arg or `LEDGER_PROJECT_ROOT` env var), loads `.ledger/project.json` from that path, resolves `docsRoot` as `path.resolve(projectRoot, projectMetadata.docs)`, **enforces path containment** (rejects `..` segments and asserts the resolved docs path is a descendant of `projectRoot`; closes the explicit handoff in `03-project-metadata`'s Open Issues), and refuses to start on any failure with a clear stderr message. PRD §7.1's "one project per ledger instance" contract is implemented as a single immutable `ProjectContext` carried via Hono's context, not a global mutable singleton.
-4. **A `ledger` CLI launcher** (`server/bin/ledger.ts` compiled to `dist/bin/ledger.js`, exposed via the workspace package's `bin` field). Argument shape: `ledger /path/to/project [--port 4180] [--no-open]`. Behavior: validates the path exists and contains `.ledger/project.json`, starts the API server, opens the browser at `http://localhost:<port>/` (using `open` package or platform-appropriate `child_process.spawn`), prints the URL to stdout. No-path invocation prints a usage message and exits 2 (matches the PRD §7.1 contract: "explicit path argument or error"). Process lifecycle is the obvious one (SIGINT → graceful shutdown, no PID file, no daemonization).
-5. **One UI consumer migrated** (`useDocGraph`). Per PRD §7.2's per-endpoint migration discipline, the UI's `useDocGraph` hook flips from `loadDocNodes()` (build-time) to a TanStack Query against `GET /api/docs` (runtime). The rest of the UI (`useDocSource`, `useHealthData`, the orchestration hooks) stays on its current bootstrap — those migrate in their own follow-up commits. Per §7.2 this is **the** way the API gets validated by a real consumer; landing the server with no migrated consumer is explicitly rejected.
-6. **A shared workspace package** (`packages/parser/`) extracted from `app/src/lib/` so the server can reuse the schema validator (`02-schema`), the project-metadata loader (`03-project-metadata`), the markdown extractor, and the `DocNode[]` projection without duplicating code or paying the cost of a `app/` → `server/` relative-path import. v1 extracts the minimum: `schema/` (parseDocNode, validateDocNode, types, schema JSON), `project/` (loadProjectMetadata, types), and the pure `parseDocs.ts` core (`buildDocGraph(rawDocs)` factored out of `loadDocNodes()` so the server can hand it a runtime-read map of `path → content` while the UI still calls `loadDocNodes()` with `import.meta.glob` results). The Vite-import-time fallback path in `loadProjectMetadata.ts` stays for the build-time use case but is no longer the only loader; the server adds a runtime variant that reads from `fs` against `projectRoot`.
-7. **Tests** covering: endpoint-level request/response for all three endpoints (against a fixture project under `server/__fixtures__/sample-project/`), CLI launcher argument parsing (`--port`, `--no-open`, missing-path, bad-path, missing-metadata-file), path containment enforcement (a `docs` field set to `"../escape"` is rejected at server start, with the exact error path), and the migrated `useDocGraph` hook against a mocked server response. Each workspace package owns its `vitest.config.ts` (`app/` keeps its existing jsdom-client + node-server projects; `server/` adds a Node-environment config; `packages/parser/` adds a Node-environment config). The `vitest` binary is hoisted by the workspace; only the per-package config files are new.
+1. **An HTTP API server** as a new top-level pnpm workspace package (`server/`). Hono as the HTTP framework (D1). Runs as a Node process on a port the operator can pin via CLI flag or `LEDGER_PORT` env var; defaults to **4180** (one above the UI's 4179). Exposes a small JSON-over-HTTP surface (endpoints listed below). No SSE in v1 — the only consumer that needs streaming is the eventual log endpoint, which is `05-task-runner`'s deliverable.
+2. **Three v1 endpoints**, each backed by extracted shared parser code:
+   - `GET /api/project` — returns the loaded `.ledger/project.json` (validated against `03-project-metadata`'s schema) plus a small server-status envelope (`{ projectRoot, docsRoot, port, startedAt }`).
+   - `GET /api/docs` — returns the full `DocNode[]` set with the validation-error list alongside.
+   - `GET /api/docs/:nodeId` — returns the full validated `DocumentNode`; `422` on schema-validation failure with `{ errors: ValidationError[] }`; `404` only when the id doesn't resolve.
+3. **A project-scoped runtime.** The server takes a project path at startup, loads `.ledger/project.json`, resolves `docsRoot`, **enforces path containment** (rejects `..` segments and asserts the resolved docs path is a descendant of `projectRoot`; closes the explicit handoff in `03-project-metadata`'s Open Issues), and refuses to start on any failure with a clear stderr message. One immutable `ProjectContext` per process; constructor-injected, no module-level singleton.
+4. **A `ledger` CLI launcher** (`server/src/bin/ledger.ts` → `dist/bin/ledger.js`, exposed via the package's `bin` field). `ledger /path/to/project [--port 4180] [--no-open]`. Validates path + metadata, starts the server, opens the browser, prints the URL. Bare invocation exits 2 with usage on stderr.
+5. **One UI consumer migrated** (`useDocGraph`). Per PRD §7.2's per-endpoint migration discipline, the hook flips from `loadDocNodes()` (build-time) to a TanStack Query against `GET /api/docs` (runtime), with a build-time `placeholderData` fallback so the UI keeps working without the server. The rest of the UI stays on its current bootstrap; those migrate in their own follow-up nodes.
+6. **A shared workspace package** (`packages/parser/`) extracted from `app/src/lib/` so the server can reuse the schema validator (`02-schema`), the project-metadata validator (`03-project-metadata`), and a pure `buildDocGraph(rawDocs)` factored out of `parseDocs.ts`. `import.meta.glob` and `loadDocNodes()` stay inside `app/src/lib/parseDocs.ts` (Vite-only primitive).
+7. **Tests** covering each workspace package — endpoint request/response, CLI argument parsing, path-containment enforcement, the migrated hook. Each workspace package owns its `vitest.config.ts`; the `vitest` binary is hoisted by the workspace.
+
+Decomposed into five sub-leaves per §Children. Each sub-leaf delivers one of the seven items above with its own Verification gate. Reasoning recorded in §Implementation Notes (Decomposition 2026-05-26).
 
 **Out of scope for v1:**
 
@@ -614,33 +616,32 @@ Nothing was punted. S1 was the only operator-decision finding; the chosen resolu
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Decomposition (2026-05-26)
 
----
+The original spec was authored as a leaf node and APPROVED 2026-05-25. The first stage-4 implementer dispatch (Sonnet sub-agent, worktree-isolated, briefed against the APPROVED spec + Spec Review audit) ran ~115 minutes and ~50 tool uses before its socket connection dropped. Only commit 4a (`APPROVED → IN_PROGRESS`) had landed; the worktree carried partial uncommitted work — root `package.json`, `pnpm-workspace.yaml`, `packages/parser/` scaffolded with 6 extracted source files (schema + project + docs/types). No tests, no `buildDocGraph` extraction, no `app/` slim-down, no `server/` package, no UI hook migration, no Implementation Notes. Estimated ~10–15% of total work.
 
-## Verification
+Operator call: the spec packed five distinct work streams (workspace conversion + parser extraction + server build + CLI launcher + UI hook migration) into one implementation pass. Even without the socket drop, that scope strained a single Sonnet pass; the failure mode was a useful signal. Decomposed into the five sub-leaves per §Children below. Each child is one focused implementation pass against a child spec inheriting this parent's Design, Decisions, and Open Issues.
 
-When this node moves to `VERIFY`, the verifier confirms:
+This is the framework's first data point for PRD §11's "decomposition termination criteria" Open Issue — what "too large for one pass" looks like in practice. The empirical heuristic from this case: a leaf whose Verification gate enumerates more than ~10 items, or whose Design touches more than 3 cross-cutting workspace boundaries, likely needs decomposition.
 
-1. `pnpm-workspace.yaml` exists at the repo root and lists `app`, `server`, `packages/*`. `pnpm install` at the repo root succeeds and links the workspace packages.
-2. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build`, `pnpm -C app test` exit zero. The UI test count includes the new `useDocGraph.test.ts`.
-3. `pnpm -C server typecheck`, `pnpm -C server lint`, `pnpm -C server build`, `pnpm -C server test` exit zero. Server test count covers all five test files listed in the Design.
-4. `pnpm -C packages/parser typecheck`, `pnpm -C packages/parser lint`, `pnpm -C packages/parser test` exit zero. The moved tests still pass without modification.
-5. Starting the server (`pnpm -C server dev /Users/dennis/code/ledger`) and hitting `http://127.0.0.1:4180/api/_health`, `/api/project`, `/api/docs`, `/api/docs/02-schema` returns the expected shapes (verified by the implementer's manual curl run, recorded in Implementation Notes).
-6. The compiled `ledger` binary works end-to-end: `node server/dist/bin/ledger.js /Users/dennis/code/ledger` starts the server, opens the browser, prints the URL. `--no-open` suppresses the browser. `--port 4181` binds the alternative port. `--help` exits 0 with usage. Bare invocation exits 2 with usage on stderr.
-7. With both servers running, the DAG panel renders the live API data: edit a doc's status header on disk, wait ≤30s, see the change appear without restarting the UI.
-8. Killing the API server keeps the UI rendering (placeholder data covers the gap; no error spinner).
-9. Path containment enforcement: setting `"docs": "../escape"` in `.ledger/project.json` and re-launching causes the server to exit 1 at start with a `PathContainmentError`; no port is bound. Setting `"docs": "/etc"` likewise fails.
-10. `03-project-metadata.md`'s "docs path validation" Open Issue is closed in this node's commit, with a closure note pointing back at `04-api-server.md`.
-11. The migrated `useDocGraph` is the only UI hook touched. `git diff main..HEAD --stat -- app/src/components` shows no other hooks modified beyond the new test file.
-11a. `git diff main..HEAD -- app/server/ app/vite.config.ts app/tsconfig.node.json` shows **no changes** to the `app/server/` transcript-bootstrap directory, the Vite config's `./server/middleware.js` import, or the tsconfig.node.json include for `./server/**/*.ts`. This node deliberately does not touch the (confusingly-named) existing `app/server/` directory; that cleanup is deferred per Open Issues. (Spec Review S5.)
-11b. **All 99 pre-existing tests in `app/` still pass post-workspace-migration without source changes** — the only `app/` test additions are the new `useDocGraph.test.ts`. The 32 tests from `03-project-metadata` and the 67 from `02-schema` continue to pass against their (now relocated) implementations under `@ledger/parser`.
-12. Bundle delta is reported in Implementation Notes against a named baseline (likely commit `a72c13f`, `03-project-metadata` COMPLETE). The UI bundle change is small (~1–5 KB gzip net); the server bundle is reported separately as an absolute size.
-13. No new runtime dependencies beyond `hono`, `@hono/node-server`, `open` in `server/package.json`. No new runtime deps in `app/package.json` (TanStack Query is already there).
-14. `CLAUDE.md` updated: "Running the app" gains a `pnpm -C server dev` line; "Hard constraints" line about the build order is synced; the round-2 / round-3 status sentence reflects the new `04-api-server` state.
+Status was reverted `IN_PROGRESS → APPROVED` (decomposed) in the same commit that landed this decomposition. The failed worktree (`worktree-agent-a15c4310feed361b7`) is parked, not pruned — the partial extraction it produced is a useful reference for the `02-parser-extraction` child's implementer, who can either resume it or restart with the smaller scoped brief.
+
+The Spec Review (2026-05-25) audit table stays in this parent as durable provenance; every finding it resolved still applies, and each child spec cites the parent for the architectural decisions it inherits (CORS-dropped contract, Hono route shape, `:nodeId{.+}` matcher, 422-vs-404 semantics, path-containment posture, `import.meta.glob` stays in `app/`, etc.).
 
 ---
 
 ## Children
 
-None.
+| ID | Title | Depends on | Status |
+|----|-------|------------|--------|
+| `01-workspace-conversion` | Convert repo to pnpm workspace — root `package.json` + `pnpm-workspace.yaml` declaring `app`, `server`, `packages/*`; rename `app` package to `@ledger/app`; no source code moves | — | PLANNED |
+| `02-parser-extraction` | New `packages/parser/` package containing the schema validator (`02-schema`), the project-metadata validator (`03-project-metadata`'s pure half), `buildDocGraph(rawDocs)` extracted from `parseDocs.ts`, types, tests, and fixtures; slim `app/src/lib/{schema,project,parseDocs}` to thin Vite-glob/import wrappers around the new package | `01-workspace-conversion` | PLANNED |
+| `03-server-package` | New top-level `server/` package: Hono app, `ProjectContext` + `loadProjectContext`, `pathSafety`, `readDocs`, three v1 routes (`/api/_health`, `/api/project`, `/api/docs`, `/api/docs/:nodeId{.+}`), Vitest config (Node env), endpoint + path-safety + context tests, fixture project under `__fixtures__/sample-project/` | `02-parser-extraction` | PLANNED |
+| `04-cli-launcher` | `ledger` CLI binary at `server/src/bin/ledger.ts` exposed via the package's `bin` field; `parseArgs` strict + try/catch + `Number.isInteger` port guard; headless-safe `open(url)` wrap; SIGINT graceful shutdown; CLI tests via spawned subprocess | `03-server-package` | PLANNED |
+| `05-ui-hook-migration` | Migrate `useDocGraph` to TanStack Query against `/api/docs` with `placeholderData: () => loadDocNodes()` build-time fallback; add Vite dev proxy `server.proxy: { "/api": "http://127.0.0.1:4180" }`; add mocked-fetch hook test; close `03-project-metadata`'s "docs path validation" Open Issue with a pointer here | `03-server-package` | PLANNED |
+
+Build order is determined by the dependency edges above. Sequential dispatch: each child waits on its predecessor. `04-cli-launcher` and `05-ui-hook-migration` could in principle run in parallel after `03-server-package` lands (they share no files), but for the manual workflow today the operator is single-threaded so they'll serialize.
+
+Out-of-scope items from the parent's Requirements (write endpoints, task/log/dispatcher/daemon endpoints, auth, multi-project, OpenAPI, hot reload, packaging) apply to every child — none of them reintroduce a deferred concern. Each child spec cites this parent's Decisions table for architectural inheritance rather than restating.
+
+The end-to-end Acceptance check that originally lived in this parent's Verification section is distributed across the children: each child's Verification gate covers the items it produces, plus the final child (`05-ui-hook-migration`) carries the cross-cutting end-to-end gates (live DAG re-render on doc edit, server-down placeholder fallback, `03-project-metadata` Open Issue closure, `CLAUDE.md` doc sync).
