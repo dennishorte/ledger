@@ -144,9 +144,13 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
                                                   ISSUE_OPEN
                                                        ↓
                                               (back to APPROVED or DRAFT)
+
+(any active state) → DEFERRED   (terminal; node removed from active roadmap)
 ```
  
 An agent may not begin implementation until a node reaches `APPROVED`. Verification compares generated artifacts against the node's Requirements and Design sections. Failed verification transitions the node to `ISSUE_OPEN` and appends findings to the document.
+
+`DEFERRED` is a terminal status — a deliberate decision that the node is out of scope for the current roadmap. It is distinct from `COMPLETE` (work done) and from `DRAFT` (work pending): it asserts that no further work is planned. The status row should record the version that deferred it and the rationale (e.g. `DEFERRED (v0.5.1) — out of v1 scope. <reason>`). A deferred node may be reactivated by transitioning back to any earlier state.
  
 ### 6.3 Task Queue and DAG
  

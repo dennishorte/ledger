@@ -46,9 +46,10 @@
         "VERIFY",
         "COMPLETE",
         "ISSUE_OPEN",
-        "PLANNED"
+        "PLANNED",
+        "DEFERRED"
       ],
-      "description": "Normalized lifecycle status (uppercase, hyphens replaced with underscores)."
+      "description": "Normalized lifecycle status (uppercase, hyphens replaced with underscores). DEFERRED is a terminal status (PRD §6.2) for nodes explicitly removed from the active roadmap."
     },
     "statusAnnotation": {
       "type": "string",
@@ -122,7 +123,8 @@
               "VERIFY",
               "COMPLETE",
               "ISSUE_OPEN",
-              "PLANNED"
+              "PLANNED",
+              "DEFERRED"
             ]
           }
         }

@@ -8,4 +8,5 @@ export type NodeStatus =
   | "VERIFY"
   | "COMPLETE"
   | "ISSUE_OPEN"
-  | "PLANNED";
+  | "PLANNED"
+  | "DEFERRED";

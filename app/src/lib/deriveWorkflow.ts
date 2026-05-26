@@ -60,6 +60,8 @@ function statusToRank(status: NodeStatus): number {
       return 2; // coerced to APPROVED-rank per D12
     case "PLANNED":
       return -1; // caught by authored === false check; guard only
+    case "DEFERRED":
+      return 5; // terminal status (PRD §6.2), sibling of COMPLETE
   }
 }
 

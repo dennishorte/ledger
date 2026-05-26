@@ -16,7 +16,7 @@ Phase-1 scope, narrower than PRD §8.1 because no task runner exists yet:
 
 1. Render the project's **document tree** (the implementation nodes under `docs/`) as a directed graph: each `docs/*.md` is a node, parent → child edges from the manifests.
 2. Render **planned** child nodes declared in a parent's manifest even when no doc file exists yet, distinguished visually from authored nodes.
-3. Show each node's **lifecycle status** (PRD §6.2: DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, ISSUE_OPEN, plus the manifest-only `PLANNED` pseudo-state) as a colored chip on the node.
+3. Show each node's **lifecycle status** (PRD §6.2: DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, ISSUE_OPEN, plus the terminal `DEFERRED` and the manifest-only `PLANNED` pseudo-state) as a colored chip on the node.
 4. **Pan and zoom** via React Flow defaults. (Minimap removed in v1.1 — see D12.)
 5. **Auto-layout** the graph (no hand-authored coordinates) so adding a new doc requires zero positioning work.
 6. **Click a node → open the shell's right-hand inspector** with the node's metadata (id, parent, status, title, and a link to `/docs/:nodeId`).
@@ -70,7 +70,8 @@ export type NodeStatus =
   | "VERIFY"
   | "COMPLETE"
   | "ISSUE_OPEN"
-  | "PLANNED"; // manifest-only; no authored doc yet
+  | "PLANNED" // manifest-only; no authored doc yet
+  | "DEFERRED"; // terminal — node removed from active roadmap (PRD §6.2)
 
 export interface DocNode {
   id: NodeId;
@@ -123,6 +124,7 @@ src/lib/
 | `COMPLETE` | `--color-success` |
 | `ISSUE_OPEN` | `--color-danger` |
 | `PLANNED` | `--color-muted` (dashed border on the node) |
+| `DEFERRED` | `--color-muted` (terminal; rendered like `PLANNED` but explicitly out-of-scope, not awaiting authorship) |
 
 All colors flow through the existing CSS variables in `src/styles/globals.css`. No new tokens are introduced — if a token gap exists the gap is filled in `globals.css`, not in component CSS.
 

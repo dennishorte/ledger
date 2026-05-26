@@ -21,6 +21,7 @@ const STATUS_STYLES: Record<NodeStatus, { bg: string; fg: string }> = {
   COMPLETE: { bg: "var(--color-success)", fg: "var(--color-accent-fg)" },
   ISSUE_OPEN: { bg: "var(--color-danger)", fg: "var(--color-accent-fg)" },
   PLANNED: { bg: "var(--color-surface-sunken)", fg: "var(--color-muted)" },
+  DEFERRED: { bg: "var(--color-surface-sunken)", fg: "var(--color-muted)" },
 };
 
 export function StatusChip({ status, className }: StatusChipProps): JSX.Element {

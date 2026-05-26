@@ -36,6 +36,7 @@ const STATUS_DISPLAY_ORDER: NodeStatus[] = [
   "VERIFY",
   "ISSUE_OPEN",
   "COMPLETE",
+  "DEFERRED",
 ];
 
 export function WorkflowProgressSection({
