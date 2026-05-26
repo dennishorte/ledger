@@ -22,13 +22,19 @@ Every node in `docs/` follows the schema laid out in PRD §6.1:
 
 ## Running the app
 
+The repo is a **pnpm workspace** (`01-workspace-conversion`, COMPLETE 2026-05-26) with packages: `app/`, `packages/parser/`, and (when it lands) `server/`.
+
 ```bash
-pnpm -C app install
-pnpm -C app dev          # http://localhost:4179
+pnpm install                       # at repo root — wires up workspace symlinks
+pnpm -C packages/parser build      # builds @ledger/parser's dist/ — REQUIRED before app/ gates
+pnpm -C app dev                    # http://localhost:4179
 pnpm -C app typecheck
 pnpm -C app lint
 pnpm -C app build
+pnpm test                          # fans out across all workspace packages
 ```
+
+**Build-order quirk**: `packages/parser/dist/` is gitignored. `app/` resolves `@ledger/parser` via the package's `main` field (`dist/index.js`), so `dist/` must exist before `pnpm -C app typecheck`/`test`/`build` succeed. Run `pnpm -C packages/parser build` after a fresh clone or whenever you've touched parser source. (Logged for a future `pnpm -w build:packages` script that runs it automatically.)
 
 Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: true` (chosen because the default 5173 collides with other local projects).
 

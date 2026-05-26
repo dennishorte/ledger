@@ -7,32 +7,13 @@
  * First contributor: 01-ui/02-dag (the DAG view renders the project's own
  * document tree). Later panels (docs, tasks, logs, health, replay) will add
  * Task, LogEvent, Issue, etc.
+ *
+ * NodeId, NodeStatus, and DocNode are canonical in @ledger/parser (04-api-server/02-parser-extraction D5).
+ * Re-exported here so existing @/lib/types consumers keep working unchanged.
  */
 
-export type NodeId = string;
-
-export type NodeStatus =
-  | "DRAFT"
-  | "SPEC_REVIEW"
-  | "APPROVED"
-  | "IN_PROGRESS"
-  | "VERIFY"
-  | "COMPLETE"
-  | "ISSUE_OPEN"
-  | "PLANNED";
-
-export interface DocNode {
-  id: NodeId;
-  parentId: NodeId | null;
-  title: string;
-  status: NodeStatus;
-  /** Sibling node IDs this node depends on, per its parent's manifest. */
-  dependsOn: NodeId[];
-  /** True when an authored `docs/**.md` file backs this node. */
-  authored: boolean;
-  /** Glob key from `import.meta.glob`, kept for debugging/routing. */
-  source?: string;
-}
+export type { NodeId, NodeStatus, DocNode } from "@ledger/parser";
+import type { NodeId, NodeStatus } from "@ledger/parser";
 
 /**
  * Raw markdown payload for a single authored doc node.

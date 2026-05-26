@@ -1,26 +1,24 @@
 /**
  * Tests for parseDocNode — pure markdown → candidate JSON extractor.
- *
- * Fixtures are imported as raw strings via Vite's ?raw query so the tests
- * run in the jsdom (client) environment without node:fs.
- *
- * Covers:
- * - Out-of-scope path filtering (process/, _schemas/, root, parent docs)
- * - Conformant doc extracts all fields correctly
- * - Status normalization: uppercase, mixed case, annotation
- * - Missing optional fields produce correct defaults
- * - Children manifest parsing
- * - parentId derivation from path when field is absent
  */
 
 import { describe, it, expect } from "vitest";
-import { parseDocNode } from "./parseDocNode";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseDocNode } from "../../src/schema/parseDocNode";
 
-import conformantRaw from "./fixtures/conformant.md?raw";
-import missingStatusRaw from "./fixtures/missing-status.md?raw";
-import annotatedStatusRaw from "./fixtures/annotated-status.md?raw";
-import mixedCaseStatusRaw from "./fixtures/mixed-case-status.md?raw";
-import malformedManifestRaw from "./fixtures/malformed-manifest.md?raw";
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+function fixture(name: string): string {
+  return readFileSync(join(fixturesDir, name), "utf8");
+}
+
+const conformantRaw = fixture("conformant.md");
+const missingStatusRaw = fixture("missing-status.md");
+const annotatedStatusRaw = fixture("annotated-status.md");
+const mixedCaseStatusRaw = fixture("mixed-case-status.md");
+const malformedManifestRaw = fixture("malformed-manifest.md");
 
 // ---------------------------------------------------------------------------
 // Path filtering

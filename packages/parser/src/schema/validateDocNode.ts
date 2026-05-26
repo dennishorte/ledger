@@ -8,8 +8,9 @@
  * allErrors: true so callers see the full picture in one pass.
  */
 
-import Ajv2020 from "ajv/dist/2020";
+import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import type { ErrorObject } from "ajv";
 import schema from "../../../../docs/_schemas/document-node.schema.json" with { type: "json" };
 import type { DocumentNode } from "./types";
 
@@ -56,11 +57,20 @@ export function validateDocNode(candidate: unknown): ValidationResult {
     return { ok: true, node: candidate };
   }
 
-  const errors: ValidationError[] = (_validate.errors ?? []).map((e) => ({
+  return { ok: false, errors: toValidationErrors(_validate.errors) };
+}
+
+/**
+ * Map ajv's `ErrorObject[]` to the framework's `ValidationError[]` shape.
+ * Shared between `validateDocNode` and `validateProjectMetadata` per Spec
+ * Review N6 — single source of truth for the error envelope.
+ */
+export function toValidationErrors(
+  errors: ErrorObject[] | null | undefined,
+): ValidationError[] {
+  return (errors ?? []).map((e) => ({
     path: e.instancePath || "/",
     message: e.message ?? "validation failed",
     keyword: e.keyword,
   }));
-
-  return { ok: false, errors };
 }

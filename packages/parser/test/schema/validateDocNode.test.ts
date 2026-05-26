@@ -1,31 +1,27 @@
 /**
  * Tests for validateDocNode — ajv 2020-12 schema validator.
- *
- * Fixtures are imported as raw strings via Vite's ?raw query so the tests
- * run in the jsdom (client) environment without node:fs.
- *
- * Covers:
- * - Conformant candidate returns {ok: true, node}
- * - Missing required top-level fields return {ok: false, errors}
- * - Invalid status enum returns {ok: false, errors} with informative path/keyword
- * - Missing required sections returns {ok: false, errors}
- * - Invalid manifest-row status returns {ok: false, errors}
- * - Mixed-case status (normalized by extractor) validates fine
- * - annotated-status fixture validates fine with statusAnnotation
- * - Never throws on arbitrary unknown input
  */
 
 import { describe, it, expect } from "vitest";
-import { parseDocNode } from "./parseDocNode";
-import { validateDocNode } from "./validateDocNode";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseDocNode } from "../../src/schema/parseDocNode";
+import { validateDocNode } from "../../src/schema/validateDocNode";
 
-import conformantRaw from "./fixtures/conformant.md?raw";
-import missingStatusRaw from "./fixtures/missing-status.md?raw";
-import badStatusEnumRaw from "./fixtures/bad-status-enum.md?raw";
-import missingSectionRaw from "./fixtures/missing-section.md?raw";
-import malformedManifestRaw from "./fixtures/malformed-manifest.md?raw";
-import annotatedStatusRaw from "./fixtures/annotated-status.md?raw";
-import mixedCaseStatusRaw from "./fixtures/mixed-case-status.md?raw";
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+function fixture(name: string): string {
+  return readFileSync(join(fixturesDir, name), "utf8");
+}
+
+const conformantRaw = fixture("conformant.md");
+const missingStatusRaw = fixture("missing-status.md");
+const badStatusEnumRaw = fixture("bad-status-enum.md");
+const missingSectionRaw = fixture("missing-section.md");
+const malformedManifestRaw = fixture("malformed-manifest.md");
+const annotatedStatusRaw = fixture("annotated-status.md");
+const mixedCaseStatusRaw = fixture("mixed-case-status.md");
 
 function parseAndValidate(docsRelPath: string, raw: string) {
   const candidate = parseDocNode(docsRelPath, raw);
