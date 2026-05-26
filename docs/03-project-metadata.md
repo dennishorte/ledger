@@ -2,9 +2,9 @@
 
 **Node ID:** `03-project-metadata`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-25)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-25 (operator sign-off)
 
 **Dependencies:** —
 
