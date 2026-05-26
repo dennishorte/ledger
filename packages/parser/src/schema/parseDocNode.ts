@@ -14,7 +14,7 @@
  * Encoding rules are frozen as of schema v1; see docs/02-schema.md §Design.
  */
 
-import type { NodeId } from "../types";
+import type { NodeId } from "../coreTypes";
 
 // ---------------------------------------------------------------------------
 // Internal helpers

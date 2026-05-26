@@ -411,7 +411,89 @@ Nothing punted. SF1 and the cross-cutting S2 were both operator-decision; both r
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+- `@eslint/js@^9.17.0` and `globals@^15.14.0` added to `packages/parser/package.json` devDependencies — required by the parser's `eslint.config.js` (not declared in the spec's package.json snippet but required by the ESLint config that mirrors `app/eslint.config.js`). Both were already hoisted in the workspace from `app/`; adding them to the parser's devDeps follows D7 ("each package declares the version it uses").
+
+### Files moved / added / modified
+
+| File | Operation |
+|------|-----------|
+| `packages/parser/package.json` | NEW — `@ledger/parser` package |
+| `packages/parser/tsconfig.json` | NEW — composite, `rootDir: src`, no paths alias (SF1) |
+| `packages/parser/tsconfig.test.json` | NEW — extends tsconfig.json, covers test/ and vitest.config.ts for ESLint |
+| `packages/parser/eslint.config.js` | NEW — mirrors app eslint config minus React rules; two file-pattern blocks (src/ and test/) pointing to respective tsconfigs |
+| `packages/parser/vitest.config.ts` | NEW — Node env |
+| `packages/parser/src/index.ts` | NEW — public surface |
+| `packages/parser/src/coreTypes.ts` | NEW — canonical home for `NodeId`, `NodeStatus` |
+| `packages/parser/src/schema/parseDocNode.ts` | MOVED from `app/src/lib/schema/` — import of `../types` → `../coreTypes` |
+| `packages/parser/src/schema/validateDocNode.ts` | MOVED from `app/src/lib/schema/` — import `ajv/dist/2020.js` (SF1 requirement, see below) |
+| `packages/parser/src/schema/types.ts` | MOVED from `app/src/lib/schema/` — imports from `../coreTypes` |
+| `packages/parser/src/project/types.ts` | MOVED from `app/src/lib/project/types.ts` — added `ProjectMetadataResult` (was in loadProjectMetadata.ts) |
+| `packages/parser/src/project/validateProjectMetadata.ts` | NEW EXTRACT from `loadProjectMetadata.ts` — pure validator |
+| `packages/parser/src/docs/types.ts` | NEW — `DocNode` interface (moved from `app/src/lib/types.ts`) |
+| `packages/parser/src/docs/buildDocGraph.ts` | NEW EXTRACT from `parseDocs.ts` — pure function + `idForPath` |
+| `packages/parser/test/schema/parseDocNode.test.ts` | MOVED — uses `fs.readFileSync` instead of `?raw` Vite imports |
+| `packages/parser/test/schema/validateDocNode.test.ts` | MOVED — same |
+| `packages/parser/test/schema/fixtures/*.md` | MOVED from `app/src/lib/schema/fixtures/` |
+| `packages/parser/test/project/validateProjectMetadata.test.ts` | SPLIT — 14 fixture-based tests from original loadProjectMetadata.test.ts (19 total) |
+| `packages/parser/test/project/fixtures/*.json` | MOVED from `app/src/lib/project/fixtures/` |
+| `packages/parser/test/docs/buildDocGraph.test.ts` | NEW — 6 tests for the pure function |
+| `app/src/lib/schema/` | DELETED — all moved to `packages/parser/src/schema/` |
+| `app/src/lib/project/types.ts` | DELETED — moved to `packages/parser/src/project/types.ts` |
+| `app/src/lib/project/fixtures/` | DELETED — moved to `packages/parser/test/project/fixtures/` |
+| `app/src/lib/project/loadProjectMetadata.ts` | SLIMMED — ~12-line Vite wrapper; re-exports `ValidationError` from `@ledger/parser` (SF2) |
+| `app/src/lib/project/loadProjectMetadata.test.ts` | SLIMMED — 1 module-singleton smoke test (was 19 tests) |
+| `app/src/lib/parseDocs.ts` | SLIMMED — Vite-glob wrapper around `buildDocGraph`; re-exports `idForPath` |
+| `app/src/lib/types.ts` | MODIFIED — re-exports `NodeId`, `NodeStatus`, `DocNode` from `@ledger/parser`; retains all other types unchanged |
+| `app/package.json` | MODIFIED — adds `@ledger/parser: workspace:*` dep; changes `typecheck` from `tsc -b --noEmit` to `tsc --noEmit` (see decision below) |
+| `app/tsconfig.app.json` | MODIFIED — adds `references: [{ "path": "../packages/parser" }]` (SF3) |
+| `pnpm-lock.yaml` | REGENERATED — new package entries for `@ledger/parser`; no version changes for shared transitive deps |
+
+### Decisions beyond spec
+
+1. **`ajv/dist/2020.js` with explicit `.js` extension (SF1 variant)** — the spec said to use direct relative paths for JSON schemas (`../../../../docs/_schemas/...`). This worked. Additionally, `import Ajv2020 from "ajv/dist/2020"` works for Vite (bundler handles the missing `.js`) but fails at Node runtime with ESM resolution. Changed to `ajv/dist/2020.js` in both `validateDocNode.ts` and `validateProjectMetadata.ts`. The app's original code used `ajv/dist/2020` without `.js` and relied on Vite's module resolution; since the parser targets Node runtime, the explicit extension is required.
+
+2. **`app/package.json` typecheck script changed from `tsc -b --noEmit` to `tsc --noEmit`** — TypeScript 5.x raises TS6310 when `tsc -b --noEmit` is used with a root project that has `references` entries. This is a known TypeScript limitation: `tsc -b` manages the build graph and conflicts with `--noEmit`. The fix: remove `-b` from the typecheck command. The `noEmit: true` already in `tsconfig.app.json` ensures no files are emitted. The `build` script (`tsc -b && vite build`) uses the proper composite-build order and remains unchanged. The typecheck script now type-checks without the build graph but the types from `@ledger/parser` are still found via `node_modules/@ledger/parser/dist/index.d.ts`.
+
+3. **`tsconfig.test.json` added to `packages/parser/`** — The composite tsconfig covers `src/**/*` only (required for `rootDir: "./src"` to work). ESLint's `parserOptions.project` for test files and `vitest.config.ts` needed a separate tsconfig that covers both `src/` and `test/`. Added `tsconfig.test.json` (extends the main tsconfig, sets `composite: false`, `rootDir: "."`, includes `test/` and `vitest.config.ts`). This is a practical necessity not anticipated by the spec; does not affect the public API or the composite build.
+
+4. **`idForPath` placed in `buildDocGraph.ts`** — The spec gave a choice of `buildDocGraph.ts` or sibling `idForPath.ts`. Both are equivalent; placed in `buildDocGraph.ts` since both functions share the `pathKeyToNodeId` helper.
+
+5. **`DocNode` moved to `packages/parser/src/docs/types.ts`** — Spec D5 says only `NodeId`/`NodeStatus` move to `coreTypes.ts` and `DocNode` re-exports from `@ledger/parser` via `app/src/lib/types.ts`. `DocNode` is implemented in the parser's `docs/types.ts` and exported through the index. This matches the spec's public surface (`export type { DocNode } from "./docs/types"`).
+
+6. **Test count split: 14 fixture-based tests in parser, 5 singleton tests remain in app** — The original `loadProjectMetadata.test.ts` had 19 tests total: 5 singleton tests (which need the Vite-imported `.ledger/project.json`) and 14 fixture-based validator tests. All 14 fixture-based tests moved to `packages/parser/test/project/validateProjectMetadata.test.ts`. The spec's N3 claim of "31 fixture-based tests" did not match the actual file (which had 14 fixture-based + 5 singleton = 19 total). The 5 singleton tests remain in `app/` (not 1 as N3 stated) because all 5 depend on the Vite-imported `projectMetadata` singleton. Total test count: 55 (parser) + 65 (app) = 120 ≥ 118+2.
+
+### SF1 smoke-test outcome
+
+Direct relative paths work. `node -e "import('./packages/parser/dist/schema/validateDocNode.js').then(m => console.log(typeof m.validateDocNode))"` prints `"function"` and exits 0. No copy-to-dist fallback needed. The key secondary fix was the `.js` extension on the ajv import (unrelated to the JSON schema resolution — the schema JSONs resolve correctly via the pnpm symlink at the 4-level relative path).
+
+### Bundle delta
+
+- `app/` gzip JS: baseline 523.16 KB → with extraction 523.19 KB (+0.03 KB). Well within ±5 KB.
+- `packages/parser/dist/`: 116 KB (includes `.d.ts`, `.d.ts.map`, and `.js` files for all modules).
+
+### Headless verification results
+
+| Gate | Exit code | Notes |
+|------|-----------|-------|
+| `pnpm -C packages/parser typecheck` | 0 | |
+| `pnpm -C packages/parser lint --max-warnings=0` | 0 | |
+| `pnpm -C packages/parser test` | 0 | 55 tests (35 schema + 14 project + 6 buildDocGraph) |
+| `pnpm -C packages/parser build` | 0 | emits `dist/` (116 KB) |
+| `pnpm -C app typecheck` | 0 | |
+| `pnpm -C app lint --max-warnings=0` | 0 | |
+| `pnpm -C app test` | 0 | 65 tests |
+| `pnpm -C app build` | 0 | gzip JS 523.19 KB |
+| `pnpm typecheck` (workspace) | 0 | |
+| `pnpm lint` (workspace) | 0 | |
+| `pnpm test` (workspace) | 0 | 120 tests total |
+| `pnpm build` (workspace) | 0 | |
+| SF1 smoke-test | 0 | prints "function" |
+
+### Total test count verification
+
+Pre-extraction: 118 tests (all in `app/`). Post-extraction: 65 (app) + 55 (parser) = **120 total** ≥ 118+2=120. Zero regression; 2 new buildDocGraph tests added.
 
 ---
 

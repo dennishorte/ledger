@@ -8,7 +8,7 @@
  * allErrors: true so callers see the full picture in one pass.
  */
 
-import Ajv2020 from "ajv/dist/2020";
+import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import schema from "../../../../docs/_schemas/document-node.schema.json" with { type: "json" };
 import type { DocumentNode } from "./types";

@@ -15,3 +15,9 @@ export interface ProjectMetadata {
   /** Identifier of the agent runtime used to dispatch tasks. */
   agent: string;
 }
+
+import type { ValidationError } from "../schema/validateDocNode";
+
+export type ProjectMetadataResult =
+  | { ok: true; metadata: ProjectMetadata }
+  | { ok: false; errors: ValidationError[] };
