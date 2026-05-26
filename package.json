@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "kill-all": "pids=$(lsof -iTCP:4179,4180 -sTCP:LISTEN -t); if [ -z \"$pids\" ]; then echo 'no app/server processes running on :4179 or :4180'; else echo \"killing $pids\" && kill $pids; fi"
   }
 }
