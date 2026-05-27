@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** APPROVED (2026-05-27 — v1.3 ELK migration; SPEC_REVIEW skipped per leaf-workflow §2 shortcut, decision pre-recorded in `00-ui.md` D10)
+**Status:** IN_PROGRESS (2026-05-27 — v1.3 ELK migration; implementer entered stage 4a)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
