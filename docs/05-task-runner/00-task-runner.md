@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `04-api-server`
 
@@ -44,6 +44,8 @@ Decomposed into five sub-leaves per §Children. Each sub-leaf inherits this pare
 - **Garbage collection of completed tasks or old events.** v1 keeps every task and every event forever in the DB. At a few hundred tasks per project the file stays under 10 MB; revisit when it doesn't. A `VACUUM` cron is a follow-up. Old events are the only meaningful storage cost; the events-per-task ratio is bounded by what executors emit.
 - **Observability beyond the event log.** No metrics export, no `/api/runner/metrics`, no Prometheus, no OpenTelemetry. The event log is the metric source; aggregation is the UI's job.
 - **Operator CLI subcommands** (`ledger task list`, `ledger task approve`, etc.). The UI calls the API directly. A CLI surface is a polish item; defer until the UI gaps become operator pain.
+- **Breakpoint insertion** (PRD §8.4: "pause execution after a specified task completes"). The closest v1 analog is for the operator to manually `POST /api/tasks` a `human_review` task with the to-be-paused task in its `depends_on` — but this requires the operator to know the dep IDs and to time the insertion before the dependent task is dispatched. A proper breakpoint surface (post-hoc `dependsOn` insertion, or scheduler-level "pause-after" hooks) is deferred; logged as an Open Issue.
+- **Priority override** (PRD §8.4: "bump a queued task ahead of non-dependent tasks"). The `priority` column exists on `tasks` and is honoured by the scheduler's `ORDER BY priority DESC`, but no v1 endpoint mutates it after creation. `PATCH /api/tasks/:id` for priority + claims is deferred to a v2 task-control surface paired with breakpoint insertion.
 
 ---
 
@@ -120,8 +122,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   parent_task_id  TEXT REFERENCES tasks(id),           -- nullable
   depends_on      TEXT NOT NULL DEFAULT '[]',          -- JSON: TaskId[]
   resource_claims TEXT NOT NULL DEFAULT '[]',          -- JSON: ResourceClaim[]
-  agent           TEXT,                                -- JSON: { model, persona? }
-  review_payload  TEXT,                                -- JSON: { summary, diffRef? }
+  agent           TEXT,                                -- JSON: { model, persona? } — NULL legal (operator-injected tasks may have no agent)
+  review_payload  TEXT,                                -- JSON: { summary, diffRef? } — NULL legal (non-human_review tasks)
+  db_row_version  INTEGER NOT NULL DEFAULT 0,          -- bumped on every UPDATE (HITL approve/reject 409 check; PRD §8.4)
   priority        INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT NOT NULL,                       -- ISO 8601
   started_at      TEXT,
@@ -158,24 +161,53 @@ CREATE TABLE IF NOT EXISTS migrations (
 
 ### Scheduler tick
 
+**Task state machine (v1):**
+
+| Status | Entry condition | Exit transitions |
+|---|---|---|
+| `PENDING` | Created via `POST /api/tasks` or `runner.createTask(...)`. Has not yet been evaluated by the scheduler. | → `RUNNING` (scheduler picks it), → `BLOCKED` (scheduler evaluated and found it ineligible) |
+| `BLOCKED` | Scheduler evaluated and rejected because of (a) at least one `dependsOn` row not in `COMPLETE`, (b) a write-claim conflict with an in-flight task, or (c) no executor registered for `tasks.type`. The triggering condition is recorded in the latest `status_change` event's `reason` field (see §Status reasons). | → `PENDING` (state changes elsewhere — dep COMPLETE, conflicting task COMPLETE, executor registered — re-evaluates next tick), → `RUNNING` (direct transition when re-evaluation succeeds), → `FAILED` (if `reason` was a `FAILED` dependency and operator cancels via `reject` flow once that lands) |
+| `RUNNING` | Scheduler dispatched the task to its registered executor. The row is in the in-flight working set; its `resource_claims` are held. | → `AWAITING_HUMAN_REVIEW` (only via the `human_review` executor calling `runner.awaitHumanReview`), → `COMPLETE` (executor called `runner.complete`), → `FAILED` (executor called `runner.fail`, or process restart caught it mid-flight) |
+| `AWAITING_HUMAN_REVIEW` | A `human_review` executor suspended. Claims remain held; the scheduler does not re-tick for this task until an external approve/reject. | → `COMPLETE` (`POST /:id/approve`), → `FAILED` (`POST /:id/reject`) |
+| `COMPLETE` | Terminal. Claims released. Dependents become eligible on the next tick. | (none) |
+| `FAILED` | Terminal. Claims released. Dependents remain `BLOCKED` (D11). | (none) |
+| `CANCELLED` | Reserved type-level value. Not produced by any v1 transition (cancellation deferred — see Out of scope). The DB `status` column accepts it so the type compiles cleanly across the wire; v1 row count is structurally 0. | (none in v1) |
+
 A tick runs the following on each scheduler-relevant event:
 
 ```
 1. Load the in-flight working set: { tasks WHERE status = 'RUNNING' }.
 2. Compute the in-flight claim set: union of resource_claims across the working set.
 3. SELECT one row from tasks WHERE:
-     status = 'PENDING' AND
+     status IN ('PENDING', 'BLOCKED') AND
      no row in depends_on has status != 'COMPLETE' AND
      resource_claims does not conflict with the in-flight claim set
    ORDER BY priority DESC, created_at ASC
    LIMIT 1.
-4. If found: transition the row PENDING → RUNNING (appends a status_change event in the same tx).
-   Look up the registered executor for tasks.type. If unregistered, the row stays PENDING but
-   its dependency state is logged via a 'blocked_no_executor' status reason; the tick yields.
-   If registered: invoke the executor asynchronously (await is not in the tx); the executor
-   reports back via the runner's emit API.
-5. Repeat from step 1 until no eligible task remains. Each pick is its own transaction.
+4. If found AND an executor is registered for tasks.type:
+     transition row → RUNNING (appends a status_change event in the same tx);
+     invoke the executor asynchronously (await is not in the tx);
+     the executor reports back via the runner's emit API.
+5. If found AND no executor is registered:
+     transition row → BLOCKED with reason 'blocked_no_executor'
+     (status_change event in the same tx); tick yields.
+6. If no eligible row found AND there exists a PENDING row whose deps are not all COMPLETE
+   OR whose claims conflict:
+     transition each such row PENDING → BLOCKED with the appropriate reason
+     ('blocked_by_dep' or 'blocked_by_claim_conflict'); tick yields.
+7. Repeat from step 1 until no eligible task remains. Each pick is its own transaction.
 ```
+
+**Status reasons** (the `reason` field of the `status_change` event):
+
+| Reason | Emitted when |
+|---|---|
+| `blocked_by_dep:<dep_task_id>` | A `dependsOn` row is not `COMPLETE`. The first failing dep is named. |
+| `blocked_by_claim_conflict:<conflicting_task_id>` | A write-claim conflict with an in-flight task. The conflicting task is named. |
+| `blocked_no_executor` | No executor registered for `tasks.type`. |
+| `approved` | `human_review` task approved. |
+| `rejected:<short rationale>` | `human_review` task rejected. Full rationale in the event payload. |
+| `orphaned_on_restart` | Runner restart found the task in `RUNNING`; transitioned to `FAILED`. |
 
 The scheduler is **event-driven, not polled**: a tick is invoked on (a) task creation, (b) task status change, (c) any executor completing. Polling is rejected because at v1 scale tick cost is microseconds and idle CPU is more valuable than fast-path latency reduction. (D5.)
 
@@ -199,7 +231,7 @@ function claimKey(c: ResourceClaim): string {
 
 Two read claims on the same resource do not conflict. Any pair where at least one side is `write` conflicts. The function is O(|a|·|b|) — at v1 scale (≤10 claims per task, ≤10 in-flight tasks) this is negligible.
 
-**Dependency check** is the boolean `dependsOn.every(id => store.getStatus(id) === "COMPLETE")`. `FAILED` dependencies block forever — the dependent task is `BLOCKED` and the operator decides whether to cancel it or retry the failed predecessor (no automatic propagation in v1; D11).
+**Dependency check** is the boolean `dependsOn.every(id => store.getStatus(id) === "COMPLETE")`. `FAILED` dependencies block forever — the dependent task is `BLOCKED` with reason `blocked_by_dep:<failed-id>` and the operator decides whether to cancel it (via the future cancellation API) or retry the failed predecessor (no automatic propagation in v1; D11).
 
 ### Executor registry
 
@@ -246,12 +278,29 @@ When dispatched by the scheduler:
 
 External transitions:
 
-- `POST /api/tasks/:id/approve` → transitions `AWAITING_HUMAN_REVIEW → COMPLETE`, releases claims, re-ticks the scheduler. Event log entry: `{ kind: "status_change", from: "AWAITING_HUMAN_REVIEW", to: "COMPLETE", reason: "approved" }`.
-- `POST /api/tasks/:id/reject` with body `{ reason: string, followUp?: TaskInput }` → transitions `AWAITING_HUMAN_REVIEW → FAILED` with `reason` in the event log; if `followUp` is provided, enqueues it as a new task (typically a re-`implement` with the rejection rationale as input). Releases claims, re-ticks.
+- `POST /api/tasks/:id/approve` with body `{ note?: string, dbRowVersion: number }` → transitions `AWAITING_HUMAN_REVIEW → COMPLETE`, releases claims, re-ticks the scheduler. Event log entry: `{ kind: "status_change", from: "AWAITING_HUMAN_REVIEW", to: "COMPLETE", reason: "approved" }`. 409 if the stored `db_row_version` no longer matches the request's value (PRD §8.4 optimistic locking).
+- `POST /api/tasks/:id/reject` with body `{ reason: string, dbRowVersion: number, followUp?: TaskInput }` → transitions `AWAITING_HUMAN_REVIEW → FAILED` with `reason: "rejected:<short rationale>"` in the event log (full rationale in the event payload's `details` field). Releases claims, re-ticks. Same 409 semantics as approve. If `followUp` is provided, enqueues it as a new task with:
+  - `dependsOn: []` — the rejected task is terminal; the follow-up has no waiting predecessor in the runner's view (the conceptual dependency on "operator wrote rejection rationale" is captured in the follow-up's `review_payload.summary`).
+  - `resource_claims` — operator's choice. The natural default (which the UI should pre-fill) is the rejected task's claim set, holding the same write claims so downstream tasks stay blocked until the follow-up either completes or is itself rejected. If `followUp.resource_claims` is omitted on the request body, the endpoint copies the rejected task's claims as the default.
+
+Terminal states for SSE auto-close purposes: `COMPLETE`, `FAILED`, `CANCELLED`. The 60s grace window after entering one of these closes the stream cleanly (matches `01-ui/10-orchestration` D7's contract).
 
 Process restart durability: the runner's startup sequence loads all `AWAITING_HUMAN_REVIEW` tasks from the DB and treats them as still-suspended. The scheduler does not auto-retry them. The `RUNNING` rows on the other hand are crash victims — startup transitions them `RUNNING → FAILED` with reason `"orphaned: runner restarted while task was in flight"` and emits a `status_change` event. v1 makes no attempt to recover in-flight executor state; that's a `06-agent-dispatcher` concern (Claude Code subprocess state is in its own transcript and cannot be resumed by the runner).
 
 ### Endpoints in v1
+
+Endpoint-to-child ownership map (resolves the children-manifest cross-reference flagged by Spec Review S6):
+
+| Endpoint | Ships in child |
+|---|---|
+| `GET /api/tasks` | `04-api-endpoints` |
+| `GET /api/tasks/:id` | `04-api-endpoints` |
+| `GET /api/tasks/:id/stream` (SSE) | `04-api-endpoints` |
+| `POST /api/tasks` (operator injection) | `04-api-endpoints` |
+| `POST /api/tasks/:id/approve` | `03-hitl-gate` |
+| `POST /api/tasks/:id/reject` | `03-hitl-gate` |
+
+Approve/reject routes mount under the same `/api/tasks/:id/...` namespace as the rest but live in `server/src/routes/hitl.ts` (`03-hitl-gate`) rather than `server/src/routes/tasks.ts` (`04-api-endpoints`). Both files mount onto the same Hono app from `04-api-server`. The split keeps each child's diff focused; the URL grouping is a routing detail, not a file-organization one.
 
 ```
 GET /api/tasks
@@ -302,13 +351,14 @@ The `Task` and `LogEvent` types live today in `app/src/lib/types.ts` (introduced
 1. **Move them to `@ledger/parser`** alongside `NodeId` / `NodeStatus` / `DocNode`. Aligns with `02-parser-extraction`'s D5 (canonical types live in `@ledger/parser`); the UI re-exports them.
 2. **Duplicate in `server/src/runner/types.ts`** to keep `@ledger/parser` schema-focused.
 
-Going with option 1 (D4). Three small changes:
+Going with option 1 (D4). The concrete type changes:
 
-- `Task.transcriptPath` becomes optional (was required by the transcript-only world; runner-emitted tasks have no transcript).
-- `Task.dbRowVersion?: number` added — opaque to the UI; used by the store for optimistic-concurrency on the rare case of two writers (v1 has none, but the column is cheap to add at schema-introduction time).
-- A new `TaskInput` type for `POST /api/tasks` body validation (subset of `Task`, plus rules for required fields per D9).
+- **`Task.transcriptPath` becomes optional** — was `transcriptPath: string` (required by the transcript-only world); becomes `transcriptPath?: string` (absent for runner-emitted tasks). This is a *breaking* change at every consumer site that destructures `transcriptPath` without a null check. Sub-leaf `01-store-schema` audits every reference and either narrows-then-uses or substitutes a defined-or-undefined check. Today's consumers (`useTaskList`, `useTask`, `TaskInspector`, `useTaskGrouping`) all read `transcriptPath` for either display (server-internal — never rendered per `10-orchestration` line 142 comment) or source-disambiguation (the dual-source migration in `05-ui-hook-migration` uses presence/absence as the runner-vs-transcript discriminator). `app/src/lib/types.ts` retains the `export type { Task, LogEvent } from "@ledger/parser"` re-export so the existing import sites keep compiling.
+- **`Task.dbRowVersion: number` added (not optional — defaults to 0 on insert).** Used by the store for **optimistic-concurrency on the HITL approve/reject endpoints**, matching PRD §8.4's explicit requirement ("optimistic locking against the task's current status — rejects if the task has been moved by another actor mid-review"). Each successful update to a `tasks` row increments `dbRowVersion`; approve/reject requests carry the version they observed and 409 if the stored version has moved (sub-leaf `03-hitl-gate` ships the endpoint semantics). v1 single-writer scenarios still happen rarely — e.g., the operator opens two browser tabs and clicks Approve in both — and the 409 is the honest answer.
+- **A new `TaskInput` type** for `POST /api/tasks` body validation (subset of `Task`: `type`, `title`, `source?`, `parent_task_id?`, `depends_on?`, `resource_claims?`, `agent?`, `review_payload?`, `priority?`). Required fields and defaults are pinned per D9. Lives in `@ledger/parser` alongside `Task`.
+- **`TaskStatus`'s `CANCELLED` value is preserved.** No v1 transition produces it; the SQLite schema accepts it as a legal `status` column value (no `CHECK` constraint enumerates the legal set in v1 — see N3 below). The wire type stays whole so adding cancellation in `06-agent-dispatcher` is a no-schema-change deliverable.
 
-The migration of `Task` / `LogEvent` from `app/src/lib/types.ts` → `@ledger/parser` happens in sub-leaf `01-store-schema` (the first sub-leaf that needs the types in `server/`). `app/src/lib/types.ts` keeps the re-exports for source compatibility — matches the existing `NodeId` / `NodeStatus` / `DocNode` pattern.
+The migration of `Task` / `LogEvent` from `app/src/lib/types.ts` → `@ledger/parser` happens in sub-leaf `01-store-schema` (the first sub-leaf that needs the types in `server/`). `app/src/lib/types.ts` keeps the re-exports for source compatibility — matches the existing `NodeId` / `NodeStatus` / `DocNode` pattern. The `transcriptPath?` optionality is part of the same commit so consumers see one consistent type after the migration, not a half-state.
 
 ### UI consumer migration: additive dual-source
 
@@ -334,10 +384,10 @@ Distributed across sub-leaf verification gates; the parent's roll-up is:
 2. `pnpm -C server dev /Users/dennis/code/ledger` boots; on first start it creates `.ledger/runner.db` and applies migration 001. On restart, the file is reused without re-applying migrations.
 3. `curl -X POST http://127.0.0.1:4180/api/tasks -d '{"type":"noop","title":"smoke test","source":"operator_injected"}'` returns `201` with a task body whose status flips to `COMPLETE` on the very next poll of `GET /api/tasks/:id`.
 4. `curl -X POST .../api/tasks -d '{"type":"human_review","title":"approve me","source":"operator_injected","review_payload":{"summary":"test diff"}}'` returns `201`; the task sits in `AWAITING_HUMAN_REVIEW`; `POST /:id/approve` transitions it `COMPLETE` and the SSE stream emits the status_change.
-5. Conflict primitive: create two tasks with conflicting write claims on the same node; the second stays `PENDING` (status reason `blocked_by_claim_conflict`) while the first is in flight.
+5. Conflict primitive: create two tasks with conflicting write claims on the same node; the second transitions `PENDING → BLOCKED` with reason `blocked_by_claim_conflict:<first-task-id>` while the first is in flight. Completing the first un-blocks the second on the next tick.
 6. SSE resume: open the stream, append an event, disconnect, reopen with `Last-Event-ID: <seq>` — no duplicate events, first delivered event is `seq + 1`.
 7. Process restart: a task in `RUNNING` is transitioned `FAILED` on next boot with the orphan reason; a task in `AWAITING_HUMAN_REVIEW` is still pending review on next boot.
-8. UI: visit `/tasks` with the runner running and at least one runner task injected; the table shows both runner and transcript rows; clicking a runner task in `AWAITING_HUMAN_REVIEW` shows Approve/Reject buttons; clicking Approve transitions it COMPLETE in the table within the staleTime window.
+8. UI: visit `/tasks` with the runner running and at least one runner task injected; the table shows both runner and transcript rows; clicking a runner task in `AWAITING_HUMAN_REVIEW` shows Approve/Reject buttons; clicking Approve triggers a `queryClient.invalidateQueries(["tasks"])` and the row reflects `COMPLETE` on the next render (≤1s in practice; ≤30s worst case if the explicit invalidation is omitted and the hook's poll-interval handles it).
 9. `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test` exit zero across all workspace packages.
 
 ---
@@ -372,13 +422,40 @@ Distributed across sub-leaf verification gates; the parent's roll-up is:
 - **`status_change` event author.** Today every status_change is emitted by the runner itself. When the dispatcher lands, agent-driven status changes (e.g., an agent self-reporting `FAILED`) need an attribution field (`who: "runner" | "agent" | "operator"`). Logged here to thread the type forward into `06-agent-dispatcher`'s scope. *(Priority: LOW.)*
 - **No bulk endpoints.** `POST /api/tasks` is one-task-per-request. Bulk task injection (e.g., a doc-tree-wide reverify pass) is N round-trips. Adequate for v1; revisit when the daemon lands and might enqueue tens of tasks per scan. *(Priority: LOW.)*
 - **OpenAPI / typed client.** Inherited from `04-api-server`'s Open Issue of the same name; this node makes the surface larger and slightly increases the case for codegen. Still defer until a non-TS consumer exists (the `06-agent-dispatcher` MCP server). *(Priority: LOW — inherited.)*
-- **UI affordance for `BLOCKED` reason inspection.** When a task is `BLOCKED` (dependency not COMPLETE, or claim conflict, or unregistered executor), the reason lives in the latest `status_change` event's `reason` field. The `04-tasks` inspector shows the latest status but not the reason. A small inspector tweak is needed to surface it. Logged for `05-ui-hook-migration` to pick up. *(Priority: LOW.)*
+- ~~**UI affordance for `BLOCKED` reason inspection.**~~ → Folded into `05-ui-hook-migration`'s scope per Spec Review S6 — manifest entry now names the inspector-UX work explicitly.
+- **Breakpoint insertion + priority override (PRD §8.4).** v1 ships neither. Breakpoints have a workaround (operator injects a `human_review` task with `dependsOn` set), but post-hoc breakpoint insertion requires `PATCH /api/tasks/:id` for `depends_on` mutation, which is not in v1. Priority override is the simpler half — `PATCH /api/tasks/:id { priority }` is ~20 LOC — but ships together with breakpoints as a v2 task-control surface so the operator gets a coherent control story in one release. *(Priority: MEDIUM — direct PRD §8.4 ask; surfaced once `06-agent-dispatcher` has tasks worth pausing.)*
 
 ---
 
-## Spec Review
+## Spec Review (2026-05-27)
 
-*(none yet — pre-review)*
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — two blocking, six should-fix, five nits. PRD coverage matrix returned full Addressed across §5/§6.3/§6.5/§7.1/§8.6/§10; §8.4 was flagged Partial (breakpoint + priority-override not addressed). All findings applied or explicitly resolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | Reviewer claimed the `## Spec Review` section was missing. | Not applied — false alarm. The section heading existed at line 429 of the DRAFT (placeholder body `*(none yet — pre-review)*` per house style). Now populated by this audit, dated, satisfying the structural requirement. Audit kept for traceability. |
+| B2 | `BLOCKED` was used ambiguously as both a status (`status = 'BLOCKED'`) and a status-reason string across the spec (scheduler tick step 4 said "stays PENDING" while D11 said "leaves the dependent BLOCKED" and Acceptance check 5 said "stays PENDING"). Mechanically inconsistent — implementer cannot write store tests without a pinned state machine. | Added a "Task state machine (v1)" table to Design with one row per status and explicit entry conditions; rewrote the scheduler tick pseudocode so `PENDING → BLOCKED` transitions are explicit (steps 5–6 added); added a "Status reasons" enumeration (`blocked_by_dep:<id>`, `blocked_by_claim_conflict:<id>`, `blocked_no_executor`, `approved`, `rejected:<rationale>`, `orphaned_on_restart`). D11 text and Acceptance check items 5 + 7 reworded to match. |
+| S1 | `Task.transcriptPath` becoming optional is a breaking change at every consumer site that destructures without a null check — spec needed to call this out and pin the coordinated re-export update. Also: `CANCELLED` in `TaskStatus` not addressed by the schema. | §Type coordination rewritten: `transcriptPath?: string` syntax pinned, consumer-site audit assigned to sub-leaf `01-store-schema`, `app/src/lib/types.ts` re-export coordination noted. `CANCELLED` covered: SQLite `status` column accepts the value (no CHECK constraint); type stays whole; state-machine table notes the row count is structurally 0 in v1. |
+| S2 | PRD §8.4's breakpoint insertion and priority override are not addressed and not deferred. | Added two Out of scope bullets with PRD §8.4 citations and the workaround note (operator can inject a `human_review` task with `dependsOn`, but post-hoc dep insertion needs `PATCH /api/tasks/:id` which is also deferred). Also bumped the corresponding Open Issue from absent to MEDIUM-priority. |
+| S3 | `POST /api/tasks/:id/reject` with `followUp` was under-specified: dep handling, claim inheritance, SSE auto-close on `FAILED`. | §HITL gate's external-transitions block now pins: `followUp.dependsOn = []`; `followUp.resource_claims` defaults to the rejected task's claims (UI pre-fills, request can override); `FAILED` is in the SSE auto-close terminal set alongside `COMPLETE` and `CANCELLED`. |
+| S4 | `Task.dbRowVersion` rationale ("v1 has no two-writer scenarios") conflicted with PRD §8.4's explicit "optimistic locking against the task's current status" requirement. | §Type coordination rewritten: `dbRowVersion` becomes non-optional (`number`, defaults to 0 on insert, bumped on every UPDATE), explicitly wired to the approve/reject 409 semantics, PRD §8.4 cited. Two-tab Approve race documented as the honest v1 use case. SQLite schema gains `db_row_version` column. |
+| S5 | Reviewer flagged the section order as deviating from house style — Spec Review section position. | Not applied — same false alarm as B1. Section order matched house style already; just the audit table was a placeholder, now populated. |
+| S6 | Endpoint-to-child ownership ambiguous: approve/reject endpoints described in §Endpoints in v1 but the Children manifest assigned them to `03-hitl-gate`. | Added an endpoint-to-child mapping table at the top of §Endpoints in v1 making each endpoint's child owner explicit; clarifying note that approve/reject live in `server/src/routes/hitl.ts` (`03-hitl-gate`) while everything else lives in `server/src/routes/tasks.ts` (`04-api-endpoints`), both mounted on the same Hono app. |
+| N1 | Status-reason strings (`blocked_by_claim_conflict`, `blocked_no_executor`) used bare without a typed definition. | Covered by the new "Status reasons" enumeration table under §Scheduler tick. The `reason` field is the existing `status_change` event payload field per `LogEvent` already; no new type added. |
+| N2 | Acceptance check item 8 used `staleTime` (an implementation detail of the consumer hook) as the timing gate. | Reworded to specify `queryClient.invalidateQueries(["tasks"])` as the explicit refresh trigger with `≤1s in practice; ≤30s worst case`. |
+| N3 | `agent` SQLite column has no NOT NULL constraint (correct — runner-injected tasks may have no agent), but the spec didn't note this explicitly. | Added inline column comments to the migration SQL: `-- NULL legal` on `agent` and on `review_payload`. |
+| N4 | `05-ui-hook-migration` child manifest entry's title under-described the inspector-UX work bundled into it. | Manifest row rewritten with a leading bold-tag "**UI hook migration + inspector UX for runner tasks.**" and named-out scope: hook migration, Approve/Reject buttons with `dbRowVersion` wiring, `BLOCKED` reason surfacing. The corresponding Open Issue is now struck-through with a pointer to the child. |
+| N5 | `CANCELLED` in the SSE auto-close terminal set without an explicit note that no v1 transition produces it. | Covered by S1's state-machine row and Type coordination paragraph. SSE auto-close terminal set kept as `{COMPLETE, FAILED, CANCELLED}` so the contract stays whole for `06-agent-dispatcher`'s cancellation work. |
+
+Reviewer's **Confidence notes** (recorded so the stage-4 implementer of `01-store-schema` spot-checks them):
+
+- `better-sqlite3` prebuilt URL pinning at sub-leaf implementation time.
+- Per-task `seq` monotonicity is correct only if the store API computes `seq` atomically inside the same write transaction as the event insert — sub-leaf `01-store-schema` must verify (the spec asserts it; the implementer's tests must exercise concurrent emits on the same task).
+- `mergeTasks` id-collision claim depends on transcript IDs staying `session:<uuid>` / `agent:<id>` and runner IDs being bare UUIDv4. Sub-leaf `01-store-schema` pins the runner-task-id format explicitly.
+
+Reviewer's **decomposition assessment** flagged `01-store-schema` as denser than any sibling in `04-api-server` (5–7 distinct deliverables: schema, migrations runner, typed store API, type migration, three new JSON Schemas). Noted as a soft watch-item for the sub-leaf author; the natural split point if it needs decomposition is `[schema + migrations]` first, `[typed store API + type migration]` second. No structural change to the parent's manifest in this audit pass.
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
@@ -410,7 +487,7 @@ When this parent moves to `VERIFY` (all children COMPLETE), the verifier confirm
 | `02-scheduler` | Scheduler tick (event-driven), conflict primitive (`runner/conflict.ts`), executor registry with `noop` built-in, dep-met check, status_change event emission, process-restart crash recovery (`RUNNING → FAILED` orphan transition) | `01-store-schema` | PLANNED |
 | `03-hitl-gate` | `human_review` executor + suspension semantics (`RUNNING → AWAITING_HUMAN_REVIEW`, claims held), `POST /api/tasks/:id/approve` + `/reject` endpoints with rationale capture and optional follow-up enqueue, restart durability for suspended tasks | `02-scheduler` | PLANNED |
 | `04-api-endpoints` | Read endpoints (`GET /api/tasks`, `/:id`, `/:id/stream` SSE with `Last-Event-ID` resume), operator-injection endpoint (`POST /api/tasks`) with `TaskInput` validation against the schema, `Runner` instance wired onto `ProjectContext` | `02-scheduler` | PLANNED |
-| `05-ui-hook-migration` | `useTaskList`/`useTask`/`useLogStream` flip to additive dual-source (`/api/tasks*` + `/api/transcripts*` merger), `TaskInspector` Approve/Reject buttons gated on `runner-emitted ∧ AWAITING_HUMAN_REVIEW`, `BLOCKED` reason surfaced from latest `status_change` event (Open Issue UI affordance) | `03-hitl-gate`, `04-api-endpoints` | PLANNED |
+| `05-ui-hook-migration` | **UI hook migration + inspector UX for runner tasks.** `useTaskList`/`useTask`/`useLogStream` flip to additive dual-source (`/api/tasks*` + `/api/transcripts*` merger using `transcriptPath` presence as runner-vs-transcript discriminator); `TaskInspector` Approve/Reject buttons gated on `runner-emitted ∧ AWAITING_HUMAN_REVIEW` (sending the observed `dbRowVersion` on each request per PRD §8.4 optimistic locking); `BLOCKED` row reason surfaced from latest `status_change` event's `reason` field (resolves the Open Issue "UI affordance for `BLOCKED` reason inspection") | `03-hitl-gate`, `04-api-endpoints` | PLANNED |
 
 Build order is determined by the dependency edges above. Sequential: `01` → `02` → `{03, 04}` (parallelizable after `02` — `03` adds endpoints + executor; `04` adds read endpoints + injection; no file overlap) → `05` (consumes both). The manual workflow today serializes the parallel pair; the runner's eventual ability to declare claims on shared spec files (e.g., `server/src/routes/tasks.ts` if both `03` and `04` were to write to it) would catch the conflict — but the planned carve-up keeps `03`'s endpoints in their own router file mounted alongside `04`'s, so even concurrent dispatches wouldn't clash.
 
