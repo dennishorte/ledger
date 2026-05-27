@@ -14,7 +14,7 @@ import type { JSX } from "react";
 import { Link } from "react-router";
 import type { DocNode, NodeId } from "@/lib/types";
 import { loadDocNodes } from "@/lib/parseDocs";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { FileText } from "lucide-react";
 
@@ -127,9 +127,7 @@ function TreeRow({
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function DocsTree(): JSX.Element {
-  const roots = treeMap.get(null) ?? [];
-
-  if (roots.length === 0) {
+  if (allNodes.length === 0) {
     return (
       <EmptyState
         icon={FileText}
@@ -138,6 +136,8 @@ export function DocsTree(): JSX.Element {
       />
     );
   }
+
+  const roots = treeMap.get(null) ?? [];
 
   return (
     <div className="flex h-full flex-col">

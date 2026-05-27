@@ -34,7 +34,7 @@ export default function LogStreamPanel(): JSX.Element {
 }
 
 function LogStreamPanelInner({ taskId }: { taskId: string }): JSX.Element {
-  const { events, status: connStatus, reconnectAttempt } = useLogStream(taskId);
+  const { events, status: connStatus, reconnectVisible } = useLogStream(taskId);
   const taskQuery = useTask(taskId);
   const queryPending = taskQuery.status === "pending";
 
@@ -100,7 +100,7 @@ function LogStreamPanelInner({ taskId }: { taskId: string }): JSX.Element {
       task={task}
       events={events}
       connStatus={connStatus}
-      reconnectAttempt={reconnectAttempt}
+      reconnectVisible={reconnectVisible}
       queryPending={queryPending}
     />
   );

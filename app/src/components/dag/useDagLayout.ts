@@ -31,6 +31,49 @@ export interface LayoutResult {
 }
 
 /**
+ * Compute the transitive reduction of a set of dep edges.
+ *
+ * For each edge u → v, drop it if there exists any longer path u → … → v
+ * (length ≥ 2) within the same edge set. Parent edges are excluded from
+ * this computation — callers must pass only dep-typed edges.
+ *
+ * The input array is not mutated; a new filtered array is returned.
+ */
+function transitiveReduction(edges: Edge[]): Edge[] {
+  // Build adjacency list: source → set of targets.
+  const adj = new Map<string, Set<string>>();
+  for (const e of edges) {
+    const targets = adj.get(e.source) ?? new Set<string>();
+    targets.add(e.target);
+    adj.set(e.source, targets);
+  }
+
+  // BFS/DFS: can we reach `target` from `start` in ≥2 hops?
+  function reachableViaLongerPath(start: string, target: string): boolean {
+    // Explore all nodes reachable from `start` in ≥1 hop,
+    // then check if `target` is among those reachable in ≥2 hops.
+    const visited = new Set<string>();
+    const queue: Array<{ node: string; hops: number }> = [{ node: start, hops: 0 }];
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+      const { node, hops } = item;
+      const neighbors = adj.get(node) ?? new Set<string>();
+      for (const neighbor of neighbors) {
+        if (hops >= 1 && neighbor === target) return true;
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push({ node: neighbor, hops: hops + 1 });
+        }
+      }
+    }
+    return false;
+  }
+
+  return edges.filter((e) => !reachableViaLongerPath(e.source, e.target));
+}
+
+/**
  * One-shot dagre layout. Recomputes only when the input doc set changes
  * (which, in Phase 1, is once per page load).
  */
@@ -86,6 +129,10 @@ function layout(docs: DocNode[]): LayoutResult {
 
   dagre.layout(g);
 
+  // Reduce the dep edges for rendering (dagre already used the full set above
+  // for rank assignment — layout is unaffected by the reduction).
+  const reducedDepEdges = transitiveReduction(depEdges);
+
   const docNodes: Node<DocNodeData>[] = docs.map((d) => {
     const pos = g.node(d.id);
     return {
@@ -103,7 +150,7 @@ function layout(docs: DocNode[]): LayoutResult {
   const subtreeNodes = buildSubtreeNodes(docs, g);
 
   // Subtree group rects render first so they sit behind the doc tiles.
-  return { nodes: [...subtreeNodes, ...docNodes], edges: depEdges };
+  return { nodes: [...subtreeNodes, ...docNodes], edges: reducedDepEdges };
 }
 
 function buildSubtreeNodes(

@@ -5,7 +5,7 @@
  *
  * States:
  *   loading  — query pending; render neutral "Loading" (avoids red-pill flash on mount)
- *   live     — green dot + "Streaming"; with reconnect suffix when reconnectAttempt > 0
+ *   live     — green dot + "Streaming"; with reconnect suffix when reconnectVisible = true
  *   ended    — muted dot + "Ended"
  *   missing  — red dot + "No transcript"
  *   stub     — muted + "Stub" (tests only)
@@ -16,7 +16,11 @@ import type { ConnectionStatus } from "@/lib/types";
 
 interface ConnectionPillProps {
   status: ConnectionStatus;
-  reconnectAttempt: number;
+  /**
+   * True only after an onerror has persisted for ≥ RECONNECT_VISIBLE_DELAY_MS.
+   * Suppresses the "(reconnecting…)" flash during sub-threshold blips.
+   */
+  reconnectVisible: boolean;
   /** True when the TanStack Query for the task is still pending. */
   queryPending: boolean;
 }
@@ -29,7 +33,7 @@ interface PillStyle {
 
 function pillConfig(
   status: ConnectionStatus,
-  reconnectAttempt: number,
+  reconnectVisible: boolean,
   queryPending: boolean,
 ): PillStyle {
   // N1: neutral loading state while query is pending
@@ -42,7 +46,7 @@ function pillConfig(
       return {
         dot: "var(--color-success)",
         label: "Streaming",
-        suffix: reconnectAttempt > 0 ? "(reconnecting…)" : undefined,
+        suffix: reconnectVisible ? "(reconnecting…)" : undefined,
       };
     case "ended":
       return { dot: "var(--color-muted)", label: "Ended" };
@@ -55,10 +59,10 @@ function pillConfig(
 
 export function ConnectionPill({
   status,
-  reconnectAttempt,
+  reconnectVisible,
   queryPending,
 }: ConnectionPillProps): JSX.Element {
-  const { dot, label, suffix } = pillConfig(status, reconnectAttempt, queryPending);
+  const { dot, label, suffix } = pillConfig(status, reconnectVisible, queryPending);
 
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-[color:var(--color-muted)]">

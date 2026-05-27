@@ -10,7 +10,7 @@ import { useState, useMemo } from "react";
 import type { JSX } from "react";
 import { useNavigate } from "react-router";
 import type { DocNode, NodeId } from "@/lib/types";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { computeDepImpact } from "@/lib/deriveHealth";
 
 interface DepImpactWidgetProps {

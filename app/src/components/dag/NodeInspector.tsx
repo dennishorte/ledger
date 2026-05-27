@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { WorkflowProgressSection } from "@/components/dag/WorkflowProgressSection";
 import type { DocNode } from "@/lib/types";
 

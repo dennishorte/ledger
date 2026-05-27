@@ -18,10 +18,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTask } from "./useTask.js";
 import type { ConnectionStatus, LogEvent, TaskId } from "./types.js";
 
+/** Minimum ms the error state must persist before the pill shows "reconnecting…". */
+const RECONNECT_VISIBLE_DELAY_MS = 500;
+
 export interface UseLogStreamResult {
   events: LogEvent[];
   status: ConnectionStatus;
   reconnectAttempt: number;
+  /** True only after an onerror has persisted for ≥ RECONNECT_VISIBLE_DELAY_MS. */
+  reconnectVisible: boolean;
 }
 
 export function useLogStream(taskId: TaskId): UseLogStreamResult {
@@ -30,10 +35,13 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
   const [streamedEvents, setStreamedEvents] = useState<LogEvent[]>([]);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("missing");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [reconnectVisible, setReconnectVisible] = useState(false);
 
   // Track the highest seq we've seen so EventSource sends Last-Event-ID.
   const lastSeqRef = useRef<number>(-1);
   const esRef = useRef<EventSource | null>(null);
+  // Timer that fires setReconnectVisible after the threshold elapses.
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Seed initial events from TanStack Query result.
   const initialEvents = taskQuery.data?.events;
@@ -92,15 +100,35 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
       es.close();
     });
 
+    es.onopen = () => {
+      // Clear any pending reconnect timer and hide the pill on successful open.
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      setReconnectVisible(false);
+    };
+
     es.onerror = () => {
       // EventSource will attempt to reconnect automatically.
       setReconnectAttempt((n) => n + 1);
       setConnStatus("live"); // will restore when reconnected
+      // Only show the reconnecting pill after the threshold elapses.
+      if (reconnectTimerRef.current === null) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          setReconnectVisible(true);
+        }, RECONNECT_VISIBLE_DELAY_MS);
+      }
     };
 
     return () => {
       es.close();
       esRef.current = null;
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
   }, [taskId, queryStatus, taskQuery.data]);
 
@@ -112,5 +140,6 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
     events: allEvents,
     status: connStatus,
     reconnectAttempt,
+    reconnectVisible,
   };
 }

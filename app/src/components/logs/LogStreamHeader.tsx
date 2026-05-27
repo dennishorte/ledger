@@ -19,7 +19,7 @@ interface LogStreamHeaderProps {
   task: Task;
   eventCount: number;
   connStatus: ConnectionStatus;
-  reconnectAttempt: number;
+  reconnectVisible: boolean;
   queryPending: boolean;
 }
 
@@ -27,7 +27,7 @@ export function LogStreamHeader({
   task,
   eventCount,
   connStatus,
-  reconnectAttempt,
+  reconnectVisible,
   queryPending,
 }: LogStreamHeaderProps): JSX.Element {
   const duration = formatDuration(task.startedAt, task.completedAt);
@@ -54,7 +54,7 @@ export function LogStreamHeader({
         <TaskStatusChip status={task.status} />
         <ConnectionPill
           status={connStatus}
-          reconnectAttempt={reconnectAttempt}
+          reconnectVisible={reconnectVisible}
           queryPending={queryPending}
         />
       </div>
