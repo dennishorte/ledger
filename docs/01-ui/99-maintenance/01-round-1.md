@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/99-maintenance/01-round-1`
 **Parent:** `01-ui/99-maintenance`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-26)
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED)
+**Last Updated:** 2026-05-26 (VERIFY → COMPLETE)
 
 **Dependencies:** `01-ui/03-docs`, `01-ui/04-tasks`, `01-ui/05-logs`, `01-ui/06-health` (originating siblings, all COMPLETE). `01-ui/02-dag` no longer in scope — see Spec Review B1.
 
@@ -151,7 +151,61 @@ Nothing punted. B1 was an operator judgment call (kept R2 in the round, deferred
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implementation date:** 2026-05-26.
+
+**Dependencies added:** none.
+
+**Algorithm choice for R1:** BFS-based reachability: for each dep edge `u → v`, run a BFS from `u` through the adjacency list; if `v` is reachable in ≥2 hops, the edge is redundant and dropped. This is the standard "for each edge, check if a longer path exists" formulation — O(E·(V+E)) worst-case, acceptable for ≤500-node DAGs. The adjacency list is built once per call to `transitiveReduction`, not per edge.
+
+**R2 prop rename:** the spec says update `ConnectionPill.tsx` to read `reconnectVisible` instead of `reconnectAttempt`. Renaming the prop required threading through the full call chain: `ConnectionPill` → `LogStreamHeader` → `LogStream` → `LogStreamPanel` (4 files). After Implementation Review N1, `reconnectAttempt` was removed from the hook entirely — interface, state, and the `setReconnectAttempt` call in `onerror`. `reconnectVisible` is the sole reconnection signal exposed by `useLogStream`. The timer guard (`if (reconnectTimerRef.current === null)`) ensures that rapid successive `onerror` calls don't reset the 500 ms window.
+
+**R3 file choice:** the guard belongs in `DocsTree.tsx` (not `DocsPanel.tsx`). `DocsPanel.tsx` is a one-liner that delegates to `DocsTree`; the data (`allNodes`) and the tree-level render logic both live in `DocsTree`. A guard in `DocsPanel` would require threading the `allNodes` reference up, which is worse. The existing `DocsTree` already had a `roots.length === 0` guard (from the `03-docs` implementation). After Implementation Review S1, the guard is **combined**: `allNodes.length === 0 || roots.length === 0` — covers both the empty-doc-set case (spec's stated form) and the all-orphans case (where `allNodes.length > 0` but no node has `parentId === null`).
+
+**R4 relocation:** `git mv` used for the file move (preserves git history). All 6 import sites updated. `grep -rln 'components/dag/StatusChip' app/src` returns zero matches post-edit.
+
+**Bundle delta vs main HEAD baseline (post-fix re-measure):**
+- JS: 1,744.74 kB uncompressed / 548.48 kB gzip (worktree) vs 1,740.10 kB / 547.13 kB gzip (main) → +4.64 kB / +1.35 kB gzip
+- CSS: 44.17 kB / 8.62 kB gzip (unchanged)
+
+The original Implementation Notes reported +0.71 kB / +0.23 kB; that measurement was off (likely a stale baseline). Implementation Review N2 caught the discrepancy; numbers above are the post-fix gate run.
+
+**Files added:** `app/src/components/ui/StatusChip.tsx` (moved from `dag/`).
+
+**Files modified:**
+- `app/src/components/dag/useDagLayout.ts` (R1: `transitiveReduction` helper + application)
+- `app/src/lib/useLogStream.ts` (R2: `reconnectVisible` state + timer logic)
+- `app/src/components/logs/ConnectionPill.tsx` (R2: prop renamed `reconnectAttempt` → `reconnectVisible`)
+- `app/src/components/logs/LogStreamHeader.tsx` (R2: prop threading)
+- `app/src/components/logs/LogStream.tsx` (R2: prop threading)
+- `app/src/routes/LogStreamPanel.tsx` (R2: prop threading + destructuring)
+- `app/src/components/docs/DocsTree.tsx` (R3: `allNodes.length === 0` guard; R4: import path update)
+- `app/src/components/dag/DocDagNode.tsx` (R4: import path update)
+- `app/src/components/dag/NodeInspector.tsx` (R4: import path update)
+- `app/src/components/docs/DocViewer.tsx` (R4: import path update)
+- `app/src/components/health/DepImpactWidget.tsx` (R4: import path update)
+- `app/src/components/health/StalenessWidget.tsx` (R4: import path update)
+
+**Files deleted:** `app/src/components/dag/StatusChip.tsx` (moved to `ui/`).
+
+**Deviations from spec:** none.
+
+**Headless acceptance status:**
+- R1: cannot confirm headlessly — requires browser at `/dag` to verify the `01-shell → 03-docs` implied edge is absent while `01-shell → 08-markdown` and `08-markdown → 03-docs` are drawn.
+- R2: cannot confirm headlessly — requires live API server, mid-stream shutdown, and timer observation in the browser.
+- R3: cannot confirm headlessly — requires temporarily returning `[]` from the data source and observing the `EmptyState` render.
+- R4: confirmed headlessly — `grep -rln 'components/dag/StatusChip' app/src` returns zero matches; all three gates exit zero; `app/src/components/ui/StatusChip.tsx` exists and `app/src/components/dag/StatusChip.tsx` does not.
+
+### Implementation Review (2026-05-26)
+
+Independent clean-context review against the rebased worktree diff. Verdict: NEEDS_MINOR_REVISIONS — zero blocking, one should-fix, two nits. All applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | R3 regressed the orphan-only case. Original `DocsTree` guard was `roots.length === 0`; the implementer replaced it with `allNodes.length === 0`. For `allNodes.length > 0 && roots.length === 0` (every node has a `parentId` pointing to a missing parent), the new code fell through to `roots.map(...)` and rendered a blank panel instead of `EmptyState`. The implementer's "empty allNodes implies empty roots" rationale held in one direction only. | Combined the two checks: `if (allNodes.length === 0 \|\| roots.length === 0) return <EmptyState …/>`. `roots` is now computed before the guard. Comment in the source notes the dual coverage. |
+| N1 | `reconnectAttempt` was a dead export: still in `UseLogStreamResult` and the return object, with the state and setter still live, despite the implementer's notes claiming it had been removed. No consumer reads it. | Removed `reconnectAttempt: number` from the interface, removed the `useState` for it, removed `setReconnectAttempt` from the `onerror` handler, removed it from the return object, and updated the file-level JSDoc. `reconnectVisible` is now the sole reconnection signal exposed. R2 paragraph above rewritten to match. |
+| N2 | Reported bundle delta (+0.71 kB JS / +0.23 kB gzip) was off by ~6×. Post-fix re-measure: +4.64 kB / +1.35 kB gzip. Still well within negligible territory, but the doc said something untrue. | Bundle delta section above rewritten with the post-fix numbers and a note pointing at this audit row. |
+
+Nothing punted; all findings mechanical. Audit retained as durable provenance per playbook §6.
 
 ---
 

@@ -9,7 +9,7 @@
 import type { JSX } from "react";
 import { useNavigate } from "react-router";
 import type { DocNode, NodeId, StalenessSignal } from "@/lib/types";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 
 interface StalenessWidgetProps {
   staleness: StalenessSignal[];

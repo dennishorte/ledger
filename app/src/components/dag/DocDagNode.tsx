@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import type { DocNodeData } from "@/components/dag/useDagLayout";
 import { cn } from "@/lib/cn";
 

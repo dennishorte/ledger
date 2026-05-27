@@ -15,7 +15,7 @@ interface LogStreamProps {
   task: Task;
   events: LogEvent[];
   connStatus: ConnectionStatus;
-  reconnectAttempt: number;
+  reconnectVisible: boolean;
   queryPending: boolean;
 }
 
@@ -23,7 +23,7 @@ export function LogStream({
   task,
   events,
   connStatus,
-  reconnectAttempt,
+  reconnectVisible,
   queryPending,
 }: LogStreamProps): JSX.Element {
   // Compute per-kind counts for filter chips
@@ -38,7 +38,7 @@ export function LogStream({
         task={task}
         eventCount={events.length}
         connStatus={connStatus}
-        reconnectAttempt={reconnectAttempt}
+        reconnectVisible={reconnectVisible}
         queryPending={queryPending}
       />
       <LogFilters countByKind={countByKind} />

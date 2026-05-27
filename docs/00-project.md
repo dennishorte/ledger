@@ -364,7 +364,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED in v0.5.1, out of v1 scope) |
+| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED in v0.5.1, out of v1 scope; `99-maintenance/01-round-1` COMPLETE v1 2026-05-26 — first batched maintenance pass) |
 | `02-schema` | Document schema artifact (JSON Schema + validator; formalises what `parseDocs.ts` assumes today) | — | COMPLETE (v1) |
 | `03-project-metadata` | Project metadata file (`.ledger/project.json`) and loader; provides project identity and scoping (§7.1) | — | COMPLETE (v1) |
 | `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | COMPLETE (v1, 2026-05-26 — decomposed into 5 sub-leaves: `01-workspace-conversion`, `02-parser-extraction`, `03-server-package`, `04-cli-launcher`, `05-ui-hook-migration` all COMPLETE) |

@@ -19,7 +19,7 @@ import { Link } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import type { DocNode, DocSource } from "@/lib/types";
 import { resolveDocLink } from "@/lib/docLink";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { MarkdownBody } from "@/components/markdown/MarkdownBody";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { FileSearch } from "lucide-react";

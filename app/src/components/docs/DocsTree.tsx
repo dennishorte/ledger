@@ -14,7 +14,7 @@ import type { JSX } from "react";
 import { Link } from "react-router";
 import type { DocNode, NodeId } from "@/lib/types";
 import { loadDocNodes } from "@/lib/parseDocs";
-import { StatusChip } from "@/components/dag/StatusChip";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { FileText } from "lucide-react";
 
@@ -129,7 +129,9 @@ function TreeRow({
 export function DocsTree(): JSX.Element {
   const roots = treeMap.get(null) ?? [];
 
-  if (roots.length === 0) {
+  // Empty when either the doc set is empty OR every node is an orphan
+  // (parentId resolves to nothing) — both render the same EmptyState.
+  if (allNodes.length === 0 || roots.length === 0) {
     return (
       <EmptyState
         icon={FileText}
