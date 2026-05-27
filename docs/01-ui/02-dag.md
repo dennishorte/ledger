@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1.1)
+**Status:** ISSUE_OPEN (re-opened 2026-05-26 — see §Open Issues "Parent node renders floating above its own subtree container")
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-23
+**Last Updated:** 2026-05-26
 
 ---
 
