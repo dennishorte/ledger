@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** VERIFY (v1.2)
+**Status:** ISSUE_OPEN (v1.2 verification — see §Open Issues "Outer subtree paints over inner subtree's header")
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-26
+**Last Updated:** 2026-05-27
 
 ---
 
@@ -171,6 +171,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 - ~~**Parent node renders floating above its own subtree container.** When a parent is decomposed (`01-ui` is the live example), the parent renders as one node and its children render inside a separate labelled container box. The two are not visually connected — the parent appears orphaned. Collapse the model: the container's title bar *is* the parent node (status chip, ID, name in the header; children inside; no separate floating element). Affects `DocSubtreeNode.tsx` and `useDagLayout.ts`. *(Priority: MEDIUM — confusing in the current screenshot; trivial fix.)*~~ → addressed in v1.2 (2026-05-27).
 - ~~**Redundant transitive dependency edges drawn.** Today the layout draws every declared `dependsOn` edge. When `A → B` and `B → C` are both declared, the implied `A → C` is also drawn, producing visual clutter (live example: `01-shell → 03-docs` is implied by `01-shell → 08-markdown → 03-docs`). Compute the transitive reduction over the edge set before passing to dagre. Caveat: when task-DAG edges arrive (claims, deps), reduction must respect edge type — same-type only. *(Priority: MEDIUM — affects readability; fix in `useDagLayout.ts`.)*~~ → addressed by `99-maintenance/01-round-1` R1 (2026-05-26).
 - **Dagre rank-ordering causes crossed dep edges.** Surfaced during round-1 verification (2026-05-26): with the transitive reduction now in place, two real (non-redundant) dep edges still cross uselessly — `08-markdown → 03-docs` and `02-dag → 09-workflow-progress`. Dagre places `03-docs` and `09-workflow-progress` in an order that forces the crossing; ordering hints or post-layout swap would resolve it. Independent of the parent-floating issue. *(Priority: LOW — visual quirk only; revisit in a future round.)*
+- **Outer subtree paints over inner subtree's header and intercepts clicks.** Surfaced during v1.2 operator verification (2026-05-27). `useDagLayout.ts` emits all subtree nodes with `zIndex: -1`; with nested subtrees (`root` enclosing `01-ui`, `04-api-server`), the bottom-up sort pushes the outer subtree into the nodes array *after* the inner one, so React Flow paints `root` on top of `01-ui`. Two consequences from the single paint-order bug: (a) `root`'s cream-wash background washes out `01-ui`'s header strip visually; (b) React Flow's node wrapper defaults to `pointer-events: all`, so `root`'s wrapper captures clicks anywhere inside its bounds — including `01-ui`'s header button. Fix: depth-based `zIndex` (outer = lower, doc tiles = 0) so paint order is correct regardless of array order, plus `pointerEvents: "none"` on the subtree wrapper (the inner `<button>` keeps `pointer-events-auto` and wins as a CSS leaf). *(Priority: HIGH — blocks v1.2 sign-off; fix in `useDagLayout.ts`.)*
 
 ---
 
