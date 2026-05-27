@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Resolve between docs file paths and node IDs via the @ledger/parser.
+# Requires `pnpm -C packages/parser build` to have been run.
+#
+# Usage:
+#   node-info id   <docs-relative-path>   # e.g. 01-ui/02-dag.md  ->  01-ui/02-dag
+#   node-info path <node-id>              # e.g. 01-ui/02-dag    ->  docs/01-ui/02-dag.md
+#   node-info ls                          # list all  (id<TAB>path)
+set -euo pipefail
+
+mode="${1:-ls}"; arg="${2:-}"
+
+case "$mode" in
+  id|path|ls) ;;
+  -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "usage: node-info {id <path> | path <id> | ls}" >&2; exit 2 ;;
+esac
+
+MODE="$mode" ARG="$arg" node --input-type=module -e '
+import { buildDocGraph, idForPath } from "/Users/dennis/code/ledger/packages/parser/dist/index.js";
+import { readFile, readdir } from "node:fs/promises";
+import { join, relative } from "node:path";
+
+const root = "/Users/dennis/code/ledger/docs";
+const mode = process.env.MODE;
+const arg = process.env.ARG;
+
+if (mode === "id") {
+  if (!arg) { console.error("node-info id: missing <path>"); process.exit(2); }
+  const id = idForPath("docs/" + arg.replace(/^docs\//, ""));
+  console.log(id ?? "");
+  process.exit(0);
+}
+
+async function walk(dir) {
+  const out = [];
+  for (const ent of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, ent.name);
+    if (ent.isDirectory()) {
+      if (ent.name === "process") continue;
+      out.push(...(await walk(p)));
+    } else if (ent.name.endsWith(".md")) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+const files = await walk(root);
+const raw = {};
+for (const f of files) raw["docs/" + relative(root, f)] = await readFile(f, "utf8");
+const g = buildDocGraph(raw);
+
+if (mode === "path") {
+  if (!arg) { console.error("node-info path: missing <id>"); process.exit(2); }
+  // buildDocGraph stores ids with a "docs/" prefix; idForPath returns ids without it.
+  // Accept either form.
+  const candidates = [arg, "docs/" + arg.replace(/^docs\//, "")];
+  const n = g.nodes.find((n) => candidates.includes(n.id));
+  console.log(n?.source ?? "");
+} else {
+  for (const n of g.nodes) console.log(n.id + "\t" + (n.source ?? ""));
+}
+'

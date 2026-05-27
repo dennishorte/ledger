@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Print a line range from a file with line numbers.
+# Stops reading at `end` so it's cheap on huge files.
+#
+# Usage:
+#   lines <file> <start> [end]
+#   lines foo.md 50            # just line 50
+#   lines foo.md 50 100        # lines 50..100 inclusive
+set -euo pipefail
+
+file="${1:-}"; start="${2:-}"; end="${3:-${2:-}}"
+if [[ -z "$file" || -z "$start" ]]; then
+  echo "usage: lines <file> <start> [end]" >&2
+  exit 2
+fi
+if [[ ! -r "$file" ]]; then
+  echo "lines: cannot read $file" >&2
+  exit 1
+fi
+if ! [[ "$start" =~ ^[0-9]+$ && "$end" =~ ^[0-9]+$ ]]; then
+  echo "lines: start/end must be integers" >&2
+  exit 2
+fi
+
+awk -v s="$start" -v e="$end" '
+  NR < s { next }
+  NR > e { exit }
+  { printf "%6d\t%s\n", NR, $0 }
+' "$file"

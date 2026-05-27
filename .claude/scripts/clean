@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Remove gitignored TypeScript build artifacts so the next build is fresh.
+# Idempotent. Only touches dist/ and tsconfig.tsbuildinfo under known packages.
+#
+# Usage: clean
+set -euo pipefail
+
+root="/Users/dennis/code/ledger"
+targets=(
+  "$root/packages/parser/dist"
+  "$root/packages/parser/tsconfig.tsbuildinfo"
+  "$root/server/dist"
+  "$root/server/tsconfig.tsbuildinfo"
+)
+
+for t in "${targets[@]}"; do
+  if [[ -e "$t" ]]; then
+    rm -rf -- "$t"
+    echo "removed  $t"
+  fi
+done
+echo "clean: done"

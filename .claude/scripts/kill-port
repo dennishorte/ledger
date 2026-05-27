@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Kill processes LISTENING on a TCP port. Does not touch connected clients
+# (so a browser tab pointed at the port is safe — naive `lsof -i :PORT`
+# returns the browser PID and would kill Firefox).
+#
+# Usage: kill-port <port> [--signal SIG]   (default SIGTERM)
+set -euo pipefail
+
+port="${1:-}"; signal="TERM"
+if [[ "${2:-}" == "--signal" ]]; then
+  signal="${3:-TERM}"
+fi
+if [[ -z "$port" ]]; then
+  echo "usage: kill-port <port> [--signal SIG]" >&2
+  exit 2
+fi
+if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+  echo "kill-port: port must be numeric" >&2
+  exit 2
+fi
+
+pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)
+if [[ -z "$pids" ]]; then
+  echo "kill-port: no listener on :$port"
+  exit 0
+fi
+
+echo "kill-port: SIG$signal $(echo $pids | tr '\n' ' ')on :$port"
+kill -s "$signal" $pids

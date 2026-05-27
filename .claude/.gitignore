@@ -1,0 +1,5 @@
+# User-local overrides (Claude Code convention; never shared)
+*.local.json
+
+# Agent worktree checkouts (ephemeral, can be GB-sized)
+worktrees/

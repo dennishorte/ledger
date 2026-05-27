@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Block until both the UI (:4179) and API (:4180/api/_health) answer 200.
+# Exits 0 when both are up; non-zero on timeout.
+#
+# Usage: wait-ready [timeout-seconds]   (default 30)
+set -euo pipefail
+
+timeout="${1:-30}"
+deadline=$(( $(date +%s) + timeout ))
+ui_ok=0; api_ok=0
+
+while (( $(date +%s) < deadline )); do
+  if (( ui_ok == 0 )) && curl -sf -o /dev/null --max-time 1 http://127.0.0.1:4179/; then
+    ui_ok=1
+  fi
+  if (( api_ok == 0 )) && curl -sf -o /dev/null --max-time 1 http://127.0.0.1:4180/api/_health; then
+    api_ok=1
+  fi
+  if (( ui_ok && api_ok )); then
+    echo "ready  ui=:4179  api=:4180"
+    exit 0
+  fi
+  sleep 0.5
+done
+
+echo "wait-ready: timeout after ${timeout}s  ui_ok=$ui_ok  api_ok=$api_ok" >&2
+exit 1

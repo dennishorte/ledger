@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Snapshot the lifecycle status of every doc node under docs/.
+# Skips docs/process/** (those are reference material, not nodes).
+#
+# Usage:
+#   doc-status                # all nodes
+#   doc-status 01-ui          # filter by path prefix (relative to docs/)
+set -euo pipefail
+
+root="/Users/dennis/code/ledger/docs"
+prefix="${1:-}"
+
+{
+  printf "STATUS\tNODE\n"
+  find "$root" -type f -name "*.md" -not -path "*/process/*" | sort | while IFS= read -r f; do
+    rel="${f#$root/}"
+    if [[ -n "$prefix" && "$rel" != "$prefix"* ]]; then
+      continue
+    fi
+    status=$(awk -F'\\*\\*Status:\\*\\*[[:space:]]*' '
+      /^\*\*Status:\*\*/ { print $2; exit }
+    ' "$f" 2>/dev/null | awk '{print $1}')
+    printf "%s\t%s\n" "${status:-—}" "$rel"
+  done
+} | column -t -s $'\t'

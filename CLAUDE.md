@@ -56,6 +56,20 @@ CLI args: `<project-path>` is required; `--port N` overrides the default 4180 (a
 
 Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: true` (default 5173 collides with other local projects). API server defaults to **port 4180** (`LEDGER_PORT` env var or `--port` flag to override).
 
+## Agent scripts
+
+Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`) cover recurring operations so they don't prompt per-invocation. **Prefer these over the raw forms** — the raw forms (`curl`, `sed`, `node -e`, `lsof | xargs kill`, etc.) will trigger a permission prompt every time.
+
+- `.claude/scripts/api <path>` — GET against the local API, jq-pretty (replaces `curl http://127.0.0.1:4180/api/...`)
+- `.claude/scripts/lines <file> <start> [end]` — numbered line range (replaces `sed -n 'X,Yp'`)
+- `.claude/scripts/wait-ready [timeout]` — block until UI :4179 + API :4180 both 200
+- `.claude/scripts/kill-port <port>` — kill LISTEN-only processes (won't kill a browser client on the port)
+- `.claude/scripts/doc-status [prefix]` — table of node → lifecycle status across `docs/`
+- `.claude/scripts/node-info {id <path> \| path <id> \| ls}` — parser-backed doc id ↔ source path
+- `.claude/scripts/clean` — remove `dist/` + `tsbuildinfo` artifacts under `packages/parser` and `server`
+
+See `.claude/scripts/README.md` for the inventory. If you find yourself running the same prompt-triggering shell incantation twice, add a wrapper.
+
 ## Hard constraints worth not forgetting
 
 - **Single cream theme only** — no dark mode, no `data-theme` attribute, no alternate token block.
