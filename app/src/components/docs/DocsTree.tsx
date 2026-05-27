@@ -127,7 +127,11 @@ function TreeRow({
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function DocsTree(): JSX.Element {
-  if (allNodes.length === 0) {
+  const roots = treeMap.get(null) ?? [];
+
+  // Empty when either the doc set is empty OR every node is an orphan
+  // (parentId resolves to nothing) — both render the same EmptyState.
+  if (allNodes.length === 0 || roots.length === 0) {
     return (
       <EmptyState
         icon={FileText}
@@ -136,8 +140,6 @@ export function DocsTree(): JSX.Element {
       />
     );
   }
-
-  const roots = treeMap.get(null) ?? [];
 
   return (
     <div className="flex h-full flex-col">

@@ -7,7 +7,8 @@
  * - `status: "ended"` — SSE closed cleanly (server signalled task COMPLETE).
  * - `status: "stub"` — reserved for unit-test / Storybook contexts (unused here).
  *
- * `reconnectAttempt` increments each time the EventSource reconnects.
+ * `reconnectVisible` flips true once an error state has persisted for
+ * RECONNECT_VISIBLE_DELAY_MS; the connection pill reads it directly.
  *
  * On reconnect, the EventSource sends Last-Event-ID automatically (built into
  * the browser's EventSource API), and the server re-parses from line 0,
@@ -24,7 +25,6 @@ const RECONNECT_VISIBLE_DELAY_MS = 500;
 export interface UseLogStreamResult {
   events: LogEvent[];
   status: ConnectionStatus;
-  reconnectAttempt: number;
   /** True only after an onerror has persisted for ≥ RECONNECT_VISIBLE_DELAY_MS. */
   reconnectVisible: boolean;
 }
@@ -34,7 +34,6 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
 
   const [streamedEvents, setStreamedEvents] = useState<LogEvent[]>([]);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("missing");
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnectVisible, setReconnectVisible] = useState(false);
 
   // Track the highest seq we've seen so EventSource sends Last-Event-ID.
@@ -111,7 +110,6 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
 
     es.onerror = () => {
       // EventSource will attempt to reconnect automatically.
-      setReconnectAttempt((n) => n + 1);
       setConnStatus("live"); // will restore when reconnected
       // Only show the reconnecting pill after the threshold elapses.
       if (reconnectTimerRef.current === null) {
@@ -139,7 +137,6 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
   return {
     events: allEvents,
     status: connStatus,
-    reconnectAttempt,
     reconnectVisible,
   };
 }
