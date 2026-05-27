@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** ISSUE_OPEN (2026-05-27 — v1.3 stage-8 verification found `root` subtree rect missing; patch in progress)
+**Status:** IN_PROGRESS (2026-05-27 — v1.3 patch: root-id collision fix)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
