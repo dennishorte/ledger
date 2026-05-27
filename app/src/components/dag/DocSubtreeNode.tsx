@@ -24,7 +24,7 @@ export function DocSubtreeNode({ data }: NodeProps): JSX.Element {
   // 3rd nesting level wouldn't go fully opaque.
   const bgOpacity = Math.min(30 + depth * 40, 90);
   const backgroundColor = `color-mix(in oklch, var(--color-surface-sunken) ${String(bgOpacity)}%, transparent)`;
-  const borderColorVar = depth === 0 ? "var(--color-border)" : "var(--color-border-strong)";
+  const borderColorVar = depth === 0 ? "var(--color-border-strong)" : "var(--color-border-stronger)";
 
   return (
     <div

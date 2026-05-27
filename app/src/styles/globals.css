@@ -11,6 +11,7 @@
   --color-surface-sunken: oklch(0.945 0.018 80);
   --color-border: oklch(0.89 0.018 80);
   --color-border-strong: oklch(0.82 0.022 80);
+  --color-border-stronger: oklch(0.74 0.026 80);
 
   --color-fg: oklch(0.22 0.01 70);
   --color-muted: oklch(0.52 0.012 70);
@@ -42,6 +43,7 @@
   --color-surface-sunken: var(--color-surface-sunken);
   --color-border: var(--color-border);
   --color-border-strong: var(--color-border-strong);
+  --color-border-stronger: var(--color-border-stronger);
   --color-fg: var(--color-fg);
   --color-muted: var(--color-muted);
   --color-faint: var(--color-faint);

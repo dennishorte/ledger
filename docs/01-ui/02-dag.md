@@ -426,6 +426,14 @@ Operator stage-8 feedback after the root-id-collision patch: the outer `root` re
 
 **Deviations:** None. Stayed entirely within cream-theme tokens (no new color tokens introduced — `--color-border-strong` was already in `globals.css`).
 
+**Follow-up tweak (same day, 2026-05-27).** Operator asked for darker borders after the first polish landed. Both depths bumped up one tier in the border-strength gradient:
+
+- New token `--color-border-stronger: oklch(0.74 0.026 80)` added to `globals.css` (`:root` + `@theme inline`), extending the existing `border` (0.89) → `border-strong` (0.82) gradient by one step toward `--color-muted` (0.52). Token defined in `globals.css` per the CLAUDE.md rule that token gaps are filled there, not in component CSS.
+- Outer rect (depth 0) border: `--color-border` → `--color-border-strong`.
+- Inner rect (depth ≥ 1) border: `--color-border-strong` → `--color-border-stronger`.
+
+Background washes (30 / 70 / 90% surface-sunken) unchanged. Gates re-run: typecheck + lint exit 0.
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
