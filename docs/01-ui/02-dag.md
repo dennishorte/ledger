@@ -412,6 +412,20 @@ This is the kind of bug `headless typecheck/lint/build` can't catch — it manif
 
 **Deviations:** None. Three-line fix, no scope creep.
 
+### v1.3 polish — depth-based subtree intensity (2026-05-27)
+
+Operator stage-8 feedback after the root-id-collision patch: the outer `root` rect now renders correctly, but at low zoom the inner subtree boundaries (`01-ui`, `04-api-server`) blur into the outer rect — all three rects shared the same 60%-opacity wash and the same `--color-border` dashed border, so nesting was only legible via the (light) double-overlap of two semi-transparent layers. Filed in-place rather than as a new ISSUE_OPEN cycle since v1.3's status was already VERIFY and the change is chrome-only (no behavior change).
+
+**What changed:**
+- `useDagLayout.ts` — `DocSubtreeData` gains a `depth: number` field, populated from the existing `parentDepth = depthOf(docId)` computation already used for zIndex. No new traversal.
+- `DocSubtreeNode.tsx` — reads `depth` from data; computes background opacity as `min(30 + depth * 40, 90)` (outer = 30%, depth-1 nested = 70%, capped at 90% so a hypothetical depth-2+ nesting doesn't go fully opaque); picks border between `--color-border` (depth 0) and `--color-border-strong` (depth ≥ 1). The header strip's bottom-divider border picks the same color so the header-to-interior transition stays coherent within a rect.
+
+**Net visual effect:** outer `root` rect remains a faint wash with a soft dashed border; inner `01-ui` and `04-api-server` rects pop as clearly darker regions with a stronger dashed border. At full zoom the difference is subtle; at low zoom it's the dominant cue.
+
+**Gates 2026-05-27:** `typecheck`, `lint` both exit 0. Build not re-run (no behavior change; the existing v1.3 patch build's chunk shape is unaffected by a token-only style edit).
+
+**Deviations:** None. Stayed entirely within cream-theme tokens (no new color tokens introduced — `--color-border-strong` was already in `globals.css`).
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.

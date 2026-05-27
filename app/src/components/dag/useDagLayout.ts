@@ -12,6 +12,13 @@ export interface DocSubtreeData extends Record<string, unknown> {
   parentNode: DocNode;
   /** Called when the user clicks the header strip. */
   onHeaderClick: () => void;
+  /**
+   * Nesting depth in the doc tree (0 = outermost, ≥1 = nested inside another
+   * subtree). Drives depth-based wash/border intensity in `DocSubtreeNode`
+   * so inner rects pop visually against their enclosing outer rect when
+   * the canvas is zoomed out.
+   */
+  depth: number;
 }
 
 const NODE_WIDTH = 240;
@@ -247,7 +254,8 @@ async function layout(
       // (zIndex 0) paint above all subtrees. Carried over from v1.2's
       // paint-order patch — preserves the same z-order semantics under the
       // ELK engine.
-      const subtreeZ = -100 + depthOf(docId);
+      const parentDepth = depthOf(docId);
+      const subtreeZ = -100 + parentDepth;
       const captured = doc;
       subtreeNodes.push({
         id: `subtree-${docId}`,
@@ -258,6 +266,7 @@ async function layout(
           onHeaderClick: () => {
             onSubtreeHeaderClick(captured);
           },
+          depth: parentDepth,
         },
         draggable: false,
         selectable: false,
