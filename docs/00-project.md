@@ -368,7 +368,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 | `02-schema` | Document schema artifact (JSON Schema + validator; formalises what `parseDocs.ts` assumes today) | — | COMPLETE (v1) |
 | `03-project-metadata` | Project metadata file (`.ledger/project.json`) and loader; provides project identity and scoping (§7.1) | — | COMPLETE (v1) |
 | `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | COMPLETE (v1, 2026-05-26 — decomposed into 5 sub-leaves: `01-workspace-conversion`, `02-parser-extraction`, `03-server-package`, `04-cli-launcher`, `05-ui-hook-migration` all COMPLETE) |
-| `05-task-runner` | In-house task runner (tasks table, append-only event log, scheduler tick, HITL gates, resource claims; §5) | `04-api-server` | PLANNED |
+| `05-task-runner` | In-house task runner (tasks table, append-only event log, scheduler tick, HITL gates, resource claims; §5) | `04-api-server` | DRAFT (parent doc authored 2026-05-27; decomposed into 5 children: `01-store-schema`, `02-scheduler`, `03-hitl-gate`, `04-api-endpoints`, `05-ui-hook-migration`, all PLANNED) |
 | `06-agent-dispatcher` | Agent dispatcher — MCP-based interface; Claude Code as first integration; replaces `10-orchestration`'s transcript ingestion as the data source | `05-task-runner` | PLANNED |
 | `07-health-daemon` | Document health daemon — size, staleness, orphan-issue monitors; enqueues `doc_refactor` / `reverify` / `issue_triage` tasks (§6.4) | `06-agent-dispatcher` | PLANNED |
 
