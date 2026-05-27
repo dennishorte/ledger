@@ -61,4 +61,4 @@ Round numbering is sequential (`01-round-1`, `02-round-2`, …). Per-round Statu
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-round-1` | First maintenance round across `01-ui` COMPLETE leaves | sibling COMPLETE leaves under `01-ui` | VERIFY (2026-05-26) — 4 items |
+| `01-round-1` | First maintenance round across `01-ui` COMPLETE leaves | sibling COMPLETE leaves under `01-ui` | COMPLETE (v1, 2026-05-26) — 4 items |
