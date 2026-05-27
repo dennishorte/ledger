@@ -1,7 +1,7 @@
 # Maintenance-round Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-05-26 (initial)
+**Last Updated:** 2026-05-26 (round-1 retro: stage 10 must also scrub in-prose code references on affected siblings, not just Open Issues bullets)
 
 A specialization of [`leaf-workflow.md`](./leaf-workflow.md) for **batched fixes to accumulated Open Issues across already-COMPLETE sibling leaves**. A maintenance round is itself a leaf node — it runs the full DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE lifecycle. This playbook describes only the deltas from `leaf-workflow.md`; the rest applies unchanged.
 
@@ -80,6 +80,8 @@ In addition to the standard cross-doc sync from leaf-workflow §10 (CLAUDE.md, P
 - The strikethrough + pointer stays in the sibling's Open Issues **forever**. This preserves where the bug was first observed (often a meaningful clue for future regression investigation) while making the resolution discoverable from both ends of the link.
 
 If a round only partially addresses an originating bullet (fixed the symptom but not the root cause, or addressed two of three sub-points), strike through only the addressed portion and append a remainder bullet describing what was left.
+
+**Scrub in-prose code references too, not just Open Issues bullets.** When a round renames a file, moves a module, renames a field, or otherwise changes a code-level identifier, sibling specs may carry buried mentions in their Design sections, Implementation Notes, Decisions tables, or acceptance checks. The strikethrough convention above only catches Open Issues bullets — it does **not** catch lines like "`StatusChip` lives at `src/components/dag/StatusChip.tsx`" buried in §Design > Components. Before finalizing the merge commit, grep the affected siblings for every identifier the round changed (old file paths, old interface field names, old function names) and rewrite each stale mention to the new truth. Preserve provenance with an inline "(relocated by `99-maintenance/01-round-N` …)" note where a future reader might be confused by the change; pure replacements are fine where the historical detail no longer matters. This was added after round-1 missed seven such mentions across `03-docs`, `05-logs`, `06-health`, and `10-orchestration`; a follow-up `docs(01-ui): clean up references stale after round-1` commit was required.
 
 The merge commit message follows the standard format: `Merge <branch>: 01-ui/99-maintenance/01-round-1 → COMPLETE + doc sync`.
 
