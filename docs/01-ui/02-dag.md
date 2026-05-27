@@ -99,9 +99,9 @@ dagre is chosen over `elkjs` because the graph is small (≤ 30 nodes for the fo
 
 ```
 src/components/dag/
-  DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, minimap, controls
+  DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, controls
   DocDagNode.tsx         // custom node renderer (title, id, status chip)
-  DocSubtreeNode.tsx     // non-interactive background rect framing a parent's children (D11)
+  DocSubtreeNode.tsx     // subtree container whose header strip IS the parent node (D13); dashed interior is click-inert
   StatusChip.tsx         // small colored pill, one per NodeStatus
   NodeInspector.tsx      // content shown in the shell inspector on click
   useDagLayout.ts        // dagre layout hook + subtree-rect emission
@@ -195,7 +195,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 ### Deviations from the spec
 
 - The Design names `useDocGraph.ts` as living in `src/components/dag/`; I placed it there as planned but it's a thin re-export of the parser. The actual swap point for the API-backed source will be this file alone.
-- React Flow's `Background`, `MiniMap`, and `Controls` are styled inline via the `style` prop and Tailwind class overrides. There's a small amount of `!important`-prefixed Tailwind in `DagCanvas.tsx` to override React Flow's stock control styling so it matches the cream theme. This is the documented escape hatch in xyflow's CSS guidance.
+- React Flow's `Background` and `Controls` are styled inline via the `style` prop and Tailwind class overrides. There's a small amount of `!important`-prefixed Tailwind in `DagCanvas.tsx` to override React Flow's stock control styling so it matches the cream theme. This is the documented escape hatch in xyflow's CSS guidance.
 
 ### Verification status
 
@@ -242,7 +242,7 @@ Implementation:
 
 - `useDagLayout.ts` no longer pushes parent relations to the visible-edges array; they still go to `dagre.setEdge` so rank assignment is unchanged.
 - All `dependsOn` edges render (the round-1 same-parent skip is removed).
-- A new "subtree" node type per parent with ≥2 children frames its kids with a dashed rounded rect; the parent's own doc tile sits separately above. Subtree nodes are non-interactive (`selectable: false`, `draggable: false`, click handler ignores them).
+- ~~A new "subtree" node type per parent with ≥2 children frames its kids with a dashed rounded rect; the parent's own doc tile sits separately above. Subtree nodes are non-interactive (`selectable: false`, `draggable: false`, click handler ignores them).~~ → superseded by v1.2 / D13: the subtree node now *is* the parent (interactive header strip with status chip + id + title); only the dashed interior is click-inert.
 - Subtree nodes are emitted **first** in the `nodes` array so React Flow renders them behind the doc tiles, and they carry `style.zIndex: -1` as belt-and-suspenders.
 
 Re-run gates on 2026-05-22 after the F4 pivot — all clean:
@@ -295,6 +295,20 @@ Status: COMPLETE (v1.1). No formal re-verification cycle — the changes are vis
 **Deviations:** None. All design constraints 1–7 met as specified.
 
 **Deprecated interface:** `DocSubtreeData.label` and `DocSubtreeData.title` replaced by `DocSubtreeData.parentNode` and `DocSubtreeData.onHeaderClick`. No other consumers of `DocSubtreeData` exist outside `DocSubtreeNode.tsx`.
+
+### Implementation Review (2026-05-27)
+
+Reviewer ran in clean context against `git diff main..HEAD`. Gates: `typecheck` exit 0 (zero output); `lint` exit 0 (zero output); `build` exit 0 (1,756.08 kB JS / 44.24 kB CSS gzip 552.70 / 8.63 kB). Verdict: NEEDS_MINOR_REVISIONS — doc-only fixes.
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| F1 | Should-fix | §Round-2 verification feedback "Implementation" bullet stated "the parent's own doc tile sits separately above" — directly contradicts D13. | Bullet struck through inline with forward pointer `→ superseded by v1.2 / D13: the subtree node now *is* the parent (…)`. Historical narrative preserved per the v1.1/round-2 audit-table convention. |
+| F2 | Should-fix | §Design > Components: `DagCanvas.tsx // … minimap, controls` carried stale `minimap` reference (removed in v1.1 / D12). | Comment now reads `// React Flow wrapper, ReactFlowProvider, controls`. |
+| F3 | Should-fix | §Design > Components: `DocSubtreeNode.tsx // non-interactive background rect framing a parent's children (D11)` — stale post-D13; the component is now the parent's visual representation with an interactive header strip. | Comment now reads `// subtree container whose header strip IS the parent node (D13); dashed interior is click-inert`. |
+| F4 | Nit | §Implementation Notes > Deviations: "React Flow's `Background`, `MiniMap`, and `Controls` are styled inline" — `MiniMap` was removed in v1.1. | `MiniMap` removed from the sentence; `Background` + `Controls` retained. |
+| F5 | Nit | `DocSubtreeNode.tsx`: `NodeProps<DocSubtreeData>` would eliminate the `data as DocSubtreeData` cast. | **Punted.** `DocDagNode.tsx` uses the same cast pattern (`data as DocNodeData`); changing one without the other introduces asymmetry. Filed as part of a future doc-DAG type-tightening pass if it surfaces. |
+
+**Code discipline / spec conformance (no findings):** no `any`, no `eslint-disable`, no `console.log`, no dead code. Bottom-up sort (`depth(b) − depth(a)`) verified correct: inner subtree bounds compute before outer. `buildSubtreeParentIds` enforces ≥2-child threshold (so `99-maintenance` stays a tile). Subtree parents filtered from `docNodes` array. `pointer-events-auto` on header `<button>` with `pointer-events-none` on outer div verified — interior is click-inert. `onNodeClick` retains its `node.type !== "doc"` guard, so subtree clicks bypass React Flow's handler and only the header's own `onClick` fires.
 
 ### Open follow-ups
 
