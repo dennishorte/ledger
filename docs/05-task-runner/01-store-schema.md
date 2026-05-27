@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/01-store-schema`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW)
+**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `04-api-server` (workspace, parser package, Hono server, ProjectContext)
 
@@ -146,6 +146,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_status      ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent      ON tasks(parent_task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON tasks(type, status);
+-- Composite covering index for listPendingEligible()'s ORDER BY priority DESC, created_at ASC
+-- (Spec Review S1). Costs ~nothing at v1 scale; keeps the scheduler tick O(log n) at v100+.
+CREATE INDEX IF NOT EXISTS idx_tasks_eligible    ON tasks(status, priority DESC, created_at ASC);
 
 CREATE TABLE IF NOT EXISTS events (
   id        TEXT PRIMARY KEY,                        -- UUIDv4
@@ -169,7 +172,7 @@ CREATE TABLE IF NOT EXISTS migrations (
 
 ```ts
 // server/src/runner/migrations/runner.ts
-import { readdir, readFile } from "node:fs/promises";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "better-sqlite3";
 
@@ -177,7 +180,7 @@ const MIGRATIONS_DIR = new URL(".", import.meta.url).pathname;
 
 export function applyMigrations(db: Database): { applied: number[] } {
   const currentVersion = db.pragma("user_version", { simple: true }) as number;
-  const files = readMigrationFilesSync(MIGRATIONS_DIR);  // sync helper using node:fs.readdirSync
+  const files = readMigrationFilesSync(MIGRATIONS_DIR);  // sync — uses node:fs readdirSync/readFileSync
   const applied: number[] = [];
 
   for (const { version, sql } of files) {
@@ -186,8 +189,12 @@ export function applyMigrations(db: Database): { applied: number[] } {
       db.exec(sql);
       db.prepare("INSERT INTO migrations(version, applied_at) VALUES (?, ?)")
         .run(version, new Date().toISOString());
-      db.pragma(`user_version = ${version}`);
     })();
+    // PRAGMA user_version is NOT transactional in SQLite — it executes immediately
+    // outside any tx boundary. Setting it AFTER db.transaction() commits successfully
+    // means we never advance user_version unless the migrations-table row landed.
+    // (Spec Review S3.)
+    db.pragma(`user_version = ${version}`);
     applied.push(version);
   }
 
@@ -195,7 +202,9 @@ export function applyMigrations(db: Database): { applied: number[] } {
 }
 ```
 
-Migration files are named `NNN-<slug>.sql` where `NNN` is a zero-padded integer. The runner sorts numerically, applies in order, and is idempotent across restarts (any `version <= currentVersion` is skipped — `IF NOT EXISTS` on the schema is belt-and-braces). Each migration runs in its own `db.transaction()`: better-sqlite3's `transaction()` wraps the closure in `BEGIN IMMEDIATE; … ; COMMIT;` (or `ROLLBACK` on throw), so an error in `db.exec(sql)` rolls the entire migration back atomically — the database stays at the previous `user_version` and the next boot retries.
+Migration files are named `NNN-<slug>.sql` where `NNN` is a zero-padded integer. The runner sorts numerically, applies in order, and is idempotent across restarts (any `version <= currentVersion` is skipped — `IF NOT EXISTS` on the schema is belt-and-braces). Each migration runs in its own `db.transaction()`: better-sqlite3's `transaction()` wraps the closure in `BEGIN IMMEDIATE; … ; COMMIT;` (or `ROLLBACK` on throw), so an error in `db.exec(sql)` rolls the entire migration back atomically. The `PRAGMA user_version` write happens only on successful commit (Spec Review S3) so the dual-source (`user_version` + the `migrations` table) cannot diverge: either both updated or neither.
+
+The function is fully synchronous — `readdirSync`/`readFileSync` from `node:fs`, no `async`/`await`. This matches better-sqlite3's sync contract and lets `applyMigrations` run before the Database handle is handed off to the Store factory.
 
 ### Store API surface
 
@@ -239,7 +248,26 @@ export function createStore(db: Database): Store {
 }
 ```
 
-`createStore` is the only public factory. It accepts an already-opened `better-sqlite3` `Database` instance so the caller controls the file path (`new Database(".ledger/runner.db")` for production, `new Database(":memory:")` for tests). The runner module's `index.ts` exposes a higher-level `createStoreForProject(project: ProjectContext): Store` wrapper that does the file-path construction; that wrapper lives here in this sub-leaf but is exercised by `02-scheduler`.
+`createStore` is the only public factory. It accepts an already-opened `better-sqlite3` `Database` instance so the caller controls the file path (`new Database(".ledger/runner.db")` for production, `new Database(":memory:")` for tests). 
+
+A higher-level `createStoreForProject(project: ProjectContext): Store` wrapper does the file-path construction:
+
+```ts
+// server/src/runner/index.ts (excerpt)
+import Database from "better-sqlite3";
+import { applyMigrations } from "./migrations/runner";
+import { createStore } from "./store";
+
+export function createStoreForProject(project: ProjectContext): Store {
+  const db = new Database(join(project.projectRoot, ".ledger/runner.db"));
+  db.pragma("journal_mode = WAL");      // safer crash recovery; ~zero cost
+  db.pragma("foreign_keys = ON");       // required for ON DELETE CASCADE
+  applyMigrations(db);
+  return createStore(db);
+}
+```
+
+This wrapper ships in **this sub-leaf** (Spec Review N2 — pinning ownership) and is the entry point `server/src/context.ts` will call to populate `ProjectContext.store`. Sub-leaf `02-scheduler` consumes the returned `Store` without altering the factory signature.
 
 **Transaction model:** every method that writes is a `db.transaction(() => { ... })()` invocation. Reads are bare `prepare(...).get(...)` or `.all(...)`. The Store does not expose raw transactions to callers — composability across multiple operations (e.g., `createTask + appendEvent` in one tx) is handled inline within each method that needs it. If `02-scheduler` requires multi-method tx composition, a `withTx(fn)` helper is added then; not in v1 scope.
 
@@ -252,7 +280,12 @@ The block currently at `app/src/lib/types.ts:95–194` (between the `// Orchestr
 ```ts
 // packages/parser/src/runner/types.ts (excerpt)
 export type TaskId = string;
-export type TaskType = /* unchanged enum */;
+export type TaskType =
+  | "spec_draft" | "spec_review" | "implement" | "verify"
+  | "doc_refactor" | "issue_triage" | "human_review"
+  | "reverify" | "project_status_review"
+  | "operator_session" | "agent_task"
+  | "noop";                                       // NEW — v1 synthetic executor (parent D8)
 export type TaskStatus = /* unchanged enum */;
 export type TaskSource = /* unchanged enum */;
 export type ResourceClaim = /* unchanged discriminated union */;
@@ -286,13 +319,26 @@ export interface TaskInput {                       // NEW
   agent?: { model: string; persona?: string };
   reviewPayload?: { summary: string; diffRef?: string };
   priority?: number;                              // default 0
+  // Note: transcriptPath deliberately absent — only the transcript bootstrap path
+  // (app/server/deriveTask.ts) sets it, and that path constructs Task objects directly
+  // rather than going through createTask(). See Spec Review N3.
 }
 
 export type LogEventId = string;
 export type ConnectionStatus = /* unchanged */;
 export interface BaseLogEvent { /* unchanged */ }
-export type LogEvent = /* unchanged discriminated union */;
+export type LogEvent = BaseLogEvent & (
+  | { kind: "reasoning"; text: string; subkind: "thinking" | "message" }
+  | { kind: "tool_call"; callId: string; toolName: string; arguments: string }
+  | { kind: "tool_result"; callId: string; status: "ok" | "error"; body: string; durationMs?: number }
+  | { kind: "artifact"; artifactKind: "doc_created" | "doc_updated" | "file_written" | "version_committed";
+      path: string; docNodeId?: NodeId; summary?: string }
+  | { kind: "status_change"; from?: TaskStatus; to: TaskStatus; reason?: string }  // CHANGED — from? optional for seq-0 creation event
+  | { kind: "error"; message: string; stack?: string }
+);
 ```
+
+`status_change.from` becomes `from?: TaskStatus` (was required). The seq-0 creation event emitted by `createTask` records the task entering `PENDING` from "no prior state" — modelling this as `{ to: "PENDING" }` with an absent `from` is more honest than synthesizing a fake predecessor status. Every other `status_change` (PENDING → BLOCKED, RUNNING → COMPLETE, etc.) continues to set both fields. UI consumers (`useLogStream`, `TaskInspector`) already render `from` only when present per `01-ui/10-orchestration`'s implementation. The JSON Schema for `log-event.schema.json` makes `from` optional in the `status_change` variant.
 
 `app/src/lib/types.ts` becomes (orchestration block only):
 
@@ -306,7 +352,12 @@ export type {
 
 Re-exports preserve every import path, so every *read* site (`useTaskList.ts`, `useTask.ts`, `useLogStream.ts`, `TaskInspector.tsx`, `useTaskGrouping.ts`) continues to compile unchanged. The implementer audits each site for `transcriptPath` usage and either narrows-then-uses or substitutes a defined-or-undefined check (see §Verification item 5).
 
-**One *write* site needs a touch-up.** The transcript bootstrap at `app/server/deriveTask.ts` constructs synthetic `Task` objects from JSONL. The two new required fields (`dbRowVersion`, `priority`) must be populated there — both as `0` for transcript-derived tasks (no DB row backs them, so the version is moot; priority is the v1 scheduler default). This is a two-line addition in `deriveTask.ts` and is in scope for this sub-leaf. Without it, `pnpm -C app typecheck` fails. The corresponding test fixture (`app/server/__fixtures__/sample-session.jsonl`) requires no update — fixtures are inputs, not outputs.
+**Two transcript-bootstrap files need touch-ups.** Both audited and confirmed via grep against the working tree at sub-leaf authoring time:
+
+- **`app/server/deriveTask.ts:239`** constructs synthetic `Task` objects from JSONL via an object literal. The two new required fields (`dbRowVersion`, `priority`) must be populated there — both as `0` for transcript-derived tasks (no DB row backs them, so the version is moot; priority is the v1 scheduler default). Two-line addition.
+- **`app/server/middleware.ts:105`** reads `const jsonlPath = task.transcriptPath` and **`app/server/middleware.ts:226`** passes `task.transcriptPath` to `parseTranscriptFile(...)`. Both sites read the field as a non-optional `string`. After `transcriptPath?: string`, both lines become TypeScript errors. Fix at each site is a guard: `if (!task.transcriptPath) return;` (line 105 — early return from the handler since a transcript-less task has no JSONL to read) and the line-226 call site is already inside the same handler so the same guard covers it. The implementer audits the surrounding handler to confirm the guard placement.
+
+Both touch-ups are in scope for this sub-leaf. Without them, `pnpm -C app typecheck` fails. The transcript fixture (`app/server/__fixtures__/sample-session.jsonl`) requires no update — fixtures are inputs, not outputs.
 
 `packages/parser/src/index.ts` adds:
 
@@ -319,7 +370,7 @@ export { validateTaskInput } from "./runner/validateTaskInput";
 
 ### JSON Schemas
 
-All three follow the `02-schema` / `03-project-metadata` convention: JSON Schema 2020-12 draft, `$id` rooted at `https://ledger.local/schemas/`, `$comment` block at the top citing the spec doc. Validators in `@ledger/parser/src/runner/` instantiate `new Ajv2020({ strict: true, allErrors: true })`, add the format pack, and compile the schema at module load (paying the ~5ms compile cost once per process).
+All three follow the `02-schema` / `03-project-metadata` convention: JSON Schema 2020-12 draft, `$id` rooted at `https://ledger.dev/schemas/` (matching the existing `document-node.schema.json` and `project-metadata.schema.json` host — Spec Review N1), `$comment` block at the top citing the spec doc. Validators in `@ledger/parser/src/runner/` instantiate `new Ajv2020({ strict: true, allErrors: true })`, add the format pack, and compile the schema at module load (paying the ~5ms compile cost once per process).
 
 `task-input.schema.json` is the most consequential of the three — it gates `POST /api/tasks` requests in `04-api-endpoints`. Required fields: `type`, `title`. Each optional field gets a `default` so ajv applies the default during validation when configured (the validator constructs ajv with `useDefaults: true`). String enums are pinned (`type` ∈ `TaskType` values; `source` ∈ `TaskSource` values; claim shapes follow `ResourceClaim`'s discriminated union). The schema is the source of truth — if the TS type and the schema disagree, the validator tests catch it (one test per kind/variant).
 
@@ -331,7 +382,10 @@ A reviewer running the worktree must observe:
 2. `pnpm -C packages/parser typecheck`, `pnpm -C packages/parser lint`, `pnpm -C packages/parser test` exit zero. Test counts increase by exactly the number of new validator tests; pre-existing parser tests still pass.
 3. `pnpm -C server typecheck`, `pnpm -C server lint`, `pnpm -C server build`, `pnpm -C server test` exit zero. The new `server/test/runner/*.test.ts` are picked up by `server/vitest.config.ts`.
 4. `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build` exit zero. `app/src/lib/types.ts` re-exports compile cleanly; no UI source file outside `types.ts` is modified by this child.
-5. Spot-check three import sites in `app/src/` for `transcriptPath` usage (`useTaskList.ts`, `TaskInspector.tsx`, `useTaskGrouping.ts`): each either uses `transcriptPath` only inside a `if (task.transcriptPath)` guard or via the destructured `transcriptPath?: string` parameter shape. No `transcriptPath!` non-null assertions.
+5. Spot-check the four sites in `app/` that touch `transcriptPath` (per the grep audit in §Type migration):
+   - `app/src/components/tasks/TaskInspector.tsx` / `useTaskList.ts` / `useTaskGrouping.ts` — read sites; each uses `transcriptPath` only inside a `if (task.transcriptPath)` guard or via the destructured `transcriptPath?: string` parameter shape. No `transcriptPath!` non-null assertions.
+   - `app/server/middleware.ts:105` + `:226` — read sites in the transcript-bootstrap handler; each now has an early-return guard before the bare `task.transcriptPath` read.
+   - `app/server/deriveTask.ts:239` — write site; the constructor populates `transcriptPath: entry.jsonlPath`, `dbRowVersion: 0`, `priority: 0`.
 6. Boot the server: `pnpm -C server dev /Users/dennis/code/ledger`. On first start, `.ledger/runner.db` is created and migration 001 applies (server log line: `runner: applied migration 001-initial`). Restart: no migration applied (log line: `runner: schema is current at user_version=1`). The created DB file is gitignored (`git status` does not show it).
 7. `sqlite3 .ledger/runner.db ".schema"` shows the three tables, three task-indexes, one events-index, and the `migrations` row for version 1.
 8. The three new schema files validate against the JSON Schema 2020-12 meta-schema (run `ajv compile -s docs/_schemas/task.schema.json` etc.; exit zero each).
@@ -369,9 +423,36 @@ A reviewer running the worktree must observe:
 
 ---
 
-## Spec Review
+## Spec Review (2026-05-27)
 
-*(none yet — pre-review)*
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — 2 blocking, 4 should-fix, 5 nits. Coverage matrix marked every sub-leaf scope item Addressed except JSON Schemas (Partial — field-level detail left to the sub-leaf author at implementation time, intentional per house style) and transcript-bootstrap touch-up (Partial — `middleware.ts` initially named only `deriveTask.ts`). All findings applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `validateTaskInput` acceptance test uses `{ type: "noop", ... }` but `noop` is not in the `TaskType` union in `app/src/lib/types.ts`. The `noop` executor is a v1 built-in per parent D8; its type value must be present for the scheduler to dispatch it and for `task-input.schema.json`'s `type` enum to accept it. | Added `"noop"` to the `TaskType` excerpt in §Type migration. The full TS enum is now written out explicitly in the migration block (was previously `/* unchanged enum */`). `task-input.schema.json`'s `type` enum follows suit. |
+| B2 | `app/server/middleware.ts:105` and `:226` read `task.transcriptPath` as a non-optional string. After `transcriptPath?: string`, both lines become TypeScript errors. Spec named only `deriveTask.ts` as the touch-up site. | Verified via `grep transcriptPath app/server/*.ts`: confirmed both middleware sites + the deriveTask site. §Type migration rewritten to enumerate all three sites with file:line citations; each gets a specific fix (guard-before-read for middleware, populate-defaults for deriveTask). Acceptance check item 5 expanded to spot-check all four sites. |
+| S1 | `listPendingEligible`'s `ORDER BY priority DESC, created_at ASC` is not covered by any declared index; at v1 scale it's fine but degrades at v100+. | Added `idx_tasks_eligible ON tasks(status, priority DESC, created_at ASC)` to `001-initial.sql`. Composite index keeps the scheduler tick O(log n). Cost is ~nothing at v1; the right time to add it is now while the schema is fresh. |
+| S2 | `applyMigrations` pseudocode imports from `node:fs/promises` (async) but calls a `readMigrationFilesSync` helper. Internally inconsistent — implementer could plausibly use async fs which breaks better-sqlite3's sync contract. | Imports rewritten as `import { readdirSync, readFileSync } from "node:fs"`; added one-sentence note that the runner is fully synchronous and matches better-sqlite3's sync contract. |
+| S3 | `PRAGMA user_version = N` is **not transactional** in SQLite — it executes immediately outside any tx boundary. The spec wrapped it inside `db.transaction()` along with the migrations-table insert; on rollback, `user_version` could advance while the migrations-table row was not written. Dual-source consistency the spec claimed was broken. | Moved `db.pragma(\`user_version = ${version}\`)` to **after** the `db.transaction()()` invocation. Added inline comment + paragraph note explaining the constraint. Dual-source is now correctly invariant: either both updated or neither. |
+| S4 | The seq-0 creation event was described as `{ kind: "status_change", from: undefined, to: "PENDING" }`, but the existing `LogEvent` discriminated union types `from: TaskStatus` as required. `undefined` is not a `TaskStatus` value and would fail `validateLogEvent`. | Made `from?: TaskStatus` optional on the `status_change` variant in the type-migration block (full `LogEvent` union now written out explicitly in the spec). The seq-0 creation event records `{ to: "PENDING" }` with `from` absent — more honest than synthesizing a fake predecessor. Existing UI consumers already render `from` only when present (per `01-ui/10-orchestration`'s implementation). `log-event.schema.json` makes `from` optional in the `status_change` variant. |
+| N1 | New schemas used `$id` rooted at `https://ledger.local/schemas/` but existing schemas (`document-node.schema.json`, `project-metadata.schema.json`) use `https://ledger.dev/schemas/`. | Pinned `https://ledger.dev/schemas/` in §JSON Schemas paragraph. |
+| N2 | `createStoreForProject(ctx)` was mentioned in prose but not specified — implementer would ask "is this in scope?". | Added a concrete `createStoreForProject` code block (10 lines) with `journal_mode = WAL` + `foreign_keys = ON` pragmas, located at `server/src/runner/index.ts`. Explicitly named as this sub-leaf's deliverable. |
+| N3 | `TaskInput` excerpt omitted `transcriptPath` (correct) but did not explicitly note the omission — implementer could wonder. | Added inline comment to the `TaskInput` block: `// Note: transcriptPath deliberately absent — only the transcript bootstrap path sets it, and that path constructs Task objects directly rather than going through createTask().` |
+| N4 | Verification items 3 + 8 referenced `createTask({ ..., transcriptPath: undefined })` but `TaskInput` has no `transcriptPath` field — would fail compilation. | Item 3 rewritten to `createTask({ type: "noop", title: "..." })`; item 8 rewritten to make the contrast between `createTask` (no `transcriptPath` accepted) and the transcript bootstrap's direct `Task` construction (sets `transcriptPath`) explicit. |
+| N5 | Pre-review placeholder in the `Spec Review` section. | Resolved by this audit table replacing the placeholder. |
+
+Reviewer's decomposition recommendation was **Stay bundled** — the types ↔ schemas ↔ validators are mutually-referential and splitting would produce an incoherent intermediate commit. No structural change to the sub-leaf's scope.
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer):
+
+- `PRAGMA user_version` non-transactionality (S3) is documented SQLite behaviour and addressed structurally. High confidence.
+- `noop` `TaskType` absence (B1) verified by direct grep against `app/src/lib/types.ts`. Now corrected.
+- `middleware.ts` non-guarded `transcriptPath` usage (B2) verified by direct grep. Now in scope.
+- `status_change from: undefined` type incompatibility (S4) verified against `app/src/lib/types.ts:187`. Now resolved by making `from?` optional.
+- ajv `useDefaults: true` behaviour with `oneOf` discriminated unions: applies defaults inside matched branches only. Compatible with our `LogEvent` schema.
+- `better-sqlite3@^11` prebuilt on `darwin-arm64`: reasonable but unverified at review time; implementer smoke-tests at install (Verification item 1).
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
@@ -387,12 +468,12 @@ When this child moves to `VERIFY`, the verifier confirms:
 
 1. The full Acceptance check list (1–10) passes.
 2. `applyMigrations` is idempotent: invoking it twice in succession on the same DB applies migration 001 the first time and no-ops the second. `migrations` table has exactly one row.
-3. `createTask` writes exactly one row to `tasks` and exactly one row to `events` (seq=0, kind=`status_change`, from=undefined, to=`PENDING`), inside a single transaction. Crashing mid-transaction (simulated via `db.prepare('... FAIL')` throw) leaves neither row.
+3. `createTask({ type: "noop", title: "..." })` writes exactly one row to `tasks` and exactly one row to `events` (seq=0, kind=`status_change`, `from` field absent, to=`PENDING`), inside a single transaction. Crashing mid-transaction (simulated via `db.prepare('... FAIL')` throw) leaves neither row.
 4. `updateTaskStatus` with a stale `expectedDbRowVersion` throws `OptimisticLockError` and leaves the row unchanged.
 5. `appendEvent` against 100 rapid-fire calls on the same task yields events with seq 0..99, no gaps or duplicates.
 6. `getEvents(taskId, { afterSeq: 50 })` returns events 51..99 (49 events) in order.
 7. `listPendingEligible()` returns `PENDING` and `BLOCKED` rows ordered by `priority DESC, created_at ASC`. `RUNNING` rows do not appear. `COMPLETE`/`FAILED` rows do not appear.
-8. `Task.transcriptPath`'s optionality is honored: a Task constructed by `createTask({ ..., transcriptPath: undefined })` (or with no field at all) round-trips through `loadTask` with the field absent / `undefined`. A transcript-bootstrap-produced Task with `transcriptPath: "/path"` still narrows correctly via the discriminator pattern.
+8. `Task.transcriptPath`'s optionality is honored: a Task constructed by `createTask({ type: "noop", title: "..." })` (no `transcriptPath` field — `TaskInput` does not accept it) round-trips through `loadTask` with `transcriptPath` absent / `undefined`. A transcript-bootstrap-produced Task (from `app/server/deriveTask.ts`, which constructs `Task` objects directly with `transcriptPath: "/path"`) still narrows correctly via the discriminator pattern used by `05-ui-hook-migration`'s dual-source merger.
 9. `validateTaskInput` accepts a minimal `{ type: "noop", title: "..." }` body and rejects bodies missing `type` with a clear ajv error path. Default-application populates `source: "operator_injected"`, `dependsOn: []`, `resourceClaims: []`, `priority: 0` on the parsed result.
 10. `validateLogEvent` accepts every kind variant (the six discriminants: `reasoning`, `tool_call`, `tool_result`, `artifact`, `status_change`, `error`) and rejects unknown `kind` values.
 11. `pnpm -C app build` bundle delta is minimal (re-export-only change to `types.ts`; the JS bundle should not grow).
