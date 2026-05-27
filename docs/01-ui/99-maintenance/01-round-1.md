@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/99-maintenance/01-round-1`
 **Parent:** `01-ui/99-maintenance`
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26 (SPEC_REVIEW → APPROVED)
+**Last Updated:** 2026-05-26 (APPROVED → IN_PROGRESS)
 
 **Dependencies:** `01-ui/03-docs`, `01-ui/04-tasks`, `01-ui/05-logs`, `01-ui/06-health` (originating siblings, all COMPLETE). `01-ui/02-dag` no longer in scope — see Spec Review B1.
 
