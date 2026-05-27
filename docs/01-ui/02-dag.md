@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** VERIFY (v1.2)
+**Status:** COMPLETE (v1.2, 2026-05-27)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
