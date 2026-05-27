@@ -1,10 +1,11 @@
-import { useCallback, type JSX } from "react";
+import { useCallback, useEffect, type JSX } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type NodeMouseHandler,
   type NodeTypes,
 } from "@xyflow/react";
@@ -21,10 +22,12 @@ import type { DocNode } from "@/lib/types";
 const nodeTypes: NodeTypes = { doc: DocDagNode, subtree: DocSubtreeNode };
 
 const proOptions = { hideAttribution: true } as const;
+const fitViewOptions = { padding: 0.2 } as const;
 
 function DagCanvasInner(): JSX.Element {
   const docs = useDocGraph();
   const openInspector = useShellStore((s) => s.openInspector);
+  const { fitView } = useReactFlow();
 
   // Called when the user clicks the header strip of a subtree rect.
   const onSubtreeHeaderClick = useCallback(
@@ -35,6 +38,15 @@ function DagCanvasInner(): JSX.Element {
   );
 
   const { nodes, edges } = useDagLayout(docs, onSubtreeHeaderClick);
+
+  // ELK resolves asynchronously, so React Flow mounts with an empty node set
+  // and its `fitView` prop has nothing to fit on the first paint. Refit
+  // imperatively once layout produces nodes; subsequent doc-set changes
+  // (rare in Phase 1) refit the same way.
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    void fitView(fitViewOptions);
+  }, [nodes, fitView]);
 
   const onNodeClick = useCallback<NodeMouseHandler>(
     (_, node) => {
@@ -54,8 +66,6 @@ function DagCanvasInner(): JSX.Element {
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
         proOptions={proOptions}
         minZoom={0.4}
         maxZoom={2}

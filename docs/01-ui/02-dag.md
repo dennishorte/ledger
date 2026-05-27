@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS (2026-05-27 — v1.3 ELK migration; implementer entered stage 4a)
+**Status:** VERIFY (2026-05-27 — v1.3 ELK migration; awaiting operator browser walk-through)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
@@ -108,7 +108,7 @@ src/components/dag/
   DocSubtreeNode.tsx     // subtree container whose header strip IS the parent node (D13); dashed interior is click-inert
   StatusChip.tsx         // small colored pill, one per NodeStatus
   NodeInspector.tsx      // content shown in the shell inspector on click
-  useDagLayout.ts        // dagre layout hook + subtree-rect emission
+  useDagLayout.ts        // ELK-backed compound-graph layout (async) + subtree-rect emission (v1.3)
   useDocGraph.ts         // returns DocNode[] from the build-time parse
 src/lib/
   parseDocs.ts           // pure parser: raw markdown text → DocNode[]
@@ -204,16 +204,17 @@ The v1.0–v1.2 audit tables stay as durable provenance — they record decision
 | Library | Version |
 |---|---|
 | `@xyflow/react` | ^12.10.2 |
-| `elkjs` | (pinned at v1.3 install — see v1.3 ELK migration section below) |
+| `elkjs` | ^0.11.1 (v1.3 — replaces `@dagrejs/dagre` ^3.0.0) |
 
 ### Key choices
 
 - **Vite glob path.** `import.meta.glob("../../../docs/**/*.md", { query: "?raw", import: "default", eager: true })` from `src/lib/parseDocs.ts` resolves to `<repo>/docs/**`. Required adding `server.fs.allow: [path.resolve(__dirname, "..")]` in `vite.config.ts` so the dev server is allowed to serve files outside the Vite project root (`app/`).
-- **dagre typing.** `dagre`'s `graphlib.Graph` defaults its three generic params to `any`. We instantiate with `Graph<GraphLabel, NodeLabel, EdgeLabel>` using dagre's own exported label types — `NodeLabel` already declares optional `x` and `y`, so no post-layout casts are needed.
+- **ELK typing.** `elkjs/lib/elk.bundled.js` re-exports the same `ELK`, `ElkNode`, `ElkExtendedEdge` types as `elkjs`. Types are imported separately from the runtime so the type-only imports don't pull the bundled worker into typecheck. Each `ElkNode` carries optional `x`, `y`, `width`, `height` (set by ELK during `layout`) plus a `children?` array that we populate for compound parents.
 - **Parser scope.** The parser handles two doc-id patterns: `00-project.md → root`, and `<dir>/00-<slug>.md → <dir>`. All other paths map to `<dir>/<basename>`. The "## Children" manifest table is matched by a regex on rows of the form `` | `id` | title | deps | status | ``. `dependsOn` cell extraction also uses backtick capture, so plain `—` becomes an empty list.
 - **Manifest-only children.** Children listed in a parent's manifest but lacking an authored `.md` file are surfaced as `DocNode { authored: false, status: PLANNED }`. They render with a dashed border in `DocDagNode`.
-- **Dependency vs parent edges.** Both are passed to `dagre.setEdge` so rank assignment respects either. Only deps are drawn as visible arrows (dashed bezier in `--color-accent` with a "depends on" label); parent relations are conveyed by spatial grouping per D11 — a translucent dashed rounded rect emitted as a `subtree`-typed React Flow node behind each parent's children. Subtree rects are non-interactive (`selectable: false`, `draggable: false`) and have `style.zIndex: -1` so they sit behind doc tiles even if a future reorder of the node array changes paint order.
-- **No drag.** `nodesDraggable={false}` — this is a read-only view of authored doc state. When task DAGs arrive, drag may still be off because dagre-laid-out graphs shouldn't be hand-tweaked.
+- **Dependency vs parent edges.** Dep edges are passed to ELK as `ElkExtendedEdge` records (full set, pre-reduction) so the `layered` algorithm uses them for layer assignment and crossing minimization. Only the transitive-reduced subset is rendered as visible arrows (dashed bezier in `--color-accent`). Parent relations are NOT passed as edges — under ELK compound graphs they're encoded via `children` nesting on the parent's `ElkNode`. Subtree rects render as `subtree`-typed React Flow nodes behind doc tiles via depth-based `zIndex` (`-100 + parentDepth`) and `pointerEvents: "none"` on the wrapper (the inner header `<button>` carries `pointer-events-auto` and wins as a CSS leaf).
+- **No drag.** `nodesDraggable={false}` — this is a read-only view of authored doc state. The interactive task DAG (`05-task-runner`) will re-enable drag for its own affordances (claim reassignment, manual edge creation); the doc panel stays read-only.
+- **Async layout + imperative fitView.** ELK is unconditionally async (`elk.layout()` returns a Promise). The hook returns `{ nodes: [], edges: [] }` until the first resolution. `DagCanvas` calls `useReactFlow().fitView(...)` in a `useEffect` keyed on `nodes.length` so the viewport fits once nodes appear — React Flow's `fitView` JSX prop only fires on initial mount with whatever nodes are present, which would be empty under async layout.
 
 ### Deviations from the spec
 
@@ -348,11 +349,54 @@ Operator verification surfaced a paint-order/click-capture bug that the reviewer
 
 **Deviations:** None.
 
+### v1.3 ELK migration (2026-05-27)
+
+Executes D14 / `00-ui.md` D10. Engine swap `@dagrejs/dagre` → `elkjs`; subtree parents become ELK compound nodes; hand-rolled bottom-up bounds computation deleted; route-level lazy-load on `DagPanel`. Reviewer skipped per leaf-workflow §2 shortcut (decision pre-recorded in D10).
+
+**Files changed:**
+- `app/package.json` — removed `@dagrejs/dagre`, added `elkjs ^0.11.1`.
+- `app/src/components/dag/useDagLayout.ts` — rewritten end-to-end. Engine swap, async hook (`useState` + `useEffect` + cancellation flag), ELK graph builder (compound `children` for subtree parents), recursive coordinate-flattening walk. `transitiveReduction`, `buildSubtreeParentIds`, depth-based subtree `zIndex`, `pointer-events: "none"` on subtree wrappers — all carried over verbatim. `buildSubtreeNodes` deleted; ELK returns compound dimensions natively. Layout options: `elk.algorithm: layered`, `elk.direction: DOWN`, `nodeNodeBetweenLayers: 80`, `nodeNode: 40`, `hierarchyHandling: INCLUDE_CHILDREN`. Compound padding = `[top=52,left=24,bottom=20,right=24]` to mirror v1.2's `GROUP_PAD_*` constants and reserve the header strip.
+- `app/src/components/dag/DagCanvas.tsx` — adds `useReactFlow().fitView()` in a `useEffect` keyed on `nodes.length`. The `fitView` JSX prop is removed; with the async layout, React Flow mounts with empty arrays and the prop would fit on nothing. Imperative refit fires once nodes arrive (~50–200ms after mount for ≤30 nodes).
+- `app/src/router.tsx` — `DagPanel` now `React.lazy(() => import(...))`, wrapped in `<Suspense fallback={…}>`. Small cream-themed "Loading…" placeholder. Other panel imports unchanged.
+
+**Algorithm note:** `elk.bundled.js` is imported, not `elkjs/lib/main.js` — bundled entry inlines the worker so we don't need to manage `Worker` lifecycle or worker URL resolution. A single `new ELK()` instance is module-scoped and reused across hook calls.
+
+**Coordinate flattening:** ELK returns child positions relative to their parent in the compound graph. The hook walks the ELK result tree once, accumulating `(x, y)` offsets through ancestors before emitting React Flow nodes with absolute coords. React Flow's `parentId` mechanism is intentionally NOT used — keeping all React Flow nodes flat preserves the v1.2 paint-order/click-capture semantics exactly (depth-based `zIndex`, `pointer-events: "none"` on the subtree wrapper, header `<button>` wins as CSS leaf).
+
+**Async / cancellation:** `useEffect` with a `cancelled` flag protects against stale resolutions if `docs` changes mid-layout. Initial render returns `{ nodes: [], edges: [] }`; subsequent renders return ELK's result. For a ≤30-node graph the resolution typically completes within ~50–200ms and the operator sees no perceptible flash because React Flow's empty initial paint is already styled (cream background, dot pattern via `<Background />`).
+
+**Bundle delta (vs pre-migration single-chunk build, captured 2026-05-27):**
+
+| Build | JS raw | JS gzip | CSS raw | CSS gzip | Modules |
+|---|---|---|---|---|---|
+| Pre-migration (dagre, single chunk) | 1,772.34 kB | 558.40 kB | 44.24 kB | 8.63 kB | 2,354 |
+| Post-migration `index` (non-DAG paths) | 1,537.50 kB | 481.36 kB | 28.39 kB | 6.25 kB | — |
+| Post-migration `DagPanel` chunk (loaded only on `/dag`) | 1,646.36 kB | 505.15 kB | 15.85 kB | 2.66 kB | — |
+| Post-migration combined (initial load on `/dag`) | 3,183.86 kB | 986.51 kB | 44.24 kB | 8.91 kB | 2,358 |
+
+Two ways to read the delta:
+- **Non-DAG paths (e.g. direct nav to `/docs` or `/tasks`):** −77.04 kB JS gzip (−14%) and −2.38 kB CSS gzip. The ELK weight is fully isolated from these routes.
+- **DAG path:** +428.11 kB JS gzip (+77%). Of this, ~250 kB gzip is `elkjs` itself (D10's stated cost); the remainder is React Flow + transitive deps that were previously in the single chunk but Vite's chunk splitter could not de-duplicate across the static/dynamic boundary without a `manualChunks` config. That config is out of D14 scope (filed under Open follow-ups).
+
+**Chunk-content verification:** confirmed via `grep -c` that doc raw-markdown content (the eager glob from `parseDocs.ts`) lives only in the `index` chunk (because non-DAG panels statically import `parseDocs`), and `elk-worker` runtime lives only in the `DagPanel` chunk. The lazy split is structurally correct; the gzip overhead is the inherent cost of ELK plus Vite's default chunk-splitting strategy.
+
+**Deviations from D14 scope:**
+- D14 says "no changes to `DocDagNode`, `DocSubtreeNode`, `StatusChip`, `NodeInspector`". Confirmed — those four files are untouched. The two additional touches (`DagCanvas.tsx`, `router.tsx`) are the minimum-surface accommodations for ELK's async API and the explicitly-scoped route-level lazy-load. Both fit within the broader D10 migration shape.
+- The new `Suspense` fallback ("Loading…") is the only new visible UI string. Cream-theme tokens only.
+
+**Gates (2026-05-27):**
+- `pnpm -C app typecheck`: exit 0, zero output.
+- `pnpm -C app lint`: exit 0, zero output under `--max-warnings=0`.
+- `pnpm -C app build`: exit 0, 2,358 modules transformed.
+
+Resolution of pre-existing Open Issue **"Dagre rank-ordering causes crossed dep edges"** (`08-markdown → 03-docs`, `02-dag → 09-workflow-progress`, line 178) is **expected** under ELK `layered`'s crossing minimization but unverified until operator browser walk-through (stage 8).
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
-- The bundle warning ("chunks larger than 500 kB") will be addressed when 03-docs lands — code-splitting per panel becomes meaningful once there are multiple heavy panels.
+- ~~The bundle warning ("chunks larger than 500 kB") will be addressed when 03-docs lands — code-splitting per panel becomes meaningful once there are multiple heavy panels.~~ Partially addressed by v1.3 lazy-load (DAG isolated to own chunk). Both remaining chunks are still >500 KB; further `manualChunks` vendor-splitting (React, React Flow, parser) would reduce duplication across `index` and `DagPanel` chunks. *(Priority: LOW — out of D14 scope; file as follow-up.)*
 - The `?raw` query is the standard Vite pattern; double-check the `query: "?raw"` + `import: "default"` combination still parses correctly under future Vite versions.
+- Lazy-load the remaining panels (`DocsPanel`, `TaskConsolePanel`, `LogStreamPanel`, `HealthDashboardPanel`, `ReplayPanel`, `DocViewerPanel`). v1.3 establishes the pattern (`React.lazy` + `Suspense`) for `DagPanel`; extending to siblings cuts the initial JS further for any non-DAG landing path. *(Priority: LOW — follow-up.)*
 
 ---
 
