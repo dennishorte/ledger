@@ -146,7 +146,7 @@ src/lib/
 
 ### Status header chip reuse
 
-`StatusChip` already lives at `src/components/dag/StatusChip.tsx`. The doc viewer reuses it as-is. (Long-term, when a third panel needs it, move to `src/components/ui/`; not yet — premature.)
+`StatusChip` lives at `src/components/ui/StatusChip.tsx` (relocated by `99-maintenance/01-round-1` R4, 2026-05-26 — was under `dag/` at the time of this spec's authoring). The doc viewer reuses it as-is.
 
 ### Acceptance check (manual)
 

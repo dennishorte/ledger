@@ -318,7 +318,7 @@ function useTask(id: TaskId): UseQueryResult<{ task: Task; events: LogEvent[] }>
 interface UseLogStreamResult {
   events: LogEvent[];             // initial batch + streamed deltas
   status: ConnectionStatus;       // "live" | "ended" | "missing" | "stub"
-  reconnectAttempt: number;
+  reconnectVisible: boolean;      // true after onerror persists ≥500ms (round-1 R2)
 }
 function useLogStream(taskId: TaskId): UseLogStreamResult;
 ```
@@ -330,7 +330,7 @@ function useLogStream(taskId: TaskId): UseLogStreamResult;
 - `status: "ended"` when the SSE closes cleanly (server signaled task `COMPLETE`).
 - `status: "stub"` is reserved for unit-test / Storybook contexts that hand-feed events.
 
-`reconnectAttempt` increments each time the EventSource reconnects; useful for UI hints ("reconnecting…").
+`reconnectVisible` flips `true` once an `onerror` state has persisted for `RECONNECT_VISIBLE_DELAY_MS` (500 ms); the connection pill reads it directly. Cleared by the next `onopen`. Threshold gate added by `99-maintenance/01-round-1` R2 (2026-05-26); the prior `reconnectAttempt: number` field was removed by Implementation Review N1 because no consumer read it.
 
 ### Production behavior (D11)
 

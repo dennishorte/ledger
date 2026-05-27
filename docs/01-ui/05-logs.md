@@ -35,7 +35,7 @@ Phase-1 reality: `10-orchestration` already serves typed `LogEvent`s over SSE. T
    - `ended` — muted dot + "Ended" (server signalled task COMPLETE; SSE closed cleanly).
    - `missing` — red dot + "No transcript" (initial fetch 404).
    - `stub` — only seen in tests; renders as "Stub" muted.
-   On `reconnectAttempt > 0`, a muted "(reconnecting…)" suffix appears next to "Streaming".
+   On `reconnectVisible === true`, a muted "(reconnecting…)" suffix appears next to "Streaming". (`reconnectVisible` is gated by a ≥500 ms threshold per `99-maintenance/01-round-1` R2, 2026-05-26 — was `reconnectAttempt > 0` at the time of this spec's authoring.)
 5. **Filter bar** above the list: filter by event kind (multi-select chips). Filter state is URL-synced (`?kind=reasoning,tool_call`). The filter affects *display only* — events still arrive and are kept in memory; toggling kinds back on shows them without re-fetching.
 6. **Empty / missing state.** When `status === "missing"`:
    - If `useTask(taskId)` 404s (the task doesn't exist in the current scan), render an `<EmptyState>` with "Task not found." and a back link to `/tasks`.
@@ -62,7 +62,7 @@ Phase-1 reality: `10-orchestration` already serves typed `LogEvent`s over SSE. T
 `useLogStream(taskId)` from `src/lib/useLogStream.ts` (shipped by `10-orchestration`). Returns:
 
 ```ts
-{ events: LogEvent[]; status: ConnectionStatus; reconnectAttempt: number }
+{ events: LogEvent[]; status: ConnectionStatus; reconnectVisible: boolean }
 ```
 
 Internally combines an initial `useTask(taskId)` fetch (full historical `LogEvent[]`) with an SSE `EventSource` opened on `/api/transcripts/:taskId/stream`. Reconnect with `Last-Event-ID` is built into the browser; the server re-parses from line 0 and skips seen events (`10-orchestration` §Wire format). The hook deduplicates by `seq`.
