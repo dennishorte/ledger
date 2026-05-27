@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27
+**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW)
 
 **Dependencies:** `04-api-server`
 
