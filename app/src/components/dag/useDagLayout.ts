@@ -283,6 +283,14 @@ function buildSubtreeNodes(
     const height = outerMaxY - outerMinY;
     const capturedParent = parent; // stable ref for closure
 
+    // Depth-based zIndex so outer subtrees paint BEHIND inner ones (and all
+    // subtrees paint behind doc tiles, which default to zIndex 0). Without
+    // this, both subtrees would carry the same zIndex and the array-order
+    // tiebreak (which follows the bottom-up bounds sort) puts the outer rect
+    // on top, washing out and click-capturing the inner header.
+    const parentDepth = depth(parentId);
+    const subtreeZ = -100 + parentDepth;
+
     subtreeNodes.push({
       id: `subtree-${parentId}`,
       type: "subtree",
@@ -294,7 +302,12 @@ function buildSubtreeNodes(
       draggable: false,
       selectable: false,
       focusable: false,
-      style: { width, height, zIndex: -1 },
+      // pointerEvents on the wrapper: React Flow's `.react-flow__node` default
+      // is `pointer-events: all`, which would let an enclosing subtree
+      // capture clicks meant for an enclosed subtree's header button. The
+      // header `<button>` inside re-enables pointer events via
+      // `pointer-events-auto` and wins as a CSS leaf.
+      style: { width, height, zIndex: subtreeZ, pointerEvents: "none" },
     });
   }
 

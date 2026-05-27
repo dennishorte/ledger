@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** IN_PROGRESS
+**Status:** VERIFY (v1.2)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
@@ -171,7 +171,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 - ~~**Parent node renders floating above its own subtree container.** When a parent is decomposed (`01-ui` is the live example), the parent renders as one node and its children render inside a separate labelled container box. The two are not visually connected — the parent appears orphaned. Collapse the model: the container's title bar *is* the parent node (status chip, ID, name in the header; children inside; no separate floating element). Affects `DocSubtreeNode.tsx` and `useDagLayout.ts`. *(Priority: MEDIUM — confusing in the current screenshot; trivial fix.)*~~ → addressed in v1.2 (2026-05-27).
 - ~~**Redundant transitive dependency edges drawn.** Today the layout draws every declared `dependsOn` edge. When `A → B` and `B → C` are both declared, the implied `A → C` is also drawn, producing visual clutter (live example: `01-shell → 03-docs` is implied by `01-shell → 08-markdown → 03-docs`). Compute the transitive reduction over the edge set before passing to dagre. Caveat: when task-DAG edges arrive (claims, deps), reduction must respect edge type — same-type only. *(Priority: MEDIUM — affects readability; fix in `useDagLayout.ts`.)*~~ → addressed by `99-maintenance/01-round-1` R1 (2026-05-26).
 - **Dagre rank-ordering causes crossed dep edges.** Surfaced during round-1 verification (2026-05-26): with the transitive reduction now in place, two real (non-redundant) dep edges still cross uselessly — `08-markdown → 03-docs` and `02-dag → 09-workflow-progress`. Dagre places `03-docs` and `09-workflow-progress` in an order that forces the crossing; ordering hints or post-layout swap would resolve it. Independent of the parent-floating issue. *(Priority: LOW — visual quirk only; revisit in a future round.)*
-- **Outer subtree paints over inner subtree's header and intercepts clicks.** Surfaced during v1.2 operator verification (2026-05-27). `useDagLayout.ts` emits all subtree nodes with `zIndex: -1`; with nested subtrees (`root` enclosing `01-ui`, `04-api-server`), the bottom-up sort pushes the outer subtree into the nodes array *after* the inner one, so React Flow paints `root` on top of `01-ui`. Two consequences from the single paint-order bug: (a) `root`'s cream-wash background washes out `01-ui`'s header strip visually; (b) React Flow's node wrapper defaults to `pointer-events: all`, so `root`'s wrapper captures clicks anywhere inside its bounds — including `01-ui`'s header button. Fix: depth-based `zIndex` (outer = lower, doc tiles = 0) so paint order is correct regardless of array order, plus `pointerEvents: "none"` on the subtree wrapper (the inner `<button>` keeps `pointer-events-auto` and wins as a CSS leaf). *(Priority: HIGH — blocks v1.2 sign-off; fix in `useDagLayout.ts`.)*
+- ~~**Outer subtree paints over inner subtree's header and intercepts clicks.** Surfaced during v1.2 operator verification (2026-05-27). `useDagLayout.ts` emits all subtree nodes with `zIndex: -1`; with nested subtrees (`root` enclosing `01-ui`, `04-api-server`), the bottom-up sort pushes the outer subtree into the nodes array *after* the inner one, so React Flow paints `root` on top of `01-ui`. Two consequences from the single paint-order bug: (a) `root`'s cream-wash background washes out `01-ui`'s header strip visually; (b) React Flow's node wrapper defaults to `pointer-events: all`, so `root`'s wrapper captures clicks anywhere inside its bounds — including `01-ui`'s header button. Fix: depth-based `zIndex` (outer = lower, doc tiles = 0) so paint order is correct regardless of array order, plus `pointerEvents: "none"` on the subtree wrapper (the inner `<button>` keeps `pointer-events-auto` and wins as a CSS leaf). *(Priority: HIGH — blocks v1.2 sign-off; fix in `useDagLayout.ts`.)*~~ → addressed in v1.2 paint-order patch (2026-05-27).
 
 ---
 
@@ -310,6 +310,21 @@ Reviewer ran in clean context against `git diff main..HEAD`. Gates: `typecheck` 
 | F5 | Nit | `DocSubtreeNode.tsx`: `NodeProps<DocSubtreeData>` would eliminate the `data as DocSubtreeData` cast. | **Punted.** `DocDagNode.tsx` uses the same cast pattern (`data as DocNodeData`); changing one without the other introduces asymmetry. Filed as part of a future doc-DAG type-tightening pass if it surfaces. |
 
 **Code discipline / spec conformance (no findings):** no `any`, no `eslint-disable`, no `console.log`, no dead code. Bottom-up sort (`depth(b) − depth(a)`) verified correct: inner subtree bounds compute before outer. `buildSubtreeParentIds` enforces ≥2-child threshold (so `99-maintenance` stays a tile). Subtree parents filtered from `docNodes` array. `pointer-events-auto` on header `<button>` with `pointer-events-none` on outer div verified — interior is click-inert. `onNodeClick` retains its `node.type !== "doc"` guard, so subtree clicks bypass React Flow's handler and only the header's own `onClick` fires.
+
+### v1.2 paint-order patch (2026-05-27)
+
+Operator verification surfaced a paint-order/click-capture bug that the reviewer missed because it only manifests in the browser. Reviewer's "pointer-events verified — interior is click-inert" stopped at the component's own DOM; it did not consider that React Flow wraps every node in `.react-flow__node` with `pointer-events: all` by default, which sits *above* the component's outer div. Combined with both subtrees sharing `zIndex: -1` and the outer subtree being emitted after the inner one (bottom-up sort + array-tiebreak), the outer subtree's wrapper covered the inner subtree's header strip — washing it out visually and capturing its clicks. Filing as HIGH-priority Open Issue and re-entering at stage 4 was the right call; future reviewers should treat React Flow's wrapper styles as in-scope when assessing pointer-events claims.
+
+**What changed:**
+- `useDagLayout.ts` line 282–292: each subtree node now carries a depth-based `zIndex` (`-100 + depth(parentId)`) so outer subtrees (lower depth) paint behind inner ones. Doc tiles keep default `zIndex: 0`, painting above all subtrees.
+- `useDagLayout.ts` line 297: subtree wrapper now sets `pointerEvents: "none"` via the `style` prop (which React Flow applies to the `.react-flow__node` wrapper). The inner header `<button>` keeps `pointer-events-auto` and wins as a CSS leaf, so the header clicks correctly while empty interior areas fall through to React Flow's pan/zoom pane.
+
+**Gates re-run (2026-05-27):**
+- `pnpm -C app typecheck`: exit 0, zero output.
+- `pnpm -C app lint`: exit 0, zero output.
+- `pnpm -C app build`: exit 0, 2,354 modules; 1,759.81 kB JS / 44.24 kB CSS (gzip 554.14 / 8.63 kB). +3.73 kB JS vs. the v1.2 review-state build, attributable to the depth-computation reuse + the two style fields.
+
+**Deviations:** None.
 
 ### Open follow-ups
 
