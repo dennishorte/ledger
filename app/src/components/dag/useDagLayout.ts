@@ -32,6 +32,11 @@ const EMPTY_RESULT: LayoutResult = { nodes: [], edges: [] };
 // hook call would be wasteful.
 const elk = new ELK();
 
+// Sentinel id for the ELK graph wrapper. Must not collide with any doc id —
+// the PRD doc tree uses the literal `root` as its top-level id (see PRD §6.1
+// / `parseDocs.ts` mapping for `00-project.md`), so we can't reuse that here.
+const ELK_GRAPH_ROOT_ID = "__elk_root__";
+
 const ROOT_LAYOUT_OPTIONS: Record<string, string> = {
   "elk.algorithm": "layered",
   "elk.direction": "DOWN",
@@ -202,7 +207,7 @@ async function layout(
   }
 
   const elkGraph: ElkNode = {
-    id: "root",
+    id: ELK_GRAPH_ROOT_ID,
     layoutOptions: ROOT_LAYOUT_OPTIONS,
     children: rootIds.map(buildElkNode),
     edges: elkEdges,
@@ -226,7 +231,7 @@ async function layout(
     const absX = parentAbsX + (elkNode.x ?? 0);
     const absY = parentAbsY + (elkNode.y ?? 0);
 
-    if (elkNode.id === "root") {
+    if (elkNode.id === ELK_GRAPH_ROOT_ID) {
       for (const child of elkNode.children ?? []) walk(child, absX, absY);
       return;
     }
