@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1.2, 2026-05-27)
+**Status:** ISSUE_OPEN (2026-05-27 — layout-engine swap to elkjs per `00-ui.md` D10)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
