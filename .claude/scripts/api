@@ -25,7 +25,7 @@ if [[ -z "$path" ]]; then
   exit 2
 fi
 
-url="http://127.0.0.1:${port}/api/${path#/}"
+url="http://localhost:${port}/api/${path#/}"
 if (( raw )); then
   curl -sS --max-time 10 "$url"
 else
