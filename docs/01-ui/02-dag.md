@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** VERIFY (2026-05-27 — v1.3 patch applied; awaiting operator re-walk)
+**Status:** COMPLETE (v1.3, 2026-05-27 — ELK layout-engine migration + root-id-collision patch + depth-based subtree intensity)
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
