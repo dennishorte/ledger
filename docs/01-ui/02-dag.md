@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** ISSUE_OPEN (re-opened 2026-05-26 — see §Open Issues "Parent node renders floating above its own subtree container")
+**Status:** COMPLETE (v1.2, 2026-05-27)
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-26
+**Last Updated:** 2026-05-27
 
 ---
 
@@ -46,10 +46,10 @@ Vite `import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eage
 
 Children rows whose `id` does not correspond to an authored doc are surfaced as **manifest-only** nodes with `status: PLANNED` (or whatever the manifest declares). They render with a dashed border and muted fill.
 
-Edges and hierarchy (post-D11):
+Edges and hierarchy (post-D11, revised in v1.2 per D13):
 
-- **No parent → child lines are drawn.** Parent relations still feed dagre's rank assignment, but the hierarchy is conveyed *spatially* via a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). The parent's own doc tile sits separately above its subtree rect.
-- **Dependency** edges from the manifest's `dependsOn` column are the only edges drawn — dashed bezier arrows in `--color-accent` with a "depends on" label. All dep edges render, including sibling-on-sibling ones (e.g., `02-dag → 01-shell`).
+- **No parent → child lines are drawn.** Parent relations still feed dagre's rank assignment, but the hierarchy is conveyed *spatially* via a translucent rounded-rect *subtree* node that **is** each parent node (rendered only when the parent has ≥2 children). The subtree container's header strip carries the parent's status chip, id, and title — the parent is no longer a separate floating doc tile.
+- **Dependency** edges from the manifest's `dependsOn` column are the only edges drawn — dashed bezier arrows in `--color-accent`. All dep edges render, including sibling-on-sibling ones (e.g., `02-dag → 01-shell`).
 
 Why build-time parse instead of a hand-authored TS fixture: the manifests in `00-project.md` §14 and `01-ui/00-ui.md` Children are already canonical. Duplicating them into TS guarantees drift. The parser is ~80 lines and the docs schema is already regular enough to make it tractable.
 
@@ -99,9 +99,9 @@ dagre is chosen over `elkjs` because the graph is small (≤ 30 nodes for the fo
 
 ```
 src/components/dag/
-  DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, minimap, controls
+  DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, controls
   DocDagNode.tsx         // custom node renderer (title, id, status chip)
-  DocSubtreeNode.tsx     // non-interactive background rect framing a parent's children (D11)
+  DocSubtreeNode.tsx     // subtree container whose header strip IS the parent node (D13); dashed interior is click-inert
   StatusChip.tsx         // small colored pill, one per NodeStatus
   NodeInspector.tsx      // content shown in the shell inspector on click
   useDagLayout.ts        // dagre layout hook + subtree-rect emission
@@ -159,6 +159,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 | D10 | Bezier (`type: "default"`) for both parent and dep edges, replacing `smoothstep` orthogonal routing | At the current node density, orthogonal routing produces overlapping right-angle runs that read as a single line. Bezier curves separate visually even when they share rank-crossing geometry. After D11, parent edges no longer render; D10 now applies only to dep edges. Revisit if the graph grows past ~30 nodes and curves start to tangle. |
 | D11 | Parent edges are not drawn at all. Hierarchy is conveyed by a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). Parent relations are still passed to dagre for rank ordering | Parent-of is already encoded in the node id (`01-ui/02-dag` ⇒ parent is `01-ui`). Drawing it as an edge adds visual weight without adding information. The interesting edges in this view are **deps** — what blocks what. Spatial grouping is the standard idiom for "these nodes share a context" (cf. subway-map line shading) and degrades gracefully as the tree deepens. Long-term, when the panel renders the *task* DAG instead of the doc tree, there will be no parents to draw anyway — this pivot anticipates that. |
 | D12 | v1.1 visual simplification: drop the "depends on" edge label, hide React Flow's connection-handle dots on doc tiles, and remove the minimap | Each removal pays its own keep. The "depends on" label is redundant — the only edges drawn are deps (per D11), so a label restating the edge type adds noise without information. Handle dots advertise an interaction (`nodesConnectable={true}`) that this panel intentionally disables (`nodesConnectable={false}`), so they were misleading affordances; handles remain in the DOM with `opacity:0` + `isConnectable={false}` so dagre-routed edges still attach correctly. The minimap added chrome without payoff — at ≤30 nodes a `fitView` initial layout plus pan/zoom is enough, and the minimap viewport box wasn't even rendering reliably for the operator (likely a CSS-token interaction with the cream theme's mask color, but rather than debug a low-value affordance, we removed it). |
+| D13 | v1.2 collapsed-parent model: the subtree rect's header strip IS the parent node. Subtree parents are not emitted as separate `doc` tiles. The `DocSubtreeData` carries the full parent `DocNode`; the header renders its `StatusChip` + id + title with a solid background, distinguishable from the dashed interior. Bounds are computed **bottom-up** (deepest subtrees first): leaf-child tile positions first, then parent subtrees union over their already-computed inner bounds — this ensures outer rects fully enclose nested inner rects. D11 (subtree-rect-as-grouping) is **refined**, not superseded: the grouping idea stands; what changes is that the parent doc tile collapses into the rect's header. Header click → opens the inspector for the parent node; non-header area remains click-inert. | The "orphaned parent" visual was confusing: the parent tile floated above its box with no visual connection. Collapsing them makes the parent's identity, status, and interactivity immediately legible as part of the container. Bottom-up bounds ensures correctness for nested subtrees (live case: `root` subtree contains `01-ui` and `04-api-server` subtrees). |
 
 ---
 
@@ -167,9 +168,12 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 - **Cross-subtree dependency edges.** The manifest's `dependsOn` column today only references siblings under the same parent (e.g., `02-dag` depends on `01-shell`). PRD §6.1 allows cross-subtree dependencies. Parser resolves by id within the full node set, but no current manifest exercises cross-subtree, so this is untested. *(Priority: LOW.)*
 - **Graph layout for very large trees.** dagre struggles past ~500 nodes. Re-evaluate when the doc count grows past ~50. *(Priority: LOW.)*
 - **Inspector content shape conflicts when multiple panels open it.** This node ships a `NodeInspector` specific to DAG node clicks. Later panels (Tasks, Docs) will each ship their own. The shell store holds `ReactNode`, so there's no contract conflict — but a future "inspector context registry" might be cleaner. Defer. *(Priority: LOW.)*
-- **Parent node renders floating above its own subtree container.** When a parent is decomposed (`01-ui` is the live example), the parent renders as one node and its children render inside a separate labelled container box. The two are not visually connected — the parent appears orphaned. Collapse the model: the container's title bar *is* the parent node (status chip, ID, name in the header; children inside; no separate floating element). Affects `DocSubtreeNode.tsx` and `useDagLayout.ts`. *(Priority: MEDIUM — confusing in the current screenshot; trivial fix.)*
+- ~~**Parent node renders floating above its own subtree container.** When a parent is decomposed (`01-ui` is the live example), the parent renders as one node and its children render inside a separate labelled container box. The two are not visually connected — the parent appears orphaned. Collapse the model: the container's title bar *is* the parent node (status chip, ID, name in the header; children inside; no separate floating element). Affects `DocSubtreeNode.tsx` and `useDagLayout.ts`. *(Priority: MEDIUM — confusing in the current screenshot; trivial fix.)*~~ → addressed in v1.2 (2026-05-27).
 - ~~**Redundant transitive dependency edges drawn.** Today the layout draws every declared `dependsOn` edge. When `A → B` and `B → C` are both declared, the implied `A → C` is also drawn, producing visual clutter (live example: `01-shell → 03-docs` is implied by `01-shell → 08-markdown → 03-docs`). Compute the transitive reduction over the edge set before passing to dagre. Caveat: when task-DAG edges arrive (claims, deps), reduction must respect edge type — same-type only. *(Priority: MEDIUM — affects readability; fix in `useDagLayout.ts`.)*~~ → addressed by `99-maintenance/01-round-1` R1 (2026-05-26).
 - **Dagre rank-ordering causes crossed dep edges.** Surfaced during round-1 verification (2026-05-26): with the transitive reduction now in place, two real (non-redundant) dep edges still cross uselessly — `08-markdown → 03-docs` and `02-dag → 09-workflow-progress`. Dagre places `03-docs` and `09-workflow-progress` in an order that forces the crossing; ordering hints or post-layout swap would resolve it. Independent of the parent-floating issue. *(Priority: LOW — visual quirk only; revisit in a future round.)*
+- ~~**Outer subtree paints over inner subtree's header and intercepts clicks.** Surfaced during v1.2 operator verification (2026-05-27). `useDagLayout.ts` emits all subtree nodes with `zIndex: -1`; with nested subtrees (`root` enclosing `01-ui`, `04-api-server`), the bottom-up sort pushes the outer subtree into the nodes array *after* the inner one, so React Flow paints `root` on top of `01-ui`. Two consequences from the single paint-order bug: (a) `root`'s cream-wash background washes out `01-ui`'s header strip visually; (b) React Flow's node wrapper defaults to `pointer-events: all`, so `root`'s wrapper captures clicks anywhere inside its bounds — including `01-ui`'s header button. Fix: depth-based `zIndex` (outer = lower, doc tiles = 0) so paint order is correct regardless of array order, plus `pointerEvents: "none"` on the subtree wrapper (the inner `<button>` keeps `pointer-events-auto` and wins as a CSS leaf). *(Priority: HIGH — blocks v1.2 sign-off; fix in `useDagLayout.ts`.)*~~ → addressed in v1.2 paint-order patch (2026-05-27).
+- **Auto-collapse subtree when all children are terminal (COMPLETE / DEFERRED).** Filed during v1.2 sign-off (2026-05-27). Once every descendant of a subtree parent reaches a terminal lifecycle state, the children carry no actionable information — the subtree's header (status chip + id + title) is sufficient. Collapse the rect to a header-only tile so the canvas reserves space for whatever subtree is still in flight. Open questions: should the collapse be operator-toggleable (click-to-expand) or automatic on terminal-reach? Does ISSUE_OPEN unwind a previously-collapsed subtree back to expanded? Treat DEFERRED as terminal alongside COMPLETE per PRD §6.2. Likely changes: `useDagLayout.ts` (skip emitting child doc tiles + intra-subtree dep edges when all-terminal predicate is true) and `DocSubtreeNode.tsx` (header-only render path). *(Priority: LOW — visual/scaling improvement; not blocking.)*
+- **Consider alternate graph rendering substrates for the nested-container layout.** Filed during v1.2 sign-off (2026-05-27). React Flow + dagre is purpose-built for *flat* node graphs; every nested-subtree feature we've added (bounds union, depth-based zIndex, wrapper pointer-events override, paint-order fights) is working *around* React Flow's flat-graph assumption. Candidates worth evaluating before the next nested-container feature (auto-collapse above, or task-DAG claim-grouping when the runner lands): **ELK** (first-class compound graphs, larger bundle), **Cytoscape.js** (compound nodes as the primitive, less React-native), **hand-rolled SVG** (full control, more code), or **stay with React Flow** and accept the workarounds. Trigger to revisit: when the next nested feature feels harder than it should. *(Priority: LOW — research, not blocking; pair with "Graph layout for very large trees" above when revisited.)*
 
 ---
 
@@ -194,7 +198,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 ### Deviations from the spec
 
 - The Design names `useDocGraph.ts` as living in `src/components/dag/`; I placed it there as planned but it's a thin re-export of the parser. The actual swap point for the API-backed source will be this file alone.
-- React Flow's `Background`, `MiniMap`, and `Controls` are styled inline via the `style` prop and Tailwind class overrides. There's a small amount of `!important`-prefixed Tailwind in `DagCanvas.tsx` to override React Flow's stock control styling so it matches the cream theme. This is the documented escape hatch in xyflow's CSS guidance.
+- React Flow's `Background` and `Controls` are styled inline via the `style` prop and Tailwind class overrides. There's a small amount of `!important`-prefixed Tailwind in `DagCanvas.tsx` to override React Flow's stock control styling so it matches the cream theme. This is the documented escape hatch in xyflow's CSS guidance.
 
 ### Verification status
 
@@ -241,7 +245,7 @@ Implementation:
 
 - `useDagLayout.ts` no longer pushes parent relations to the visible-edges array; they still go to `dagre.setEdge` so rank assignment is unchanged.
 - All `dependsOn` edges render (the round-1 same-parent skip is removed).
-- A new "subtree" node type per parent with ≥2 children frames its kids with a dashed rounded rect; the parent's own doc tile sits separately above. Subtree nodes are non-interactive (`selectable: false`, `draggable: false`, click handler ignores them).
+- ~~A new "subtree" node type per parent with ≥2 children frames its kids with a dashed rounded rect; the parent's own doc tile sits separately above. Subtree nodes are non-interactive (`selectable: false`, `draggable: false`, click handler ignores them).~~ → superseded by v1.2 / D13: the subtree node now *is* the parent (interactive header strip with status chip + id + title); only the dashed interior is click-inert.
 - Subtree nodes are emitted **first** in the `nodes` array so React Flow renders them behind the doc tiles, and they carry `style.zIndex: -1` as belt-and-suspenders.
 
 Re-run gates on 2026-05-22 after the F4 pivot — all clean:
@@ -275,6 +279,55 @@ Gates re-run on 2026-05-23 — all clean:
 
 Status: COMPLETE (v1.1). No formal re-verification cycle — the changes are visible-on-load and the v1 acceptance items unaffected by the chrome removal still hold.
 
+### v1.2 collapsed parent (2026-05-27)
+
+**What changed:** Collapsed the floating parent doc tile into the subtree container's header strip (Open Issue → ISSUE_OPEN → IN_PROGRESS → VERIFY). Subtree parents are no longer emitted as `type: "doc"` React Flow nodes. Instead, `DocSubtreeData` carries the full parent `DocNode`; the `DocSubtreeNode` renders a solid header strip (cream-theme tokens only, no new tokens) with `StatusChip` + id + title. A `onHeaderClick` callback in the data fires `openInspector` for the parent when the user clicks the header. Bottom-up bounds computation (deepest subtrees first) ensures outer rects correctly enclose inner rects. `useDagLayout` signature gains a second param `onSubtreeHeaderClick: (node: DocNode) => void`; `DagCanvas` constructs this callback before passing it in.
+
+**Files changed:**
+- `app/src/components/dag/useDagLayout.ts` — `DocSubtreeData` shape updated; `buildSubtreeParentIds` extracted; `buildSubtreeNodes` rewritten with bottom-up bounds; `layout` skips subtree-parent nodes from `docNodes`; `useDagLayout` gains second param.
+- `app/src/components/dag/DocSubtreeNode.tsx` — header strip with `StatusChip` + id + title; `pointer-events-auto` on the `<button>`; interior remains `pointer-events-none`.
+- `app/src/components/dag/DagCanvas.tsx` — `onSubtreeHeaderClick` callback constructed and passed to `useDagLayout`; `DocNode` import added.
+
+**Bundle delta vs worktree baseline (worktree includes all panels through 04-api-server):**
+- Before: 1,751.29 kB JS / 44.17 kB CSS (gzip 550.96 / 8.62 kB)
+- After: 1,752.20 kB JS / 44.24 kB CSS (gzip 551.31 / 8.63 kB)
+- Delta: +0.91 kB JS / +0.07 kB CSS — negligible; the new `StatusChip` import in `DocSubtreeNode` is already tree-shaken since `DocDagNode` imports it too.
+
+**Note on v1.1 baseline comparison:** The PRD-documented v1.1 baseline (652.50 kB JS / 32.62 kB CSS) pre-dates the 04-api-server panels; the worktree bundle is ~1,100 kB larger because it includes all COMPLETE panels. The delta above (worktree before/after) is the correct apples-to-apples comparison for this change.
+
+**Deviations:** None. All design constraints 1–7 met as specified.
+
+**Deprecated interface:** `DocSubtreeData.label` and `DocSubtreeData.title` replaced by `DocSubtreeData.parentNode` and `DocSubtreeData.onHeaderClick`. No other consumers of `DocSubtreeData` exist outside `DocSubtreeNode.tsx`.
+
+### Implementation Review (2026-05-27)
+
+Reviewer ran in clean context against `git diff main..HEAD`. Gates: `typecheck` exit 0 (zero output); `lint` exit 0 (zero output); `build` exit 0 (1,756.08 kB JS / 44.24 kB CSS gzip 552.70 / 8.63 kB). Verdict: NEEDS_MINOR_REVISIONS — doc-only fixes.
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| F1 | Should-fix | §Round-2 verification feedback "Implementation" bullet stated "the parent's own doc tile sits separately above" — directly contradicts D13. | Bullet struck through inline with forward pointer `→ superseded by v1.2 / D13: the subtree node now *is* the parent (…)`. Historical narrative preserved per the v1.1/round-2 audit-table convention. |
+| F2 | Should-fix | §Design > Components: `DagCanvas.tsx // … minimap, controls` carried stale `minimap` reference (removed in v1.1 / D12). | Comment now reads `// React Flow wrapper, ReactFlowProvider, controls`. |
+| F3 | Should-fix | §Design > Components: `DocSubtreeNode.tsx // non-interactive background rect framing a parent's children (D11)` — stale post-D13; the component is now the parent's visual representation with an interactive header strip. | Comment now reads `// subtree container whose header strip IS the parent node (D13); dashed interior is click-inert`. |
+| F4 | Nit | §Implementation Notes > Deviations: "React Flow's `Background`, `MiniMap`, and `Controls` are styled inline" — `MiniMap` was removed in v1.1. | `MiniMap` removed from the sentence; `Background` + `Controls` retained. |
+| F5 | Nit | `DocSubtreeNode.tsx`: `NodeProps<DocSubtreeData>` would eliminate the `data as DocSubtreeData` cast. | **Punted.** `DocDagNode.tsx` uses the same cast pattern (`data as DocNodeData`); changing one without the other introduces asymmetry. Filed as part of a future doc-DAG type-tightening pass if it surfaces. |
+
+**Code discipline / spec conformance (no findings):** no `any`, no `eslint-disable`, no `console.log`, no dead code. Bottom-up sort (`depth(b) − depth(a)`) verified correct: inner subtree bounds compute before outer. `buildSubtreeParentIds` enforces ≥2-child threshold (so `99-maintenance` stays a tile). Subtree parents filtered from `docNodes` array. `pointer-events-auto` on header `<button>` with `pointer-events-none` on outer div verified — interior is click-inert. `onNodeClick` retains its `node.type !== "doc"` guard, so subtree clicks bypass React Flow's handler and only the header's own `onClick` fires.
+
+### v1.2 paint-order patch (2026-05-27)
+
+Operator verification surfaced a paint-order/click-capture bug that the reviewer missed because it only manifests in the browser. Reviewer's "pointer-events verified — interior is click-inert" stopped at the component's own DOM; it did not consider that React Flow wraps every node in `.react-flow__node` with `pointer-events: all` by default, which sits *above* the component's outer div. Combined with both subtrees sharing `zIndex: -1` and the outer subtree being emitted after the inner one (bottom-up sort + array-tiebreak), the outer subtree's wrapper covered the inner subtree's header strip — washing it out visually and capturing its clicks. Filing as HIGH-priority Open Issue and re-entering at stage 4 was the right call; future reviewers should treat React Flow's wrapper styles as in-scope when assessing pointer-events claims.
+
+**What changed:**
+- `useDagLayout.ts` line 282–292: each subtree node now carries a depth-based `zIndex` (`-100 + depth(parentId)`) so outer subtrees (lower depth) paint behind inner ones. Doc tiles keep default `zIndex: 0`, painting above all subtrees.
+- `useDagLayout.ts` line 297: subtree wrapper now sets `pointerEvents: "none"` via the `style` prop (which React Flow applies to the `.react-flow__node` wrapper). The inner header `<button>` keeps `pointer-events-auto` and wins as a CSS leaf, so the header clicks correctly while empty interior areas fall through to React Flow's pan/zoom pane.
+
+**Gates re-run (2026-05-27):**
+- `pnpm -C app typecheck`: exit 0, zero output.
+- `pnpm -C app lint`: exit 0, zero output.
+- `pnpm -C app build`: exit 0, 2,354 modules; 1,759.81 kB JS / 44.24 kB CSS (gzip 554.14 / 8.63 kB). +3.73 kB JS vs. the v1.2 review-state build, attributable to the depth-computation reuse + the two style fields.
+
+**Deviations:** None.
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
@@ -287,13 +340,13 @@ Status: COMPLETE (v1.1). No formal re-verification cycle — the changes are vis
 
 When this node moves to `VERIFY`, the verifier confirms:
 
-1. `/dag` renders the graph described in §Design > Acceptance check; all 9 current+planned nodes appear with correct status chips.
-2. Parent edges are **not** drawn as lines (F4). The `root` and `01-ui` doc tiles sit above their respective subtrees without connecting arrows.
-3. A translucent dashed rounded rect frames the `01-ui` subtree (the seven `01-shell` … `07-replay` tiles), labeled with the parent id `01-ui` and title in the top-left corner. No subtree rect is drawn for `root` (only one child).
-4. Every `dependsOn` edge is rendered as a dashed accent-colored bezier arrow — including the six `01-shell ← {02-dag, 03-docs, 04-tasks, 05-logs, 06-health, 07-replay}` sibling deps that round-1 incorrectly suppressed. (As of v1.1 the edges no longer carry a "depends on" text label — see D12.)
-5. Edges are bezier curves, not orthogonal `smoothstep` routes (F3).
-6. Subtree rects sit behind the doc tiles; clicking on a rect does **not** open the inspector (only doc-tile clicks do).
-7. Clicking each doc tile updates the inspector content; `Esc` still closes the inspector.
+1. `/dag` renders all current docs nodes with correct status chips.
+2. Parent edges are **not** drawn as lines (F4). No separate `root` or `01-ui` doc tile exists — the subtree container **is** the parent node.
+3. Each subtree container (for `root` ≥2 children, for `01-ui` ≥2 children, for `04-api-server` ≥2 children) renders a dashed rounded rect with a **solid header strip** carrying the parent's status chip, id, and title. No subtree rect is drawn for `99-maintenance` (only one child `01-round-1`). Outer subtrees fully enclose inner subtrees — the `root` subtree rect wraps the `01-ui` and `04-api-server` inner rects entirely.
+4. Clicking the **header strip** of a subtree rect opens the inspector for the parent node (same inspector content as if the parent were a doc tile). Clicking the interior (non-header) area of the subtree does nothing.
+5. Every `dependsOn` edge is rendered as a dashed accent-colored bezier arrow. (As of v1.1 edges no longer carry a "depends on" text label — see D12.)
+6. Edges are bezier curves, not orthogonal `smoothstep` routes (F3).
+7. Clicking each doc tile (leaf or single-child parent) updates the inspector content; `Esc` still closes the inspector.
 8. Removing a `.md` file under `docs/` and reloading drops the corresponding node; adding one (with a valid `**Node ID:**` and `**Parent:**`) adds it.
 9. `pnpm typecheck`, `pnpm lint`, and `pnpm build` all exit zero.
 10. No new network requests beyond Vite dev-server traffic.
