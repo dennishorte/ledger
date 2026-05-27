@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/01-store-schema`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27
+**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW)
 
 **Dependencies:** `04-api-server` (workspace, parser package, Hono server, ProjectContext)
 
