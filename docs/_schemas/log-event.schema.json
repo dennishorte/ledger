@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/log-event.schema.json",
+  "$comment": "LogEvent discriminated union. Spec: docs/05-task-runner/01-store-schema.md §Design > JSON Schemas. Version 1.",
+  "title": "LogEvent",
+  "description": "Append-only log event for a task. Six discriminant kinds. The status_change variant's 'from' field is optional — absent on the seq-0 creation event (Spec Review S4).",
+  "type": "object",
+  "required": ["id", "taskId", "at", "seq", "kind"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Bare UUIDv4."
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this event was appended."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonically increasing per task, starting at 0."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["reasoning", "tool_call", "tool_result", "artifact", "status_change", "error"]
+    }
+  },
+  "oneOf": [
+    {
+      "title": "reasoning",
+      "properties": {
+        "kind": { "const": "reasoning" },
+        "text": { "type": "string" },
+        "subkind": { "type": "string", "enum": ["thinking", "message"] }
+      },
+      "required": ["kind", "text", "subkind"]
+    },
+    {
+      "title": "tool_call",
+      "properties": {
+        "kind": { "const": "tool_call" },
+        "callId": { "type": "string", "minLength": 1 },
+        "toolName": { "type": "string", "minLength": 1 },
+        "arguments": {
+          "type": "string",
+          "description": "Serialized JSON of the tool arguments."
+        }
+      },
+      "required": ["kind", "callId", "toolName", "arguments"]
+    },
+    {
+      "title": "tool_result",
+      "properties": {
+        "kind": { "const": "tool_result" },
+        "callId": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["ok", "error"] },
+        "body": { "type": "string" },
+        "durationMs": { "type": "number", "minimum": 0 }
+      },
+      "required": ["kind", "callId", "status", "body"]
+    },
+    {
+      "title": "artifact",
+      "properties": {
+        "kind": { "const": "artifact" },
+        "artifactKind": {
+          "type": "string",
+          "enum": ["doc_created", "doc_updated", "file_written", "version_committed"]
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "docNodeId": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string" }
+      },
+      "required": ["kind", "artifactKind", "path"]
+    },
+    {
+      "title": "status_change",
+      "properties": {
+        "kind": { "const": "status_change" },
+        "from": {
+          "type": "string",
+          "enum": [
+            "PENDING", "RUNNING", "BLOCKED", "AWAITING_HUMAN_REVIEW",
+            "COMPLETE", "FAILED", "CANCELLED"
+          ],
+          "description": "Absent on seq-0 creation event (task entering PENDING from no prior state)."
+        },
+        "to": {
+          "type": "string",
+          "enum": [
+            "PENDING", "RUNNING", "BLOCKED", "AWAITING_HUMAN_REVIEW",
+            "COMPLETE", "FAILED", "CANCELLED"
+          ]
+        },
+        "reason": { "type": "string" }
+      },
+      "required": ["kind", "to"]
+    },
+    {
+      "title": "error",
+      "properties": {
+        "kind": { "const": "error" },
+        "message": { "type": "string", "minLength": 1 },
+        "stack": { "type": "string" }
+      },
+      "required": ["kind", "message"]
+    }
+  ]
+}

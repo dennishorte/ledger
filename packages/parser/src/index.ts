@@ -14,3 +14,21 @@ export type { DocNode } from "./docs/types.js";
 
 // Core types (canonical home — re-exported by app/src/lib/types.ts)
 export type { NodeId, NodeStatus } from "./coreTypes.js";
+
+// Runner types and validators (05-task-runner/01-store-schema)
+export type {
+  TaskId,
+  TaskType,
+  TaskStatus,
+  TaskSource,
+  ResourceClaim,
+  Task,
+  TaskInput,
+  LogEventId,
+  ConnectionStatus,
+  BaseLogEvent,
+  LogEvent,
+} from "./runner/types.js";
+export { validateTask } from "./runner/validateTask.js";
+export { validateLogEvent } from "./runner/validateLogEvent.js";
+export { validateTaskInput } from "./runner/validateTaskInput.js";

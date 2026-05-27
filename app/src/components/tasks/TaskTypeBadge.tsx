@@ -27,6 +27,7 @@ function badgeBg(type: TaskType): string {
     case "project_status_review":
       return "var(--color-warning-soft)";
     case "agent_task":
+    case "noop":
       return "var(--color-surface-sunken)";
   }
 }

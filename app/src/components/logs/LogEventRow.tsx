@@ -287,8 +287,12 @@ function StatusChangeRow({ event }: { event: Extract<LogEvent, { kind: "status_c
       bannerBg="var(--color-warning-soft)"
     >
       <div className="flex flex-wrap items-center gap-1">
-        <TaskStatusChip status={event.from} />
-        <span className="text-[color:var(--color-muted)]">→</span>
+        {event.from !== undefined && (
+          <>
+            <TaskStatusChip status={event.from} />
+            <span className="text-[color:var(--color-muted)]">→</span>
+          </>
+        )}
         <TaskStatusChip status={event.to} />
         {event.reason && (
           <span className="mt-0.5 w-full text-[color:var(--color-muted)]">

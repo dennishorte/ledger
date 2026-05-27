@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/task-input.schema.json",
+  "$comment": "Constrained input subset for POST /api/tasks and Store.createTask. Spec: docs/05-task-runner/01-store-schema.md §Design > JSON Schemas. Version 1.",
+  "title": "TaskInput",
+  "description": "The subset of Task accepted by POST /api/tasks. Required: type, title. All optional fields have defaults applied by validateTaskInput (ajv useDefaults: true). Note: transcriptPath is deliberately absent — only the transcript bootstrap path sets it.",
+  "type": "object",
+  "required": ["type", "title"],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "spec_draft",
+        "spec_review",
+        "implement",
+        "verify",
+        "doc_refactor",
+        "issue_triage",
+        "human_review",
+        "reverify",
+        "project_status_review",
+        "operator_session",
+        "agent_task",
+        "noop"
+      ],
+      "description": "Task type. 'noop' is the v1 synthetic executor for testing."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable task title."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["agent_generated", "operator_injected", "daemon_triggered"],
+      "default": "operator_injected",
+      "description": "Who created the task. Defaults to operator_injected."
+    },
+    "parentTaskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Parent task ID, if any."
+    },
+    "dependsOn": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "description": "TaskId[] — dependencies that must be COMPLETE before this task is eligible."
+    },
+    "resourceClaims": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "nodeId", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "node" },
+              "nodeId": { "type": "string", "minLength": 1 },
+              "mode": { "type": "string", "enum": ["read", "write"] }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "path" },
+              "path": { "type": "string", "minLength": 1 },
+              "mode": { "type": "string", "enum": ["read", "write"] }
+            }
+          }
+        ]
+      },
+      "description": "Resource claims declared upfront. Default []."
+    },
+    "agent": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "persona": { "type": "string", "minLength": 1 }
+      }
+    },
+    "reviewPayload": {
+      "type": "object",
+      "required": ["summary"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "diffRef": { "type": "string", "minLength": 1 }
+      },
+      "description": "Only relevant for human_review tasks."
+    },
+    "priority": {
+      "type": "integer",
+      "default": 0,
+      "description": "Scheduler priority. Higher values are picked first. Default 0."
+    }
+  }
+}

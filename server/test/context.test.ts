@@ -11,6 +11,7 @@ const invalidMetadataProject = resolve(fixturesDir, "invalid-metadata-project");
 describe("loadProjectContext", () => {
   it("happy path: loads valid project metadata", async () => {
     const ctx = await loadProjectContext({ projectPath: sampleProject, port: 0 });
+    ctx.store.close();
     expect(ctx.project.name).toBe("Sample Project");
     expect(ctx.project.docs).toBe("docs");
     expect(ctx.projectRoot).toBe(sampleProject);
