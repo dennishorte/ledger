@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** ISSUE_OPEN (v1.2 verification — see §Open Issues "Outer subtree paints over inner subtree's header")
+**Status:** IN_PROGRESS
 **Created:** 2026-05-22
 **Last Updated:** 2026-05-27
 
