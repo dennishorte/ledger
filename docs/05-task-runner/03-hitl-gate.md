@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/03-hitl-gate`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete; stage-4 worktree dispatch failed and recovered on main, see Implementation Notes)
+**Last Updated:** 2026-05-28 (VERIFY → COMPLETE — live-server curl verification green: inject AWAITING + approve-with-note + reject-with-followUp + 404/409/version_conflict + restart durability all confirmed)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner + RunnerHandle + tick + claim-set query), `05-task-runner/04-api-endpoints` (`tasks.ts` routes + EventBus already wired)
 
