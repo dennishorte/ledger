@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (APPROVED → IN_PROGRESS — beginning implementation)
+**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete, gates green)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
@@ -672,7 +672,33 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+Implementation landed in two commits: `05742e5` (APPROVED → IN_PROGRESS, doc-only) and `ac0982d` (4b: all source + tests).
+
+**Deviations from spec pseudocode:**
+
+- `fetchTaskList` in the spec pseudocode showed "if both rejected → throw; else return merged." The actual implementation also propagates a single-source rejection immediately rather than folding it into an empty `[]`. This matches the Requirements text ("errors other than 404 propagate") and is exercised by the `useTaskList.fetch.test.ts` "runner 500 → isError" case. The spec pseudocode was an approximation; the finer-grained propagation is the correct behavior.
+
+- `MutationErrorBody` is implemented as a `class MutationErrorBody extends Error` (not the interface shown in the spec) to satisfy ESLint's `@typescript-eslint/only-throw-error` rule, which requires thrown values to extend `Error`. The shape (`status: number; body: unknown`) is identical. The class lives in `useApproveTask.ts`; `useRejectTask.ts` re-exports the class.
+
+**Gate results (commit `ac0982d`):**
+
+- `pnpm -C app typecheck` — exit 0
+- `pnpm -C app lint --max-warnings=0` — exit 0
+- `pnpm -C app build` — exit 0 (bundle: `index-*.js` 1,942 kB gzip 608 kB; `DagPanel-*.js` 1,646 kB gzip 505 kB — no meaningful delta from pre-implementation)
+- `pnpm -C app test --run` — 102 tests pass across 11 test files (delta: +28 tests, +7 new test files)
+
+**Test count breakdown (28 new):** 5 `mergeTasks` unit (`useTaskList.test.ts`) + 5 fetch integration (`useTaskList.fetch.test.ts`) + 5 endpoint selection (`useTask.test.ts`) + 3 approve mutation (`useApproveTask.test.ts`) + 3 reject mutation (`useRejectTask.test.ts`) + 7 inspector component (`TaskInspector.test.tsx`).
+
+**Nits resolved during implementation not captured in spec:**
+
+- All `onClick`/`onChange` arrow functions use block form (`() => { fn(); }`) rather than implicit-return shorthand to satisfy ESLint's `no-confusing-void-expression` rule.
+- `res.json()` typed as `unknown` via explicit annotation (`const body: unknown = await res.json().catch(...)`) to avoid `@typescript-eslint/no-unsafe-assignment`.
+- `useMemo` dep array uses `liveEvents` (potentially `undefined`) rather than `liveEvents ?? []` to avoid creating a new `[]` reference on every render and triggering exhaustive-deps warnings.
+- Test error casts go through `unknown` first: `(result.current.error as unknown) as { status, body }` because TanStack Query types `mutation.error` as `Error | null`, and direct cast to `{ status, body }` fails tsc strict-mode overlap check.
+
+**Items confirmed headlessly (operator-stage-8 items 5–13 are out of scope for this commit):**
+
+Items 1–4 of the Acceptance check (install unchanged, four gates green, parser/server tests unaffected) confirmed.
 
 ---
 
