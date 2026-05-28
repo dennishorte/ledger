@@ -1,7 +1,12 @@
 /**
  * TanStack Query mutation hook for POST /api/tasks/:id/reject.
  *
- * On success: invalidates ["tasks"] and ["task", taskId].
+ * On success: response-based cache update for ["task", taskId] via
+ * setQueryData (same pattern as useApproveTask — atomic button-unmount via
+ * showHitlButtons gate flipping on the new task.status). List invalidated
+ * fire-and-forget; events refreshed via background ["task", taskId]
+ * invalidate.
+ *
  * On failure: throws MutationErrorBody (same shape as useApproveTask — D5).
  *
  * The `reason` field is required and non-empty. The UI enforces this via a
@@ -12,6 +17,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Task, TaskId } from "./types.js";
 import { MutationErrorBody } from "./useApproveTask.js";
+import type { TaskDetail } from "./useTask.js";
 
 export type { MutationErrorBody } from "./useApproveTask.js";
 
@@ -43,7 +49,13 @@ export function useRejectTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: postReject,
-    onSuccess: (_data, { taskId }) => {
+    onSuccess: (data, { taskId }) => {
+      // Response-based cache update — see useApproveTask for rationale (D12
+      // amended in stage-8b: response-based setQueryData is allowed).
+      queryClient.setQueryData<TaskDetail | null>(
+        ["task", taskId],
+        (old) => (old ? { ...old, task: data.task } : old),
+      );
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
     },

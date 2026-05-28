@@ -10,6 +10,7 @@ import { createElement } from "react";
 import type { ReactNode } from "react";
 import { useApproveTask } from "./useApproveTask.js";
 import type { Task } from "./types.js";
+import type { TaskDetail } from "./useTask.js";
 
 function makeWrapperWithClient() {
   const queryClient = new QueryClient({
@@ -51,7 +52,7 @@ describe("useApproveTask", () => {
     vi.restoreAllMocks();
   });
 
-  it("200 → returns {task}, invalidates ['tasks'] and ['task', id]", async () => {
+  it("200 → response-based setQueryData on ['task', id] + invalidates both keys (stage-8b Fix A)", async () => {
     const task = makeTask("runner-uuid-1");
     const approvedTask: Task = { ...task, status: "COMPLETE", dbRowVersion: 4 };
 
@@ -60,8 +61,10 @@ describe("useApproveTask", () => {
     );
 
     const { queryClient, wrapper } = makeWrapperWithClient();
-    // Pre-seed query data so we can observe invalidation.
-    queryClient.setQueryData(["task", task.id], { task, events: [] });
+    // Pre-seed query data so we can observe BOTH setQueryData (task) AND
+    // invalidation (background events refresh).
+    const seedEvents = [{ id: "ev-seed", taskId: task.id, seq: 0, at: "2026-01-01T00:00:00Z", kind: "status_change" as const, to: "PENDING" as const }];
+    queryClient.setQueryData<TaskDetail>(["task", task.id], { task, events: seedEvents });
     queryClient.setQueryData(["tasks"], [task]);
 
     const { result } = renderHook(() => useApproveTask(), { wrapper });
@@ -75,11 +78,47 @@ describe("useApproveTask", () => {
 
     await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
 
-    // Both query keys should be invalidated (stale) after success.
+    // Fix A: ["task", id] cache was updated with the post-transition task
+    // immediately on onSuccess, BEFORE the background refetch. Events are
+    // preserved from the prior cache (mutation response carries only `task`).
+    const taskData = queryClient.getQueryData<TaskDetail>(["task", task.id]);
+    expect(taskData?.task.status).toBe("COMPLETE");
+    expect(taskData?.task.dbRowVersion).toBe(4);
+    expect(taskData?.events).toEqual(seedEvents);
+
+    // Both query keys are also invalidated (background refresh).
     const taskState = queryClient.getQueryState(["task", task.id]);
     const tasksState = queryClient.getQueryState(["tasks"]);
     expect(taskState?.isInvalidated).toBe(true);
     expect(tasksState?.isInvalidated).toBe(true);
+  });
+
+  it("200 → setQueryData no-ops when ['task', id] cache is empty (Fix A defensive)", async () => {
+    const task = makeTask("runner-uuid-1-empty");
+    const approvedTask: Task = { ...task, status: "COMPLETE", dbRowVersion: 4 };
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task: approvedTask }),
+    );
+
+    const { queryClient, wrapper } = makeWrapperWithClient();
+    // No pre-seed: ["task", id] cache is empty. setQueryData's updater
+    // receives `undefined` (typed as `null`) and returns `null` per the
+    // `(old) => (old ? {...} : old)` guard. The background invalidate
+    // would fill the cache via refetch, not the response-based path.
+    const { result } = renderHook(() => useApproveTask(), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        taskId: task.id,
+        dbRowVersion: task.dbRowVersion,
+      });
+    });
+
+    await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
+
+    const taskData = queryClient.getQueryData<TaskDetail>(["task", task.id]);
+    expect(taskData).toBeUndefined();  // cache stays empty; refetch is what would fill it
   });
 
   it("409 version_conflict → mutation.error carries {status: 409, body: {error: 'version_conflict'}}", async () => {

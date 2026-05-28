@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (ISSUE_OPEN → IN_PROGRESS — applying Fix A for the Approve/Reject flicker)
+**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — stage-8b Fix A landed; gates green; awaiting operator re-verification of Approve/Reject flicker resolution)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
@@ -619,13 +619,13 @@ Items 2–4 + the unit test suite are headlessly verifiable; items 5–13 are op
 | D9 | Follow-up task injection on Reject is **deferred** (Open Issue, MEDIUM) | The `03-hitl-gate` endpoint accepts `followUp: TaskInput` but exposing the full `TaskInput` shape in a UI form is large (type/title/source/dependsOn/resourceClaims/agent/reviewPayload/priority — most operators want a simpler "describe the redo work" textarea that constructs a sensible default). v1 covers the 80% path (reject with rationale; operator manually injects follow-up later via the existing inject UX if needed). MEDIUM because the parent's HITL gate explicitly mentions it but doesn't require a UI in v1. |
 | D10 | No keyboard shortcuts (e.g., `A` to approve, `R` to reject) in v1 | Discoverability requires either a help tooltip or a status-line hint; both add scope. The buttons are clearly labeled and reachable. Future polish item if HITL becomes high-frequency. |
 | D11 | Approve `note` is a collapsed affordance (small "Add note" link), not always visible | The common path is "operator clicks Approve without explanation." Always-visible textarea would imply "fill this in" and pad inspector height. The link discoveres the field for the small fraction of cases that want one. Symmetric with `03-hitl-gate`'s schema (optional `note`). Reject's rationale stays mandatory + foregrounded because the schema requires it. |
-| D12 | TanStack mutations do NOT use `setQueryData` for optimistic updates | Local-only single-operator; the 50–200 ms invalidate-and-refetch latency is invisible at v1 scale. Optimistic updates would also need explicit rollback on 409, which is more code for less honest UX. Logged TRIVIAL. |
+| D12 | TanStack mutations use **response-based** `setQueryData` for `["task", taskId]` (writing the server's authoritative response into the inspector's cache); list invalidation stays fire-and-forget; **speculative-optimistic** updates with rollback semantics are still avoided | **Amended 2026-05-28 (stage-8b loop-back).** Original D12 said "no `setQueryData`" on the basis that 50–200 ms invalidate-and-refetch latency would be invisible. Operator stage-8 caught a ~500–1000 ms button flicker — Vite proxy + React render scheduling stretches the gap past the perception threshold, and the inspector's `showHitlButtons` gate (`live?.task.status === "AWAITING_HUMAN_REVIEW"`, per S3) re-renders the buttons in enabled state for that window because the gate reads from the stale cache. Response-based `setQueryData` writes the post-transition task from the mutation response into `["task", taskId]` so the gate flips false atomically on the same render the mutation resolves — no flicker. This is NOT speculative-optimistic (the server has already authoritatively confirmed the new state; no rollback path exists or is needed). The original rejection of speculative-optimistic updates (rollback complexity for 409 paths) still stands. |
 
 ---
 
 ## Open Issues
 
-- **Approve/Reject buttons flicker for ~500–1000 ms after a successful mutation before unmounting.** Found in operator stage-8 (2026-05-28). Sequence: click Approve → button shows "Approving…" (~30–80 ms POST round-trip) → `approve.isPending` flips false → button re-renders in enabled "Approve" state because `live?.task.status` is still stale `AWAITING_HUMAN_REVIEW` (the `useTask` refetch from the fire-and-forget `invalidateQueries` hasn't completed) → refetch lands (~500–1000 ms later through Vite proxy + React scheduling) → `live.task.status` flips to `COMPLETE` → `showHitlButtons` flips false → buttons unmount. The window where the button is enabled-but-stale is the flicker. D12's "50–200 ms invisible at v1 scale" estimate was wrong — Vite proxy + React render scheduling stretches it past the perception threshold. **Fix:** apply Fix A (response-based `setQueryData` in `onSuccess` to write `data.task` into `["task", taskId]` cache immediately, atomically flipping `live?.task.status` on the same render the mutation resolves; list invalidation stays fire-and-forget; D12 amended to distinguish response-based from speculative-optimistic). *(Priority: HIGH — degrades the core HITL UX; resolved in this child's stage-8b loop-back.)*
+- ~~**Approve/Reject buttons flicker for ~500–1000 ms after a successful mutation before unmounting.** Found in operator stage-8 (2026-05-28). Sequence: click Approve → button shows "Approving…" (~30–80 ms POST round-trip) → `approve.isPending` flips false → button re-renders in enabled "Approve" state because `live?.task.status` is still stale `AWAITING_HUMAN_REVIEW` (the `useTask` refetch from the fire-and-forget `invalidateQueries` hasn't completed) → refetch lands (~500–1000 ms later through Vite proxy + React scheduling) → `live.task.status` flips to `COMPLETE` → `showHitlButtons` flips false → buttons unmount. The window where the button is enabled-but-stale is the flicker. D12's "50–200 ms invisible at v1 scale" estimate was wrong — Vite proxy + React render scheduling stretches it past the perception threshold. **Fix:** apply Fix A (response-based `setQueryData` in `onSuccess` to write `data.task` into `["task", taskId]` cache immediately, atomically flipping `live?.task.status` on the same render the mutation resolves; list invalidation stays fire-and-forget; D12 amended to distinguish response-based from speculative-optimistic). *(Priority: HIGH — degrades the core HITL UX; resolved in this child's stage-8b loop-back.)*~~ → **RESOLVED** in stage-8b: response-based `setQueryData` applied in both mutation hooks; D12 amended; see Implementation Notes §Stage-8b loop-back.
 - **Follow-up task injection on Reject (D9).** `03-hitl-gate` accepts `followUp: TaskInput`; the UI does not expose it. Operator must POST a follow-up separately if they want one. Reasonable UX would be a "Reject and queue follow-up" toggle that reveals a minimal "title + reviewPayload.summary" pair and inherits the rejected task's resourceClaims by default (matching the server's default). *(Priority: MEDIUM — parent §HITL gate mentions but doesn't require.)*
 - ~~**No optimistic mutation updates.** Invalidate-and-refetch only. Local-only scale makes this invisible. *(Priority: TRIVIAL — D12.)*~~ → Replaced by the HIGH flicker issue above. D12 amended in the stage-8b patch: response-based `setQueryData` is in use for the inspector's `["task", id]` cache; speculative-optimistic is still avoided.
 - **No EventSource test coverage for `useLogStream`'s runner-stream variant.** Operator stage-8 covers it. If a future regression slips, it would surface as a broken `/logs/:id` page on a runner-emitted task. *(Priority: LOW — D6.)*
@@ -738,6 +738,31 @@ Reviewer's **confidence notes** (operator's stage-8 verification will exercise t
 - All Acceptance check items 5–13 are operator-only and correctly scoped (item 11 — `version_conflict` via stale curl — is mechanically reachable but the unit-test coverage via mocked-fetch is honest about what it proves).
 
 Nothing punted beyond N3 (test-fragility polish). The two applied audit fixes land in this commit alongside the audit table.
+
+### Stage-8b loop-back (2026-05-28): Approve/Reject flicker fix
+
+Operator stage-8 walkthrough caught a UX bug: clicking Approve made the buttons flicker for ~500–1000 ms before unmounting. Sequence captured in the matching HIGH-priority Open Issue. Root cause: fire-and-forget `invalidateQueries` left `live?.task.status` stale during the gap between mutation-resolved and refetch-completed; `approve.isPending` flipped false in that window so the buttons re-rendered in enabled "Approve" state. The original D12 estimate of "50–200 ms invisible at v1 scale" was wrong — Vite proxy + React render scheduling stretches the gap past the perception threshold.
+
+**Fix applied** (`useApproveTask.ts` + `useRejectTask.ts`): `onSuccess` now writes the mutation response's `data.task` into `["task", taskId]` via `queryClient.setQueryData` BEFORE firing the background invalidations. The inspector's `showHitlButtons` gate (`live?.task.status === "AWAITING_HUMAN_REVIEW"`, per S3) flips false atomically on the same render the mutation resolves — buttons unmount cleanly. The events list (not in the mutation response) is preserved from the prior cache via the updater's `(old) => (old ? { ...old, task: data.task } : old)` guard, and the background `invalidateQueries({queryKey: ["task", taskId]})` refreshes events independently. List query `["tasks"]` invalidation stays fire-and-forget.
+
+**Scope justification** (D12 amendment): the response-based pattern is NOT speculative-optimistic. The server has already authoritatively confirmed the new state at the time `onSuccess` fires; no rollback path exists or is needed. The original D12 rejection of speculative-optimistic updates (rollback complexity for 409 paths) still stands. The D12 row in §Decisions has been rewritten to make this distinction explicit.
+
+**Tests updated:**
+- `useApproveTask.test.ts`: "200 → ..." case now asserts both (a) `queryClient.getQueryData(["task", id])` returns the new task post-success, AND (b) events from the pre-seed are preserved in the cache. Added a defensive "setQueryData no-ops when cache empty" case (the `(old) => (old ? ... : old)` guard branch).
+- `useRejectTask.test.ts`: matching update to the "200 → ..." case (asserts FAILED status + preserved events).
+
+**Gate results post-fix:**
+
+| Gate | Exit | Test count |
+|---|---|---|
+| `pnpm -C app typecheck` | 0 | — |
+| `pnpm -C app lint --max-warnings=0` | 0 | — |
+| `pnpm -C app build` | 0 | bundle: `index-*.js` 1,953 kB / gzip 611 kB (+8 kB raw / +3 kB gzip vs pre-fix baseline — the setQueryData additions + doc comments) |
+| `pnpm -C app test --run` | 0 | 105 (was 104; +1 defensive empty-cache case) |
+| `pnpm -C server test --run` | 0 | 165 (unchanged) |
+| `pnpm -C packages/parser test --run` | 0 | 108 (unchanged) |
+
+**Acceptance check delta:** items 7 + 9 (Approve / Reject flows) re-require operator visual confirmation that the flicker is gone. Items 1–4 + everything else unchanged. The HIGH Open Issue stays in the Open Issues list as `~~struck-through~~` with a pointer to this subsection.
 
 ---
 

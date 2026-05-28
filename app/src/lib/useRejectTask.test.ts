@@ -11,6 +11,7 @@ import { createElement } from "react";
 import type { ReactNode } from "react";
 import { useRejectTask } from "./useRejectTask.js";
 import type { Task } from "./types.js";
+import type { TaskDetail } from "./useTask.js";
 
 function makeWrapperWithClient() {
   const queryClient = new QueryClient({
@@ -52,7 +53,7 @@ describe("useRejectTask", () => {
     vi.restoreAllMocks();
   });
 
-  it("200 → returns {task}, invalidates ['tasks'] and ['task', id]", async () => {
+  it("200 → response-based setQueryData on ['task', id] + invalidates both keys (stage-8b Fix A)", async () => {
     const task = makeTask("runner-uuid-r1");
     const rejectedTask: Task = { ...task, status: "FAILED", dbRowVersion: 6 };
 
@@ -61,7 +62,8 @@ describe("useRejectTask", () => {
     );
 
     const { queryClient, wrapper } = makeWrapperWithClient();
-    queryClient.setQueryData(["task", task.id], { task, events: [] });
+    const seedEvents = [{ id: "ev-seed", taskId: task.id, seq: 0, at: "2026-01-01T00:00:00Z", kind: "status_change" as const, to: "PENDING" as const }];
+    queryClient.setQueryData<TaskDetail>(["task", task.id], { task, events: seedEvents });
     queryClient.setQueryData(["tasks"], [task]);
 
     const { result } = renderHook(() => useRejectTask(), { wrapper });
@@ -75,6 +77,14 @@ describe("useRejectTask", () => {
     });
 
     await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
+
+    // Fix A: ["task", id] cache updated with FAILED state immediately;
+    // events preserved (the kind=error rejection_detail event arrives via
+    // the background refetch, not the mutation response).
+    const taskData = queryClient.getQueryData<TaskDetail>(["task", task.id]);
+    expect(taskData?.task.status).toBe("FAILED");
+    expect(taskData?.task.dbRowVersion).toBe(6);
+    expect(taskData?.events).toEqual(seedEvents);
 
     const taskState = queryClient.getQueryState(["task", task.id]);
     const tasksState = queryClient.getQueryState(["tasks"]);
