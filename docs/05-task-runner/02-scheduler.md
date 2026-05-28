@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/02-scheduler`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-27)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-27 (VERIFY → COMPLETE — operator verification green)
 
 **Dependencies:** `05-task-runner/01-store-schema` (Store API, runner types, `.ledger/runner.db`)
 
@@ -610,7 +610,114 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. This sub-leaf introduces no new npm dependencies. `better-sqlite3` was already added by `01-store-schema`.
+
+### Deviations from spec
+
+**Priority-ordering test design.** The spec's test items 7 and 8 say to inject tasks via `runner.createTask` and assert priority/FIFO ordering. Because `runner.createTask` fires a tick synchronously after each insert, the first-inserted task dispatches immediately before subsequent tasks are even in the queue. Tests 7 and 8 therefore use `store.createTask` (direct, no auto-tick) to stage all tasks, then call `runner.tick()` once — this correctly tests the `ORDER BY priority DESC, created_at ASC` guarantee. The spec pseudocode and D1 (synchronous trampoline) are correct; the test just needs to pre-queue the tasks before the first tick.
+
+**`return scheduleTick()` in tickOnce replaced with `pending = true; return`.** The spec's pseudocode shows `return scheduleTick()` at step 7 (after dispatching a task). Calling `scheduleTick()` from inside `tickOnce()` is safe (it sets `pending = true` and returns immediately because `ticking` is already `true`), but the cleaner pattern is to just set `pending = true` directly and return, which is exactly what that call reduces to. No semantic difference — kept the direct form for clarity.
+
+**`eslint-disable` comment on `do/while (pending)`.** TypeScript's control-flow analysis sees `pending = false` immediately before `while (pending)` and concludes the condition is always `false`. The `tickOnce()` call inside the loop mutates `pending` (a closed-over variable) at runtime, but the type checker doesn't track mutation through function calls. Added a single `// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition` comment. This is the minimal, honest fix — the condition is genuinely necessary.
+
+**`Task["type"]` in `registerExecutor` signature.** The spec shows `type: Task["type"]` in the Runner interface. `Task["type"]` equals `TaskType` — the forms are equivalent. No deviation.
+
+### Bundle delta
+
+All new code is server-side (`server/src/runner/`). The app bundle is unchanged:
+
+| Chunk | Baseline (gzip) | Post-impl (gzip) | Delta |
+|---|---|---|---|
+| `index-*.js` | 545.60 kB | 545.60 kB | 0 |
+| `DagPanel-*.js` | 505.23 kB | 505.23 kB | 0 |
+| `index-*.css` | 6.26 kB | 6.26 kB | 0 |
+| `DagPanel-*.css` | 2.66 kB | 2.66 kB | 0 |
+
+### Files changed inventory
+
+**New files:**
+- `server/src/runner/conflict.ts` — pure set-intersection conflict primitive
+- `server/src/runner/executors.ts` — `Executor` + `RunnerHandle` interfaces, `noopExecutor`, `createDefaultRegistry()`
+- `server/src/runner/scheduler.ts` — `Runner` interface, `createRunner()` factory, `recoverOrphans()`, `reasons` object, tick trampoline
+- `server/test/runner/conflict.test.ts` — 10 tests (8 spec items + 2 empty-array edge cases)
+- `server/test/runner/executors.test.ts` — 5 tests (4 spec items + 1 async-executor type test)
+- `server/test/runner/scheduler.test.ts` — 18 tests (15 spec items + test 14b async-B2 added per Implementation Review N1 + 2 registerExecutor warn tests)
+- `server/test/runner/orphan-recovery.test.ts` — 3 tests
+
+**Modified files:**
+- `server/src/runner/index.ts` — added `createRunnerForProject`, re-exports for all new modules; preserved `createStoreForProject` as backwards-compat shim
+- `server/src/context.ts` — `ProjectContext.runner: Runner` field added; `loadProjectContext` now uses `createRunnerForProject` and assigns both `runner` and `store = runner.store`
+
+**Unchanged files:**
+- `server/src/runner/store.ts` — no changes
+- `server/src/runner/ids.ts` — no changes
+- `server/src/runner/migrations/` — no changes
+- `packages/parser/` — no changes (all new types were already in `@ledger/parser/src/runner/types.ts` from `01-store-schema`)
+
+### Gates verified headlessly
+
+| Gate | Command | Exit code |
+|---|---|---|
+| server typecheck | `pnpm -C server typecheck` | 0 |
+| server lint | `pnpm -C server lint` | 0 |
+| server build | `pnpm -C server build` | 0 |
+| server test | `pnpm -C server test` | 0 (110 tests pass — 73 baseline + 37 new = 110) |
+| app typecheck | `pnpm -C app typecheck` | 0 |
+| app lint | `pnpm -C app lint` | 0 |
+| app build | `pnpm -C app build` | 0 |
+| parser typecheck | `pnpm -C packages/parser typecheck` | 0 |
+| parser lint | `pnpm -C packages/parser lint` | 0 |
+| parser test | `pnpm -C packages/parser test` | 0 (91 tests pass) |
+
+Test count delta: +37 server tests. Baseline (`main` at `ffcf0d7`) = 73 server tests; post-implementation = 110 (including the async-B2 test 14b added per Implementation Review N1). Implementation Review re-counted main as 73 — the initial commit-4c report's "+35 from 74 baseline" was off by one (Implementation Review item N3).
+
+### Acceptance-check items NOT verifiable headlessly
+
+**Item 5 — Live server boot:** `pnpm -C server dev /Users/dennis/code/ledger`. Verifier should confirm the boot log includes `runner: schema is current at user_version=1` (or `runner: applied migration(s) 1` on first boot) and, if any RUNNING rows exist in `.ledger/runner.db` from prior sessions, `runner: recovered N orphaned task(s) (RUNNING → FAILED)`.
+
+**Item 7 — REPL injection:** In a Node REPL against the running server, import `createRunnerForProject`, create a `noop` task, and confirm `runner.store.loadTask(task.id)` returns `status: 'COMPLETE'` and `getEvents(task.id)` returns 3 events (seq 0/1/2). This proves the synchronous trampoline works end-to-end outside the test harness.
+
+### Implementation Review (2026-05-27)
+
+Independent implementation review was run against this worktree (`worktree-agent-a5283542bb7ef590e`, branched from main `ffcf0d7`, rebased — no-op since main had not advanced). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, no should-fix, three nits. All nine high-leverage Spec Review closures confirmed in code with file:line citations. All 10 gates re-verified at exit 0.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 symmetric blocked_no_executor guard | Confirmed at `scheduler.ts:115–124`. Symmetric with step 6's guard at `scheduler.ts:143`. | No action — confirmed. |
+| HL — B2 sync + async error paths both call scheduleTick | Confirmed: sync branch at `scheduler.ts:196–199`, async `.catch()` at `scheduler.ts:182–185`. | No action — confirmed. |
+| HL — S3 trampoline invocation-count test | Confirmed at `scheduler.test.ts:98–120`. `dispatchCount === 2` proves the trampoline iterates `tickOnce` twice (since each `tickOnce` dispatches at most one task before `pending = true; return`). | No action — confirmed. |
+| HL — S6/D15 singleton RunnerHandle | Confirmed at `scheduler.ts:61–75`. One handle per Runner factory closure; comment cites S6/D15. | No action — confirmed. |
+| HL — D2 working set includes AWAITING_HUMAN_REVIEW | Confirmed at `scheduler.ts:97–99`. | No action — confirmed. |
+| HL — D9 lastReason gating | Confirmed: `lastReason` at `scheduler.ts:205–215`; gating at lines 115–117 and 143. | No action — confirmed. |
+| HL — D5 recoverOrphans standalone | Confirmed at `scheduler.ts:247–257`. Called from `index.ts:41`. | No action — confirmed. |
+| HL — D11 createStoreForProject preserved | Confirmed at `index.ts:52–54`. | No action — confirmed. |
+| HL — D12 ProjectContext.runner + .store both present | Confirmed at `context.ts:9–17` (interface) and `context.ts:58–68` (loadProjectContext). | No action — confirmed. |
+| N1 — Test 13 B2 verification indirect | Reviewer flagged that test 13's downstream-task assertion (B created AFTER A fails) doesn't isolate the sync-catch's `scheduleTick()`. **Analysis on apply:** the sync-catch `scheduleTick()` is structurally redundant — the surrounding `pending = true; return;` in `tickOnce` (`scheduler.ts:138–139`) fires the trampoline regardless. The B2 fix is genuinely load-bearing only on the **async** path, where `.catch()` runs in a microtask after the outer `scheduleTick` has exited. Added **test 14b** (`scheduler.test.ts:484–530`) that exercises the async B2 path concretely: A holds a write claim, async-throws; sibling C (also claims the same target) initially BLOCKED; after A's async failure, C must dispatch — which only happens if the `.catch()` calls `scheduleTick()`. Without the B2 async fix, C would stay BLOCKED. Test passes. The sync sibling case stays as test 13 (also valuable for end-to-end verification, just not isolating the B2 sync-catch). |
+| N2 — Status field already advanced | False alarm — Status header correctly shows `VERIFY`. | No action. |
+| N3 — Implementation Notes test count off-by-one | Reviewer found main has 73 server tests, not 74 as Implementation Notes claimed. Branch was 109 (now 110 with the test 14b addition). The new delta is +37, not +35. | Fixed: §Gates verified headlessly + Bundle delta + Files changed inventory updated; new total = 110 (37 added). |
+
+Bundle delta vs `ffcf0d7` baseline (reviewer-measured): app chunks byte-equivalent in content (Vite hash-suffix noise of ~1.5 kB gzip is non-deterministic rebuild variance; `git diff main..HEAD -- app/` confirmed empty). DagPanel chunk unchanged. CSS unchanged.
+
+Test counts after the N1 audit fix (test 14b added):
+
+| Workspace | Before (main `ffcf0d7`) | After (this worktree) | Delta |
+|---|---|---|---|
+| `server/` | 73 | 110 | +37 |
+| `packages/parser/` | 91 | 91 | 0 |
+| `app/` | (no test suite) | (no test suite) | 0 |
+
+Reviewer's **confidence notes** (operator's stage-8 verification will exercise these):
+- Live server boot — confirm the `runner: schema is current at user_version=1` log line on first boot since the migration, and `runner: recovered N orphaned task(s)` only if RUNNING rows exist in the DB.
+- REPL injection — `createRunnerForProject({projectRoot}).createTask({type: "noop", title: "smoke"})` should immediately have status `COMPLETE` and 3 events on `getEvents(task.id)`.
+- Optional: stage a write-claim conflict scenario in a REPL (sync), verify the second task BLOCKS with the right reason and completes after the first does.
+
+**Implementer's judgment calls** (both accepted by reviewer):
+1. `store.createTask` (direct, no auto-tick) for priority/FIFO tests: ACCEPT. Correctly isolates the `ORDER BY priority DESC, created_at ASC` guarantee.
+2. ESLint disable for `do/while (pending)`: ACCEPT. Scoped to one line; necessary because TS control-flow can't track the closure mutation; the `for (;;)` alternative is semantically identical and less idiomatic.
+
+Nothing punted. The one substantive finding (N1) was applied with a transparent note about why the suggested fix-shape was adjusted (sync B2 is structurally redundant; async B2 is load-bearing — added test for the async case).
 
 ---
 
