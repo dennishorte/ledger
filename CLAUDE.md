@@ -62,8 +62,7 @@ Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: 
 
 Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`) cover recurring operations so they don't prompt per-invocation. **Prefer these over the raw forms** — the raw forms (`curl`, `sed`, `node -e`, `lsof | xargs kill`, etc.) will trigger a permission prompt every time.
 
-- `.claude/scripts/api <path>` — GET against the local API, jq-pretty (replaces `curl http://127.0.0.1:4180/api/...`)
-- `.claude/scripts/api-curl [curl opts] /api/<path> [opts]` — thin curl passthrough restricted to localhost. Pass `--via-ui` to route via the Vite dev server on 4179 (needed for Vite-middleware-only endpoints like `/api/transcripts/*`); default routes to the Hono API on 4180. Absolute URLs rejected. Use for POST, SSE (`-N`), custom headers, status-code-only mode, etc. — anything `api` doesn't cover.
+- `.claude/scripts/api-curl [opts] /api/<path> [opts]` — thin curl passthrough restricted to localhost (host hardcoded, absolute URLs rejected). Default routes to the Hono API on 4180; pass `--via-ui` for the Vite dev server on 4179 (needed for Vite-middleware-only endpoints like `/api/transcripts/*`). Pass `-j` / `--json` for `-sS` + jq-pretty (the common GET-and-pretty case). Every other curl flag passes through (`-X`, `-H`, `-d`, `-N`, `--max-time`, `-o`, `-w`, etc.).
 - `.claude/scripts/lines <file> <start> [end]` — numbered line range (replaces `sed -n 'X,Yp'`)
 - `.claude/scripts/wait-ready [timeout]` — block until UI :4179 + API :4180 both 200
 - `.claude/scripts/kill-port <port>` — kill LISTEN-only processes (won't kill a browser client on the port)

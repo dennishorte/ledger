@@ -8,8 +8,7 @@ Allowlist entries live in `.claude/settings.json`.
 
 | Script | Replaces | One-line |
 |---|---|---|
-| `api <path>` | `curl http://localhost:4180/api/...` (+ `jq`/`python -m json.tool`) | GET a local API endpoint, pretty-print JSON |
-| `api-curl [curl opts] /api/<path> [opts]` | raw `curl http://localhost:4180/api/...` for POST/SSE/custom headers/status-only | thin curl passthrough restricted to localhost. Pass `--via-ui` to swap port from API (4180) → Vite (4179) for endpoints served by Vite middleware (e.g. `/api/transcripts/*`). Absolute URLs rejected. |
+| `api-curl [opts] /api/<path> [opts]` | raw `curl http://localhost:4180/api/...` for any local API call | thin curl passthrough restricted to localhost. `-j`/`--json` adds `-sS` + pipes through jq (the common GET-and-pretty case). `--via-ui` swaps port from API (4180) → Vite (4179) for endpoints served by Vite middleware (e.g. `/api/transcripts/*`). Absolute URLs rejected. |
 | `lines <file> <start> [end]` | `sed -n 'X,Yp' file` | print a numbered line range |
 | `wait-ready [timeout]` | nested `until curl … ; do sleep 0.5; done` | block until UI :4179 AND API :4180 are 200 |
 | `kill-port <port>` | `lsof -iTCP:PORT -sTCP:LISTEN -t \| xargs kill` | kill listeners only (won't kill a browser client) |

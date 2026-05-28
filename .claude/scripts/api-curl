@@ -9,53 +9,61 @@
 # cannot be coerced into calling arbitrary hosts.
 #
 # By default the port is the Hono API server (LEDGER_PORT, default 4180).
-# Pass --via-ui to route through the Vite dev server on 4179 instead — needed
-# for endpoints served by Vite middleware that the API proxy never sees
-# (e.g. /api/transcripts/* via app/server/middleware.ts).
+# Pass --via-ui to route through the Vite dev server (LEDGER_UI_PORT,
+# default 4179) instead — needed for endpoints served by Vite middleware
+# that the API proxy never sees (e.g. /api/transcripts/* via
+# app/server/middleware.ts).
+#
+# Pass -j / --json to suppress the curl progress meter and pretty-print
+# the response body through jq (falling back to python3 -m json.tool, or
+# raw if neither is available + the body isn't valid JSON).
 #
 # All curl features pass through: -X, -H, -d, -N, --max-time, -o, -w, etc.
 #
 # Usage:
-#   api-curl /api/<path>
-#   api-curl [curl options] /api/<path> [more options]
-#   api-curl --via-ui /api/transcripts/<id>
+#   api-curl [opts] /api/<path> [opts]
 #
 # Examples:
-#   api-curl /api/tasks
+#   api-curl -j /api/tasks                                                 # GET + jq-pretty
+#   api-curl -j /api/tasks/<id>                                            # GET + jq-pretty
 #   api-curl -X POST /api/tasks -H 'Content-Type: application/json' -d '{"type":"noop","title":"x"}'
-#   api-curl -N --max-time 3 /api/tasks/<id>/stream
+#   api-curl -j -X POST /api/tasks -H 'Content-Type: application/json' -d '{"type":"noop","title":"x"}'
+#   api-curl -N --max-time 3 /api/tasks/<id>/stream                        # SSE — don't combine with -j
 #   api-curl -H 'Last-Event-ID: 0' -N --max-time 3 /api/tasks/<id>/stream
 #   api-curl -o /dev/null -w '%{http_code}\n' /api/tasks/missing
-#   api-curl --via-ui /api/transcripts/<id>
+#   api-curl --via-ui -j /api/transcripts/<id>                             # Vite middleware
 set -euo pipefail
 
 if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
-  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
 api_port="${LEDGER_PORT:-4180}"
 ui_port="${LEDGER_UI_PORT:-4179}"
 port="$api_port"
+json_mode=0
 
-rewritten=()
-path_count=0
+# Pass 1 — peel off wrapper-owned flags + reject absolute URLs.
+filtered=()
 for arg in "$@"; do
-  if [[ "$arg" == "--via-ui" ]]; then
-    port="$ui_port"
-    continue
-  fi
-  if [[ "$arg" == *"://"* ]]; then
-    echo "api-curl: absolute URLs are not allowed; use /api/<path>" >&2
-    exit 2
-  fi
-  rewritten+=("$arg")
+  case "$arg" in
+    --via-ui) port="$ui_port" ;;
+    -j|--json) json_mode=1 ;;
+    *://*)
+      echo "api-curl: absolute URLs are not allowed; use /api/<path>" >&2
+      exit 2
+      ;;
+    *) filtered+=("$arg") ;;
+  esac
 done
 
 host="http://localhost:${port}"
 
+# Pass 2 — rewrite any /api/<path> args to absolute URLs.
 final=()
-for arg in "${rewritten[@]}"; do
+path_count=0
+for arg in "${filtered[@]}"; do
   if [[ "$arg" =~ ^/api(/|$) ]]; then
     final+=("${host}${arg}")
     path_count=$((path_count + 1))
@@ -69,4 +77,15 @@ if [[ $path_count -eq 0 ]]; then
   exit 2
 fi
 
-exec curl "${final[@]}"
+if (( json_mode )); then
+  body=$(curl -sS "${final[@]}")
+  if command -v jq >/dev/null 2>&1 && printf '%s' "$body" | jq . >/dev/null 2>&1; then
+    printf '%s' "$body" | jq .
+  elif command -v python3 >/dev/null 2>&1 && printf '%s' "$body" | python3 -m json.tool >/dev/null 2>&1; then
+    printf '%s' "$body" | python3 -m json.tool
+  else
+    printf '%s\n' "$body"
+  fi
+else
+  exec curl "${final[@]}"
+fi
