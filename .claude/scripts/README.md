@@ -9,6 +9,7 @@ Allowlist entries live in `.claude/settings.json`.
 | Script | Replaces | One-line |
 |---|---|---|
 | `api <path>` | `curl http://localhost:4180/api/...` (+ `jq`/`python -m json.tool`) | GET a local API endpoint, pretty-print JSON |
+| `api-curl [curl opts] /api/<path> [opts]` | raw `curl http://127.0.0.1:4180/api/...` for POST/SSE/custom headers/status-only | thin curl passthrough restricted to the local API (host hardcoded; absolute URLs rejected) |
 | `lines <file> <start> [end]` | `sed -n 'X,Yp' file` | print a numbered line range |
 | `wait-ready [timeout]` | nested `until curl … ; do sleep 0.5; done` | block until UI :4179 AND API :4180 are 200 |
 | `kill-port <port>` | `lsof -iTCP:PORT -sTCP:LISTEN -t \| xargs kill` | kill listeners only (won't kill a browser client) |
