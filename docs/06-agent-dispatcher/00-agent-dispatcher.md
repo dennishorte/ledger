@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28
+**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW — dispatching independent reviewer in clean context)
 
 **Dependencies:** `05-task-runner`
 
