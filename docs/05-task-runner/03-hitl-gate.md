@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/03-hitl-gate`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW — dispatching reviewer)
+**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner + RunnerHandle + tick + claim-set query), `05-task-runner/04-api-endpoints` (`tasks.ts` routes + EventBus already wired)
 
@@ -51,7 +51,7 @@ In scope for v1:
 4. **JSON Schemas** for the two request bodies, validated via new ajv-backed functions in `@ledger/parser`:
    - `docs/_schemas/hitl-approve.schema.json` — `{ dbRowVersion: integer, note?: string }`.
    - `docs/_schemas/hitl-reject.schema.json` — `{ dbRowVersion: integer, reason: non-empty string, followUp?: <TaskInput shape> }`.
-   - `packages/parser/src/runner/validateHitlApprove.ts` and `validateHitlReject.ts` — ajv2020 validators matching the convention of `validateTaskInput.ts`. Re-export via `@ledger/parser`.
+   - `packages/parser/src/runner/validateHitlApprove.ts` and `validateHitlReject.ts` — ajv2020 validators matching the convention of `validateTaskInput.ts`. Re-export via `@ledger/parser`. **Success type pinned: `{ ok: true; input: <ApproveBody | RejectBody> }`** (NOT `value` — matches the field name `validateTaskInput` uses, per Spec Review S1). Both construct ajv with `useDefaults: true` so `$ref` defaults in `hitl-reject.schema.json` propagate from `task-input.schema.json`.
 5. **`server/src/server.ts`** — one new line: `app.route("/api/tasks", hitlRoute);` mounted after `tasksRoute`. Hono composes both routers' paths under `/api/tasks` cleanly per the verification baked into `04-api-endpoints` Spec Review (`hono-base.js:111-124`).
 6. **Status-reason builders** in `scheduler.ts`'s `reasons` object — extended:
    - `reasons.APPROVED` = `"approved"` (constant).
@@ -76,6 +76,7 @@ In scope for v1:
      - POST /:id/reject with `followUp` → 200 with both `task` and `followUpTask` in the response; followUp task exists in `store.listTasks()`; followUp's `resourceClaims` defaults to the rejected task's claims.
      - POST /:id/reject with `followUp.resourceClaims: []` explicit → followUp's claims are empty (operator-overridden), not inherited.
      - POST /:id/reject without `followUp` → 200 with `task` only; no follow-up created.
+     - **OCC-loser orphaned-detail-event (Spec Review B1):** Stage an AWAITING_HUMAN_REVIEW task. Capture `dbRowVersion`. Issue TWO concurrent reject requests with the same `dbRowVersion` (e.g., simulate two tabs via two `app.request()` calls). The first wins (200, FAILED transition); the second loses (409 `version_conflict`). The event log contains TWO `error`-kind "rejected_with_details" events (one from each request — the detail event was appended BEFORE the OCC check in `updateTaskStatus` per D5) but only ONE `status_change` to FAILED. Test asserts this behavior is correct per D5 — the loser's rationale is preserved in the log even though their state transition didn't land.
      - End-to-end: inject `human_review` task → confirm AWAITING_HUMAN_REVIEW → POST approve → confirm COMPLETE → SSE stream from `04-api-endpoints` (use `app.request()` against `/api/tasks/:id/stream` with `Last-Event-ID: -1`) emits all expected events including the approval transition.
    - `packages/parser/test/runner/validateHitlApprove.test.ts`, `validateHitlReject.test.ts` — golden-test pairs for the two new validators: accepts valid bodies, rejects bodies missing required fields, rejects bodies with wrong types, rejects empty `reason` strings, applies optional-field defaults correctly.
 8. **`02-scheduler.md` Open Issue closure** — the parent doc's §Open Issues line about `awaitHumanReview` is closed by this child (strike-through with pointer at stage 10 merge). The relevant Open Issue text is in `02-scheduler.md`'s Requirements §Out of scope bullet "The `human_review` executor..." — that's a scope statement, not an Open Issue, so no strike-through needed there. The actual cross-leaf coupling closure is implicit in the manifest row flipping to COMPLETE.
@@ -209,8 +210,17 @@ export const reasons = {
   BLOCKED_NO_EXECUTOR: "blocked_no_executor",
   ORPHANED_ON_RESTART: "orphaned_on_restart",
   // NEW — HITL gate.
+  // Spec Review S2: the existing `as const` on this object is preserved across
+  // the additions. `as const` freezes the function references in place but
+  // does not narrow their return types — that's fine; the consumers (the
+  // `reason` field of status_change events) are typed as `string` regardless.
   APPROVED: "approved",
-  approvedWithNote: (note: string) => `approved: ${note}`,
+  // Spec Review N1: both note and rationale truncate at 80 chars on the
+  // `reason` field (which is for log-scanning, not full content). The full
+  // text lives in the event payload — for `note`, the request body itself
+  // (no detail event); for `rejected`, the kind=error detail event written
+  // first per D5.
+  approvedWithNote: (note: string) => `approved: ${note.slice(0, 80)}`,
   rejected: (rationale: string) => `rejected: ${rationale.slice(0, 80)}`,
 } as const;
 ```
@@ -269,7 +279,7 @@ export const hitlRoute = new Hono<ServerEnv>()
     } catch (err) {
       if (err instanceof OptimisticLockError) {
         return c.json(
-          { error: "version_conflict", expected: dbRowVersion, actual: err.actual },
+          { error: "version_conflict", expected: err.expected, actual: err.actual },
           409,
         );
       }
@@ -354,7 +364,7 @@ export const hitlRoute = new Hono<ServerEnv>()
     } catch (err) {
       if (err instanceof OptimisticLockError) {
         return c.json(
-          { error: "version_conflict", expected: dbRowVersion, actual: err.actual },
+          { error: "version_conflict", expected: err.expected, actual: err.actual },
           409,
         );
       }
@@ -436,7 +446,7 @@ A reviewer running the worktree must observe:
         -H 'Content-Type: application/json' \
         -d '{"type":"human_review","title":"approve me","reviewPayload":{"summary":"test diff"}}'
    ```
-   Returns 201 with `task.status === "AWAITING_HUMAN_REVIEW"` (the executor suspends synchronously inside the tick that fires from `runner.createTask`).
+   Returns 201 with `task.status === "AWAITING_HUMAN_REVIEW"`. (The executor suspends synchronously inside the tick that fires from `runner.createTask`; the visible AWAITING status in the response is delivered by `04-api-endpoints`'s POST handler reload pattern at `tasks.ts:171` (`store.loadTask(created.id) ?? created`) — not by anything `03-hitl-gate` ships. Spec Review S6 notes this cross-leaf coupling.)
 4. `GET /api/tasks/<id>` returns the task with status AWAITING_HUMAN_REVIEW; event log has seq 0 (creation), seq 1 (RUNNING), seq 2 (AWAITING_HUMAN_REVIEW). Note: `dbRowVersion === 2` (two transitions).
 5. Approve:
    ```
@@ -476,7 +486,8 @@ Items 1–2 + the schema-validation tests are headless-verifiable; items 3–10 
 | D9 | The follow-up's `resourceClaims` defaults to the rejected task's claims; operator can override by passing an explicit (possibly empty) array | The default is the natural one — if the operator is rejecting because the artifact isn't right, the follow-up regenerating it should hold the same write claims to block downstream consumers until it lands. An empty-array override is honored to support "reject and queue an unrelated task as a follow-up." The detection is `followUp.resourceClaims !== undefined` (presence-vs-absence) — present-and-empty is honored as "no claims." |
 | D10 | `humanReviewExecutor` registered in `createDefaultRegistry()` (joins `noop`) | Symmetric with how `02-scheduler` registers `noop`. After this child, the default registry has both built-ins. Tests that pass an explicit empty registry stay isolated. Tests that pass `createDefaultRegistry()` (the common path) get both. |
 | D11 | Both POST endpoints call `project.runner.tick()` after a successful transition | The approve transition unblocks dependents (per `02-scheduler` state machine: COMPLETE unblocks dependents on next tick). The reject transition also matters: the rejected task is FAILED so its claims are released, freeing up conflicting tasks to proceed (per `02-scheduler` D11, FAILED dependents stay BLOCKED but FAILED predecessors release claims). Explicitly ticking is the right re-evaluation trigger. The `EventBus` from `04-api-endpoints` then publishes, and SSE subscribers see the cascade. |
-| D12 | The rejection-detail event is appended via `store.appendEvent` (NOT `runner.events`-aware) | Both are equivalent in effect since the publishing-Store wrapper publishes after every write. Using `store.appendEvent` directly (via `project.runner.store`) is consistent with how `04-api-endpoints` writes events; the wrapper handles the publish. No special `runner.emit(...)` call needed at the endpoint level. |
+| D12 | The rejection-detail event is appended via `store.appendEvent` (NOT `runner.events`-aware) | After `04-api-endpoints`'s wiring, `project.runner.store` IS the publishing-wrapped Store (`server/src/runner/index.ts` constructs `withPublishing(createStore(db), bus)` and feeds it into both the Runner and ProjectContext) — so the `appendEvent` call structurally publishes to the bus, and SSE subscribers see the detail event live. There is **no access path to the raw (un-wrapped) Store from outside the Runner** (Spec Review S4); `runner.store` is always the wrapper. No special `runner.emit(...)` call needed at the endpoint level. |
+| D13 | `validateHitlReject` applies ajv `useDefaults: true` defaults through the `$ref: task-input.schema.json` for the `followUp` sub-object; the code then re-validates via `validateTaskInput(followUpInput)` as belt-and-braces | The first validation populates `source: "operator_injected"`, `dependsOn: []`, `resourceClaims: []`, `priority: 0` on the `followUp` (verified by ajv 2020 default-application-through-`$ref` behavior). The spread `{...followUp, dependsOn: [], resourceClaims: ...}` carries the populated defaults forward. The second `validateTaskInput(followUpInput)` call is a no-op for defaults (already applied) but ensures shape compatibility against any future divergence between `task-input.schema.json`'s `$ref` use and direct validation. (Spec Review S3 documents this as belt-and-braces, not strictly required.) |
 
 ---
 
@@ -496,7 +507,43 @@ Items 1–2 + the schema-validation tests are headless-verifiable; items 3–10 
 
 ## Spec Review (2026-05-27)
 
-*(none yet — pre-review)*
+Independent spec review run in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — 1 blocking (test-coverage gap, not impl bug), 6 should-fix, 6 nits. PRD coverage full Addressed across §5/§6.3/§7.1/§8.4/§11. All findings applied:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | The "detail event appended before OCC check" ordering (D5) means an OCC-loser request still writes its `rejected_with_details` event to the log. The spec acknowledged this in D5 prose but had no test in the §Test plan covering it. Without the test, the implementer might not realize the orphaned detail event is the intended behavior. | Added an explicit OCC-loser test case to §Test plan (concurrent-reject scenario asserts TWO detail events + ONE status_change). Spec Review item B1 cited inline. |
+| S1 | `validateHitlApprove` / `validateHitlReject` success branch field name was unpinned ("matching the convention of `validateTaskInput.ts`" — implicit). Implementer could diverge to `value` and break the pseudocode's `result.input` destructuring. | Requirements item 4 now pins `{ ok: true; input: ... }` explicitly. Also notes both validators construct ajv with `useDefaults: true`. |
+| S2 | The existing `reasons` object uses `as const`; adding three new entries (including two function builders) interacts with that typing — worth pinning. | Inline comment added to the §Status-reason builders pseudocode explaining `as const` is preserved; the new function entries' return types stay `string` regardless. |
+| S3 | The "double-validation" of `followUp` (`validateHitlReject` applies `$ref` defaults, then code calls `validateTaskInput` again) was described as belt-and-braces but the spec didn't explain whether the first pass's defaults are visible to the second. | New D13 added documenting that ajv 2020's `useDefaults` propagates through `$ref`; the second pass is a no-op for defaults but useful for future-shape divergence; explicitly marked belt-and-braces. |
+| S4 | `project.runner.store.appendEvent` access path implied a choice between raw and wrapped Store — but after `04-api-endpoints`, `runner.store` IS the wrapped Store; there's no raw-Store access path from outside the Runner. | D12 rewritten to state this explicitly. |
+| S5 | The OCC error response used `expected: dbRowVersion` (from the request body) instead of `err.expected` (from the thrown `OptimisticLockError`). Equivalent values, but reading from the error is structurally cleaner and survives if a future call path passes a non-request-body version. | Changed both approve and reject pseudocode to use `expected: err.expected`. |
+| S6 | Acceptance item 3's claim that `POST /api/tasks` returns 201 with `status === "AWAITING_HUMAN_REVIEW"` depends on `04-api-endpoints`'s reload pattern at `tasks.ts:171` — not anything `03-hitl-gate` ships. | Item 3 prose annotated with the cross-leaf note citing the file:line in `04-api-endpoints`. |
+| N1 | `reasons.approvedWithNote(note)` had no length cap, while `reasons.rejected(rationale)` truncated at 80 chars. Asymmetric, and a `note` capped at 4096 by schema could produce a 4103-char reason string. | `approvedWithNote` now also truncates at 80 chars. Symmetric with `rejected`. |
+| N2 | `$ref` resolution from `hitl-reject.schema.json` to `task-input.schema.json` — verified by the reviewer that `$id` URLs match. No change needed. | No action — verified. |
+| N3 | Test file path inconsistency check — confirmed `hitl.test.ts` (endpoint) + `runner/hitl.test.ts` (unit) matches `04-api-endpoints`'s pattern. | No action. |
+| N4 | `reasons.APPROVED` constant vs `approvedWithNote` function — empty-string `note` would produce `"approved: "` if not guarded externally. | Handler pseudocode already guards (`note !== undefined && note.length > 0`). N4 calls for belt-and-braces internal guard but the external guard is sufficient. No spec change. |
+| N5 | `RunnerHandle.awaitHumanReview(taskId: TaskId): Task` matches the existing `complete`/`fail` typing. | No action — verified. |
+| N6 | `awaitHumanReview` does not call `appendEvent` separately — `updateTaskStatus` writes the `status_change` event internally. | No action — confirmed correct. |
+
+Reviewer's **decomposition assessment**: **Stay bundled** — three deliverables (executor + handle + endpoints + schemas) are tightly coupled around one state transition pair; no natural split.
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer):
+
+- `OptimisticLockError`'s shape: `{taskId, expected, actual}` — verified `store.ts:28-38`. Both `err.expected` and `err.actual` are usable in the 409 response body.
+- `store.appendEvent` does NOT bump `db_row_version` — verified `store.ts:371-381` (no UPDATE on tasks table); only `updateTaskStatus` does at `store.ts:229`. D5's ordering safety preserved.
+- `LogEvent.error` shape `{kind: "error", message: string, stack?: string}` — verified `types.ts:146`. The spec's `message: "rejected_with_details"` + `stack: <rationale>` is valid.
+- `validateTaskInput`'s success type `{ok: true, input: TaskInput}` — verified `validateTaskInput.ts:17`. New HITL validators MUST match.
+- ajv `useDefaults: true` propagates through `$ref` — verified by behavior; the `task-input.schema.json` defaults apply to `followUp` during `validateHitlReject`.
+- Adding `human_review` to `createDefaultRegistry()` does NOT regress existing tests — existing `scheduler.test.ts` cases use `noop` or `implement` types; existing `tasks.test.ts` cases that create `human_review` tasks do so via `store.createTask` (bypassing the tick), which would behave the same way.
+- Scheduler tick trace verified: `runner.createTask({type: "human_review"})` → tick picks → `updateTaskStatus(PENDING→RUNNING)` → `dispatch(running, humanReviewExecutor)` → `handle.awaitHumanReview` → `updateTaskStatus(RUNNING→AWAITING_HUMAN_REVIEW)` → dispatch returns → tickOnce sets `pending = true; return;` → trampoline iterates, no eligible task, exits. dbRowVersion after both transitions = 2. Matches Acceptance item 4.
+- Hono path composition: `tasksRoute` claims `GET /`, `GET /:id`, `GET /:id/stream`, `POST /`; `hitlRoute` claims `POST /:id/approve`, `POST /:id/reject`. No path overlap — both routers compose under `/api/tasks` cleanly per `04-api-endpoints` Spec Review verification.
+
+**Implementer spot-check at stage 4:**
+- The OCC-loser test case (B1) — confirm both `app.request()` calls land in deterministic order under vitest's event loop, and the assertion correctly counts events.
+- The `followUp` double-validation behavior (S3 / D13) — explicit unit test for "followUp without source field" → second validation succeeds.
+- The truncation symmetry (N1) — test that `approvedWithNote` with a >80-char note truncates correctly.
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
