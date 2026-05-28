@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** VERIFY
+**Status:** ISSUE_OPEN
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete, gates green)
+**Last Updated:** 2026-05-28 (VERIFY → ISSUE_OPEN — Approve/Reject button flicker found in operator stage-8 walkthrough; see new HIGH Open Issue)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
@@ -625,8 +625,9 @@ Items 2–4 + the unit test suite are headlessly verifiable; items 5–13 are op
 
 ## Open Issues
 
+- **Approve/Reject buttons flicker for ~500–1000 ms after a successful mutation before unmounting.** Found in operator stage-8 (2026-05-28). Sequence: click Approve → button shows "Approving…" (~30–80 ms POST round-trip) → `approve.isPending` flips false → button re-renders in enabled "Approve" state because `live?.task.status` is still stale `AWAITING_HUMAN_REVIEW` (the `useTask` refetch from the fire-and-forget `invalidateQueries` hasn't completed) → refetch lands (~500–1000 ms later through Vite proxy + React scheduling) → `live.task.status` flips to `COMPLETE` → `showHitlButtons` flips false → buttons unmount. The window where the button is enabled-but-stale is the flicker. D12's "50–200 ms invisible at v1 scale" estimate was wrong — Vite proxy + React render scheduling stretches it past the perception threshold. **Fix:** apply Fix A (response-based `setQueryData` in `onSuccess` to write `data.task` into `["task", taskId]` cache immediately, atomically flipping `live?.task.status` on the same render the mutation resolves; list invalidation stays fire-and-forget; D12 amended to distinguish response-based from speculative-optimistic). *(Priority: HIGH — degrades the core HITL UX; resolved in this child's stage-8b loop-back.)*
 - **Follow-up task injection on Reject (D9).** `03-hitl-gate` accepts `followUp: TaskInput`; the UI does not expose it. Operator must POST a follow-up separately if they want one. Reasonable UX would be a "Reject and queue follow-up" toggle that reveals a minimal "title + reviewPayload.summary" pair and inherits the rejected task's resourceClaims by default (matching the server's default). *(Priority: MEDIUM — parent §HITL gate mentions but doesn't require.)*
-- **No optimistic mutation updates.** Invalidate-and-refetch only. Local-only scale makes this invisible. *(Priority: TRIVIAL — D12.)*
+- ~~**No optimistic mutation updates.** Invalidate-and-refetch only. Local-only scale makes this invisible. *(Priority: TRIVIAL — D12.)*~~ → Replaced by the HIGH flicker issue above. D12 amended in the stage-8b patch: response-based `setQueryData` is in use for the inspector's `["task", id]` cache; speculative-optimistic is still avoided.
 - **No EventSource test coverage for `useLogStream`'s runner-stream variant.** Operator stage-8 covers it. If a future regression slips, it would surface as a broken `/logs/:id` page on a runner-emitted task. *(Priority: LOW — D6.)*
 - **Server-side `?status=`, `?type=`, `?parent=` filters on `GET /api/tasks` are unused.** Client-side `useTaskFilters` runs over the merged list. Server-side filters can't reduce the transcript half. Could promote filtering to merged-result client side as today, or split into per-source filtering with composition — defer until the runner side dominates row count. *(Priority: TRIVIAL.)*
 - **No row-level visual distinction between runner-emitted and transcript-derived tasks.** Inspector is the discriminator. A future polish pass could add a subtle chip or column when both sources are routinely live. *(Priority: TRIVIAL.)*
