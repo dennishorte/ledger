@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/02-runner-tools`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (APPROVED → IN_PROGRESS — stage-4 implementer entered worktree)
+**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete, all gates green)
 
 **Dependencies:** `06-agent-dispatcher/01-mcp-server` (MCP scaffolding, session-lifecycle hooks, `ProjectContext.mcp`), `05-task-runner` (transitively: `RunnerHandle`, `Store`, the `Task` / `LogEvent` types and their ajv validators)
 
@@ -526,7 +526,17 @@ Nothing punted; all 2 blocking + 4 should-fix + 4 nits + 6 confidence notes land
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Delivered 2026-05-28 (v1).** All five MCP tools, binding registry, `store.updateReviewPayload`, `Runner.handle` exposure, and cast retirement shipped together. Verification gate results: 211 server tests pass, 108 parser tests pass, 105 app tests pass (424 total). typecheck + lint both exit zero. App bundle delta: zero (no UI changes). Server `dist/` delta: ~12K vs the post-`01-mcp-server` baseline (new `dispatcher/mcp/binding.js`, `toolSchemas.js`, `tools.js`).
+
+**SDK ordering constraint (critical deviation from spec prose).** The spec's §"Wiring at `loadProjectContext`" code block and Confidence note #2 both imply `registerTool` can be called after `server.connect(transport)`. This is incorrect for SDK 1.29.0: `registerTool` internally calls `setToolRequestHandlers()` → `registerCapabilities()`, which throws `"Cannot register capabilities after connecting to transport"` if called post-connect. The implementation uses `createMcpServer` (the synchronous pre-connect factory, already shipped by `01-mcp-server`) to defer `_connect()` until after `registerRunnerTools` returns. The `context.ts` wiring sequence is: `createMcpServer` → wire hooks → `registerRunnerTools` → `_connect()`. `McpServerHandleInternal` (with the `_connect()` method) is now exported from `dispatcher/index.ts` for context.ts use. Same pre-connect pattern applied in `tools.test.ts` and `binding-hook-wiring` test inline fixture.
+
+**`seq: -1` → `seq: 0` sentinel fix.** The `runner.emit_event` validation candidate used `seq: -1` as a sentinel; the `log-event.schema.json` requires `minimum: 0`. Changed to `seq: 0` — the store overwrites seq on append regardless.
+
+**`McpError.message` is non-enumerable.** `toMatchObject` does not find it via standard enumerable-key traversal. Binding tests changed to check `(err as Error).message` separately via `toContain("task_not_bound")`, and to check the full formatted message (`"MCP error -32602: task_not_bound"`) rather than `"task_not_bound"` verbatim. The `toMatchObject` calls retain `code` and `data` checks.
+
+**`listTools()` on a bare server returns `-32601 Method not found`.** The SDK only registers the `tools/list` handler on the first `registerTool` call. `server.test.ts`'s MCP handshake test was calling `listTools()` on a server with no tools registered, causing it to fail with -32601. That test now only verifies `serverInfo` (transport concern); the five-tool assertion lives exclusively in `tools.test.ts`.
+
+**Zod v4 `looseObject`.** `emitEventShape.event` uses `z.looseObject({ kind: z.string() })` — the Zod 4 replacement for `.passthrough()`. The eslint rule flags `.passthrough()` as deprecated.
 
 ---
 

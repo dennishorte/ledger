@@ -16,6 +16,7 @@ import { createRunner, recoverOrphans } from "../src/runner/scheduler.js";
 import { createEventBus, withPublishing } from "../src/runner/events.js";
 import { createServer } from "../src/server.js";
 import { createMcpServer } from "../src/dispatcher/mcp/server.js";
+import { createBindingRegistry } from "../src/dispatcher/mcp/binding.js";
 import type { ProjectContext } from "../src/context.js";
 import type { Task, LogEvent } from "@ledger/parser";
 
@@ -42,6 +43,8 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
   // These tests do not exercise MCP; the unconnected handle is sufficient.
   const mcp = createMcpServer({ version: "0.1.0" });
 
+  const binding = createBindingRegistry();
+
   const ctx: ProjectContext = {
     projectRoot: "/test",
     docsRoot: "/test/docs",
@@ -51,6 +54,7 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
     store: runner.store,
     runner,
     mcp,
+    binding,
   };
 
   return { ...ctx, closeAll: () => { runner.close(); } };

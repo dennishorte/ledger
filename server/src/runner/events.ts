@@ -84,6 +84,11 @@ export function withPublishing(store: Store, bus: EventBus): Store {
     listTasks: store.listTasks.bind(store),
     listPendingEligible: store.listPendingEligible.bind(store),
     getEvents: store.getEvents.bind(store),
+    // updateReviewPayload does not emit a task-changed event — the caller
+    // (runner.await_human_review tool) follows immediately with awaitHumanReview
+    // which writes a status_change event; that write's updateTaskStatus call
+    // publishes the task-changed event. Pass through without publishing.
+    updateReviewPayload: store.updateReviewPayload.bind(store),
     close() {
       // Spec Review N2: store first, bus second. If a future Store-close handler
       // observed bus state it would still be valid; better-sqlite3 db.close()

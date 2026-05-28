@@ -18,6 +18,7 @@ import type {
   LogEvent,
   TaskSource,
   ResourceClaim,
+  ReviewPayload,
 } from "@ledger/parser";
 import { newTaskId, newEventId } from "./ids.js";
 
@@ -148,6 +149,14 @@ export interface Store {
     taskId: TaskId,
     opts?: { afterSeq?: number; limit?: number },
   ): LogEvent[];
+  /**
+   * UPDATE tasks SET review_payload = ? WHERE id = ?.
+   * Caller (runner.await_human_review tool) follows with handle.awaitHumanReview(id)
+   * for the actual status transition. No transaction here — the transition's
+   * status_change append is the durability boundary.
+   * Throws if the task does not exist.
+   */
+  updateReviewPayload(taskId: TaskId, reviewPayload: ReviewPayload): void;
   close(): void;
 }
 
@@ -232,6 +241,10 @@ export function createStore(db: Database): Store {
 
   const stmtGetDbRowVersion = db.prepare<[string]>(
     `SELECT db_row_version FROM tasks WHERE id = ?`,
+  );
+
+  const stmtUpdateReviewPayload = db.prepare<[string, string]>(
+    `UPDATE tasks SET review_payload = ? WHERE id = ?`,
   );
 
   // ---------------------------------------------------------------------------
@@ -451,6 +464,14 @@ export function createStore(db: Database): Store {
     return rows.map(rowToEvent);
   }
 
+  function updateReviewPayload(taskId: TaskId, reviewPayload: ReviewPayload): void {
+    const json = JSON.stringify(reviewPayload);
+    const info = stmtUpdateReviewPayload.run(json, taskId);
+    if (info.changes === 0) {
+      throw new Error(`updateReviewPayload: task not found: ${taskId}`);
+    }
+  }
+
   function close(): void {
     db.close();
   }
@@ -464,6 +485,7 @@ export function createStore(db: Database): Store {
     listTasks,
     listPendingEligible,
     getEvents,
+    updateReviewPayload,
     close,
   };
 }

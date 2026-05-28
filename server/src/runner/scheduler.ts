@@ -46,6 +46,11 @@ export interface Runner {
   readonly store: Store;
   /** In-process pub/sub bus — subscribers are notified after every Store write. */
   readonly events: EventBus;
+  /**
+   * The shared RunnerHandle — exposed for the MCP tools layer (06-agent-dispatcher/02-runner-tools D9).
+   * The same handle is passed to executors via run(task, handle).
+   */
+  readonly handle: RunnerHandle;
   /** Wraps store.createTask and triggers a scheduler tick. */
   createTask(input: TaskInput): Task;
   /** Registers an executor for a task type. Overwrites prior registration with a warning. */
@@ -237,6 +242,7 @@ export function createRunner(
   return {
     store,
     events: bus,
+    handle,
     createTask(input: TaskInput): Task {
       const task = store.createTask(input);
       scheduleTick();
