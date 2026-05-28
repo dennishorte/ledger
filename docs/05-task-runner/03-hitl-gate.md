@@ -467,7 +467,7 @@ A reviewer running the worktree must observe:
 9. SSE: open `curl -N http://127.0.0.1:4180/api/tasks/<id>/stream` on an AWAITING_HUMAN_REVIEW task; approve from a second terminal; the stream emits the `status_change` event live (verifying the publish path via the EventBus from `04-api-endpoints`).
 10. Conflict-set behavior: inject task A with `resource_claims: [{kind: "node", nodeId: "x", mode: "write"}]` as a `human_review` task; before approving, inject task B with the same write claim as a `noop`. B transitions to BLOCKED with `blocked_by_claim_conflict:<A.id>`. Approve A → A completes → B dispatches → B completes.
 
-Items 1–2 + the schema-validation tests are headless-verifiable; items 3–10 require a live server + curl. The SSE-live-delivery scenario (item 9) is also covered headlessly via `app.request()` in `hitl.test.ts`'s end-to-end test.
+Items 1–2 + the schema-validation tests are headless-verifiable; items 3–10 require a live server + curl. (The original DRAFT claimed item 9's SSE live delivery was also covered headlessly via `app.request()`; not shipped — the headless suite covers approve/reject state transitions but not the SSE consumer side. Operator stage-8 covers it via curl. Impl Review N1.)
 
 ---
 
@@ -613,6 +613,49 @@ Items 3–10 of §Acceptance check require a live server + curl:
 - Restart durability: kill+reboot preserves AWAITING_HUMAN_REVIEW row.
 - SSE live delivery of approval transition.
 - Conflict-set: human_review with write claim BLOCKS a downstream task with same write claim.
+
+### Implementation Review (2026-05-28)
+
+Independent implementation review run against the on-main diff `88eaa8d..20c6a6f` (baseline = SPEC_REVIEW → APPROVED). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, 3 should-fix, 2 nits. All 9 high-leverage Spec Review closures confirmed at concrete file:line. All 10 gates re-verified at exit 0. All three implementer judgment calls accepted (raw-body presence detection for D9; `as Parameters<...>[1]` discriminated-union workaround consistent with `04-api-endpoints`; recovery-on-main meets sibling quality bar — reviewer is the stage that the failed worktree would have provided).
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 OCC-loser test | Confirmed at `server/test/hitl.test.ts:362-420`. Asserts 409 + detail event written + no FAILED transition. | No action — confirmed. |
+| HL — S1 validator `input` field | Confirmed at `packages/parser/src/runner/validateHitlApprove.ts:19` + `validateHitlReject.ts:29`. | No action — confirmed. |
+| HL — S5 `err.expected` in 409 | Confirmed at `hitl.ts:70` (approve) + `hitl.ts:145` (reject). | No action — confirmed. |
+| HL — N1 approvedWithNote truncation | Confirmed at `scheduler.ts:37`. | No action — confirmed. |
+| HL — D1 awaitHumanReview no tick | Confirmed at `scheduler.ts:87-94`. | No action — confirmed. |
+| HL — D5 detail before status_change | Confirmed at `hitl.ts:125-150`; ordering test at `hitl.test.ts:260-266`. | No action — confirmed. |
+| HL — D7 followUpErrors no rollback | Confirmed at `hitl.ts:168-171`. | No action — confirmed. |
+| HL — D8 dependsOn force-clear | Confirmed at `hitl.ts:159-165` (spread order). | No action — confirmed. |
+| HL — D9 resourceClaims raw-body detection | Confirmed at `hitl.ts:107-114` (IIFE) + `hitl.ts:162-164` (ternary use). Deviation rationale verified correct. | No action — confirmed; deviation documented in §Deviations. |
+| S1 | `makeHandle()` in `server/test/runner/executors.test.ts:30-34` was missing `awaitHumanReview` — escaped typecheck because `server/tsconfig.json` includes only `src/**/*` (not `test/**/*`). Runtime tests passed because `noopExecutor` doesn't call it. | Added `awaitHumanReviewFn: vi.fn().mockReturnValue(makeTask({status: "AWAITING_HUMAN_REVIEW"}))` to the factory. Honest mock type. |
+| S2 | Reject endpoint lacked symmetric 404 + 409 wrong_status tests; approve had both. | Added two tests (`404 on non-existent task` + `409 wrong_status on PENDING`) for reject. |
+| S3 | D9 case (c) — explicit non-empty `followUp.resourceClaims` — was missing a test. Implementation supports it (same code path as explicit-empty) but no assertion proves it. | Added test "followUp.resourceClaims=[X] is honored as explicit non-empty (D9 case c)". |
+| N1 | §Acceptance check claimed item 9 (SSE live delivery) was covered headlessly via `app.request()`. Not shipped — only state-transition tests exist. | §Acceptance check paragraph corrected; SSE live delivery is operator-stage-8 only. |
+| N2 | B1 test's same-status `updateTaskStatus({from:"AWAITING", to:"AWAITING"})` simulation writes a spurious `status_change` event into the log as a side effect of bumping `dbRowVersion`. Test assertions don't trip on it, but readers wonder why. | Added inline comment at the simulation site noting the spurious event is harmless. |
+
+Reviewer's bundle delta + test counts:
+
+| Workspace | Before (88eaa8d) | After (HEAD) | Delta |
+|---|---|---|---|
+| `server` | 140 | 162 (this commit adds +4 tests via S2 + S3) | +26 after audit |
+| `packages/parser` | 91 | 108 | +17 |
+| `app/` | (no suite) | (no suite) | 0 |
+
+Bundle delta: app source untouched (`git diff 88eaa8d..HEAD -- app/` empty).
+
+Reviewer's **confidence notes** (operator's stage-8 verification will exercise these):
+- Boot + inject `human_review` task → 201 AWAITING_HUMAN_REVIEW.
+- Event log seq inspection (3 events: PENDING / RUNNING / AWAITING_HUMAN_REVIEW; dbRowVersion=2).
+- Approve via curl: → 200 COMPLETE, seq 3 with `approved` or `approved: <note>`.
+- Reject via curl with reason + followUp: → 200 FAILED + followUpTask=COMPLETE, detail event seq 3 + status_change seq 4.
+- OCC 409 path: capture dbRowVersion, send approve twice — second is 409 wrong_status (status is COMPLETE now, version_conflict is reachable only via a fresh AWAITING task with explicit-stale version).
+- Restart durability: kill+reboot keeps AWAITING_HUMAN_REVIEW; approve still works post-restart.
+- SSE live delivery: `curl -N .../stream` while approving from another terminal — see the status_change event flow live.
+- Conflict-set blocking: inject human_review with write claim + downstream noop with same write claim; downstream BLOCKS.
+
+Nothing punted. The auto-close timer + SSE live delivery are explicit operator-only items; everything else is headless-verified.
 
 ---
 

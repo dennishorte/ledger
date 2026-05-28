@@ -27,12 +27,19 @@ function makeHandle() {
   const completeFn = vi.fn().mockReturnValue(makeTask({ status: "COMPLETE" }));
   const emitFn = vi.fn();
   const failFn = vi.fn().mockReturnValue(makeTask({ status: "FAILED" }));
+  // 03-hitl-gate added awaitHumanReview to RunnerHandle. Tests use src tsconfig
+  // (which excludes test/) for typecheck, so the missing field wasn't caught by
+  // `pnpm -C server typecheck` — but kept honest here. (Impl Review S1.)
+  const awaitHumanReviewFn = vi
+    .fn()
+    .mockReturnValue(makeTask({ status: "AWAITING_HUMAN_REVIEW" }));
   const handle: RunnerHandle = {
     emit: emitFn,
     complete: completeFn,
     fail: failFn,
+    awaitHumanReview: awaitHumanReviewFn,
   };
-  return { handle, completeFn, emitFn, failFn };
+  return { handle, completeFn, emitFn, failFn, awaitHumanReviewFn };
 }
 
 describe("createDefaultRegistry", () => {

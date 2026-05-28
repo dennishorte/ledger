@@ -213,6 +213,37 @@ describe("POST /api/tasks/:id/approve", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/tasks/:id/reject", () => {
+  it("404 on non-existent task (Impl Review S2 — symmetric with approve)", async () => {
+    const ctx = makeInMemoryContext();
+    const app = createServer(ctx);
+    const res = await app.request("/api/tasks/missing/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dbRowVersion: 0, reason: "no" }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("task_not_found");
+    ctx.closeAll();
+  });
+
+  it("409 wrong_status on a PENDING task (Impl Review S2 — symmetric with approve)", async () => {
+    const ctx = makeInMemoryContext();
+    const app = createServer(ctx);
+    const t = ctx.runner.store.createTask({ type: "implement", title: "X" });
+    const res = await app.request(`/api/tasks/${t.id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dbRowVersion: t.dbRowVersion, reason: "x" }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; expected: string; actual: string };
+    expect(body.error).toBe("wrong_status");
+    expect(body.expected).toBe("AWAITING_HUMAN_REVIEW");
+    expect(body.actual).toBe("PENDING");
+    ctx.closeAll();
+  });
+
   it("400 on empty reason", async () => {
     const ctx = makeInMemoryContext();
     const app = createServer(ctx);
@@ -314,6 +345,31 @@ describe("POST /api/tasks/:id/reject", () => {
     ctx.closeAll();
   });
 
+  it("followUp.resourceClaims=[X] is honored as explicit non-empty (Impl Review S3 — D9 case c)", async () => {
+    const ctx = makeInMemoryContext();
+    const app = createServer(ctx);
+    const rejectedClaim = { kind: "node" as const, nodeId: "rejected-thing", mode: "write" as const };
+    const followUpClaim = { kind: "node" as const, nodeId: "followup-thing", mode: "write" as const };
+    const { task, dbRowVersion } = await injectAwaitingReview(app, ctx, {
+      resourceClaims: [rejectedClaim],
+    });
+
+    const res = await app.request(`/api/tasks/${task.id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dbRowVersion,
+        reason: "different claims",
+        followUp: { type: "noop", title: "retry", resourceClaims: [followUpClaim] },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { followUpTask?: Task };
+    // Operator's explicit value is honored, NOT replaced by the rejected task's claim.
+    expect(body.followUpTask?.resourceClaims).toEqual([followUpClaim]);
+    ctx.closeAll();
+  });
+
   it("followUp.resourceClaims=[] is honored as explicit empty (not inherited)", async () => {
     const ctx = makeInMemoryContext();
     const app = createServer(ctx);
@@ -383,11 +439,15 @@ describe("OCC-loser orphaned detail event (Spec Review B1)", () => {
     // That requires a third task and a fresh stale-version request:
     const { task: t2, dbRowVersion: v2 } = await injectAwaitingReview(app, ctx);
 
-    // Bump v2 from another approve route to make our v2 stale.
-    // We'll directly mutate the row to simulate a concurrent writer.
+    // Bump v2 from another writer to make our v2 stale.
+    // Same-status updateTaskStatus is a valid no-op transition (verified
+    // store.ts:312-369 tolerates same-status). It bumps dbRowVersion AND
+    // writes a spurious same-status status_change event into the log
+    // (Impl Review N2). The test's assertions only inspect the row's status
+    // + the last event after the reject — the spurious event doesn't interfere.
     ctx.runner.store.updateTaskStatus(t2.id, {
       from: "AWAITING_HUMAN_REVIEW",
-      to: "AWAITING_HUMAN_REVIEW", // no-op transition just bumps dbRowVersion
+      to: "AWAITING_HUMAN_REVIEW",
     });
     const stale = v2; // captured before the bump
     const eventsBeforeReject = ctx.runner.store.getEvents(t2.id);
