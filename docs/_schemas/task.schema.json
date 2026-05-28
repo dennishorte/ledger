@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/task.schema.json",
+  "$comment": "Wire shape of the Task domain object. Spec: docs/05-task-runner/01-store-schema.md §Design > JSON Schemas. Version 1.",
+  "title": "Task",
+  "description": "A runner task row as returned by the Store API. Three new fields vs the transcript-only v0: dbRowVersion (required), priority (required), transcriptPath (now optional).",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "status",
+    "title",
+    "source",
+    "dependsOn",
+    "resourceClaims",
+    "dbRowVersion",
+    "priority",
+    "createdAt"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Bare UUIDv4. Runner-emitted tasks use bare UUIDs; transcript-derived tasks use 'session:<id>' or 'agent:<id>' prefixes."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "spec_draft",
+        "spec_review",
+        "implement",
+        "verify",
+        "doc_refactor",
+        "issue_triage",
+        "human_review",
+        "reverify",
+        "project_status_review",
+        "operator_session",
+        "agent_task",
+        "noop"
+      ],
+      "description": "Task type — determines which executor handles dispatch."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "BLOCKED",
+        "AWAITING_HUMAN_REVIEW",
+        "COMPLETE",
+        "FAILED",
+        "CANCELLED"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "enum": ["agent_generated", "operator_injected", "daemon_triggered"]
+    },
+    "parentTaskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absent when the task has no parent."
+    },
+    "dependsOn": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "TaskId[] — all must be COMPLETE before this task is eligible."
+    },
+    "resourceClaims": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "nodeId", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "node" },
+              "nodeId": { "type": "string", "minLength": 1 },
+              "mode": { "type": "string", "enum": ["read", "write"] }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "path" },
+              "path": { "type": "string", "minLength": 1 },
+              "mode": { "type": "string", "enum": ["read", "write"] }
+            }
+          }
+        ]
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "persona": { "type": "string", "minLength": 1 }
+      },
+      "description": "Absent for operator-injected tasks with no agent assignment."
+    },
+    "reviewPayload": {
+      "type": "object",
+      "required": ["summary"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "diffRef": { "type": "string", "minLength": 1 }
+      },
+      "description": "Only present on human_review tasks."
+    },
+    "dbRowVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optimistic concurrency token. Starts at 0 on insert; bumped on every UPDATE. Used by HITL approve/reject for 409 checks (PRD §8.4)."
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Scheduler priority. Higher values are picked first (ORDER BY priority DESC). Default 0."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp — set at createTask() time."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 — set when status transitions to RUNNING."
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 — set when status reaches a terminal state."
+    },
+    "transcriptPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute path to the source JSONL. Server-internal; never rendered in the UI. Absent for runner-emitted tasks (optional since 05-task-runner/01-store-schema)."
+    }
+  }
+}

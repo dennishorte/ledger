@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/01-store-schema`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-27)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-27 (VERIFY → COMPLETE — operator verification green)
 
 **Dependencies:** `04-api-server` (workspace, parser package, Hono server, ProjectContext)
 
@@ -458,7 +458,155 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+- `better-sqlite3@11.10.0` (pinned by pnpm resolution of `^11`) added to `server/package.json` dependencies. `@types/better-sqlite3@7.6.13` added as a dependency (not devDependency — the types are used in the server's public exports). On darwin-arm64, `prebuild-install` downloaded a prebuilt binary (`better_sqlite3.node`); no Xcode build required.
+- `pnpm.onlyBuiltDependencies: ["better-sqlite3", "esbuild"]` added to root `package.json` to allow the native build scripts. This is a workspace-root config that gates which packages may run `postinstall` build scripts.
+- `server/package.json` build script extended to `tsc -b && cp src/runner/migrations/*.sql dist/runner/migrations/` — TypeScript doesn't copy non-TS assets; the SQL files must be explicitly copied to `dist/` so `applyMigrations`'s `readdirSync/readFileSync` can find them at production runtime. In dev (`tsx watch`) and test (vitest with tsx), `import.meta.url` resolves to the source directory where the `.sql` files already live.
+
+### Deviations from spec
+
+**`INSERT OR IGNORE` on migrations table:** The spec pseudocode used `INSERT INTO migrations(...)`. Changed to `INSERT OR IGNORE INTO migrations(...)`. Reason: when tests run against a shared fixture path (the `sample-project` fixture that `context.test.ts`, `docs.test.ts`, and `project.test.ts` all open), successive `loadProjectContext` calls within the same test file would try to apply migration 001 again if `PRAGMA user_version` wasn't persisted. The `IF NOT EXISTS` on table creation is already idempotent; making the migrations-row insert also idempotent is the correct dual defense. Does not affect correctness — if `user_version` is correctly advanced, the `version <= currentVersion` check prevents re-entry entirely.
+
+**`vitest.config.ts` `fileParallelism: false`:** Added to the server vitest config. The existing server tests (`context.test.ts`, `docs.test.ts`, `project.test.ts`) all call `loadProjectContext` with the same `sample-project` fixture path, which now creates/opens a file-based SQLite DB. Running test files concurrently caused `database is locked` errors (SQLite WAL mode writer exclusion). Serializing file execution resolves the contention without requiring test-level teardown on every existing test.
+
+**`@types/better-sqlite3` as dependency (not devDependency):** The server's public `store.ts` uses the `Database` type from `better-sqlite3` in function signatures. If declared as a devDependency, the type would be unavailable when the package is built and consumed by other workspace packages. Declared as a regular dependency to ensure the type is always present.
+
+**`createStoreForProject` signature uses `{ projectRoot: string }` instead of `ProjectContext`:** The spec showed `createStoreForProject(project: ProjectContext)`. The factory only reads `projectRoot`; accepting the full `ProjectContext` would create a circular dependency (`context.ts` calls `createStoreForProject`, which would need to import `ProjectContext` from `context.ts` — same file, fine — but the factory is called DURING `loadProjectContext` before the full context is assembled). Using a structural subtype `{ projectRoot: string }` avoids the bootstrapping problem cleanly and is a strict improvement.
+
+**B2 guard in `middleware.ts` close stream (SSE) returns with `event: close` frame:** The spec said to guard with `if (!task.transcriptPath) return;` but for the SSE stream, an abrupt return leaves the client hanging. Instead, emit an SSE `event: close` frame with `reason: "no_transcript"` before calling `res.end()`. For the GET handler (`/api/transcripts/:id`), the guard returns `{ task, events: [] }` rather than 404 — runner-emitted tasks are valid tasks, they just have no JSONL.
+
+**`LogEventRow.tsx` guard change:** The UI component's `StatusChangeRow` now conditionally renders the "from →" half of the arrow only when `event.from !== undefined`. This is a display improvement — creation events (seq=0) rendered cleanly with just the destination status "PENDING" rather than "undefined → PENDING".
+
+**`TaskTypeBadge.tsx` `noop` case:** Added `case "noop":` to the `badgeBg` switch statement grouped with `agent_task` (same `--color-surface-sunken` background). Required because the `TaskType` union now includes `"noop"` and TypeScript's exhaustive check (via `noUncheckedIndexedAccess`) flagged the missing case.
+
+### Bundle delta
+
+Baseline commit: `2c4faa2` (SPEC_REVIEW → APPROVED — audit applied on main).
+
+App bundle (`pnpm -C app build`):
+- `dist/assets/index-*.js`: 1,667.82 kB uncompressed / 523.04 kB gzip
+- `dist/assets/DagPanel-*.js`: 1,646.47 kB uncompressed / 505.23 kB gzip
+- CSS: 28.49 kB + 15.85 kB (unchanged)
+
+The app bundle delta vs baseline is minimal: the `types.ts` orchestration block moved to `@ledger/parser` (re-export-only change, no new runtime code), plus the two small guard additions in `LogEventRow.tsx` (conditional render) and `TaskTypeBadge.tsx` (one switch case). The `@ledger/parser` runner types and validators are included in the parser package but are NOT bundled into the app since the app imports types only (erased at build time) — validators are server-side only.
+
+### Files changed inventory
+
+**New — server runner module** (`server/src/runner/`):
+- `migrations/001-initial.sql` — schema verbatim from spec
+- `migrations/runner.ts` — transactional migration applier
+- `ids.ts` — `newTaskId()` / `newEventId()` via `crypto.randomUUID()`
+- `store.ts` — `Store` class with prepared statements, `OptimisticLockError`
+- `index.ts` — public surface + `createStoreForProject`
+
+**New — parser runner module** (`packages/parser/src/runner/`):
+- `types.ts` — canonical runner types migrated from `app/src/lib/types.ts`
+- `validateTask.ts`, `validateLogEvent.ts`, `validateTaskInput.ts` — ajv2020 validators
+
+**New — JSON Schemas** (`docs/_schemas/`):
+- `task.schema.json`, `log-event.schema.json`, `task-input.schema.json`
+
+**New — tests**:
+- `server/test/runner/migrations.test.ts` (5 tests)
+- `server/test/runner/store.test.ts` (30 tests)
+- `packages/parser/test/runner/validateTask.test.ts` (10 tests)
+- `packages/parser/test/runner/validateLogEvent.test.ts` (12 tests)
+- `packages/parser/test/runner/validateTaskInput.test.ts` (11 tests)
+
+**Modified — type migration**:
+- `packages/parser/src/index.ts` — runner exports added
+- `app/src/lib/types.ts` — orchestration block replaced with re-exports from `@ledger/parser`
+
+**Modified — touch-up sites** (per Spec Review B1/B2):
+- `app/server/deriveTask.ts` — `dbRowVersion: 0, priority: 0` added to Task literal
+- `app/server/middleware.ts` — two `transcriptPath` read sites guarded
+- `app/src/components/logs/LogEventRow.tsx` — `from?` conditional render
+- `app/src/components/tasks/TaskTypeBadge.tsx` — `noop` case added
+
+**Modified — config/infra**:
+- `server/package.json` — `better-sqlite3`, `@types/better-sqlite3`, build script with SQL copy
+- `server/vitest.config.ts` — `fileParallelism: false`
+- `server/src/context.ts` — `store: Store` field + `createStoreForProject` call
+- `package.json` (root) — `pnpm.onlyBuiltDependencies`
+- `.ledger/.gitignore` — `runner.db`, `runner.db-*`
+
+### Gates verified headlessly
+
+| Gate | Exit |
+|------|------|
+| `pnpm -C packages/parser typecheck` | 0 |
+| `pnpm -C packages/parser lint` | 0 |
+| `pnpm -C packages/parser test` | 0 (91 tests: 58 pre-existing + 33 new) |
+| `pnpm -C server typecheck` | 0 |
+| `pnpm -C server lint` | 0 |
+| `pnpm -C server build` | 0 |
+| `pnpm -C server test` | 0 (73 tests: 38 pre-existing + 35 new) |
+| `pnpm -C app typecheck` | 0 |
+| `pnpm -C app lint` | 0 |
+| `pnpm -C app build` | 0 |
+| `pnpm -C app test` | 0 (73 tests: unchanged) |
+
+### Acceptance-check items NOT verifiable headlessly
+
+- **Item 6** (`pnpm -C server dev /path` boots, creates `.ledger/runner.db`, applies migration 001, restarts cleanly): requires a live server boot and log inspection.
+- **Item 7** (`sqlite3 .ledger/runner.db ".schema"` shows correct tables and indexes): requires operator inspection of the created DB.
+- **Item 8** (three new JSON Schemas validate against meta-schema via `ajv compile`): requires operator to run `ajv compile -s docs/_schemas/task.schema.json` etc.
+- **Item 9** (no regressions on `/api/_health`, `/api/project`, `/api/docs`): live server verification.
+- **Item 10** (UI transcript-derived tasks still render, DAG still renders): requires running both dev servers and browser inspection.
+- **Item 5 spot-check** (`transcriptPath` guard placement correctness in middleware handlers): code review / manual test of a transcript-derived task's SSE stream.
+
+### Implementation Review (2026-05-27)
+
+Independent implementation review was run against this worktree (`worktree-agent-ad8ab8d0ae4474a65`, branched from main `2c4faa2`, no rebase needed — base equalled main HEAD). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, two should-fix (both explicit deferrals to later sub-leaves, not in-leaf fixes), three nits (cosmetic). All four high-leverage Spec Review closures confirmed in code. All 11 gates re-verified at exit 0.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 `noop` in TaskType | Confirmed: `packages/parser/src/runner/types.ts:32` lists `"noop"` with comment citing parent D8 + Spec Review B1. Also present in `task-input.schema.json` and `task.schema.json` type enums. | No action — confirmed. |
+| HL — B2 middleware.ts guards | Confirmed: `app/server/middleware.ts:105–110` guards SSE with `if (!task.transcriptPath)` → emits `event: close` + `reason: no_transcript`; `:232–235` guards the GET handler → returns `{ task, events: [] }`. Both bare reads now guarded. | No action — confirmed. |
+| HL — S3 PRAGMA outside tx | Confirmed: `server/src/runner/migrations/runner.ts:52–64` — `db.transaction(() => { ... })()` runs first, then `db.pragma(\`user_version = ...\`)` outside, with an inline comment citing S3. | No action — confirmed. |
+| HL — S4 status_change.from optional | Confirmed: `packages/parser/src/runner/types.ts:142` declares `from?: TaskStatus`; `store.ts:300–303` creation event passes `{ kind: "status_change", to: "PENDING" }` with no `from` field; `store.test.ts:71` asserts `expect("from" in evt).toBe(false)` — field absent, not just `undefined`. | No action — confirmed. |
+| Dev-1 INSERT OR IGNORE on migrations | ACCEPT — belt-and-suspenders idempotency over the primary `user_version <= currentVersion` guard. Semantically correct. | No action. |
+| Dev-2 `fileParallelism: false` in server vitest | ACCEPT — SQLite WAL-mode writer exclusion is real; 73-test serial run is 2.55s, negligible. | No action. |
+| Dev-3 `createStoreForProject({ projectRoot: string })` | ACCEPT — factory is called DURING `loadProjectContext` before `ProjectContext` is assembled; structural subtype is strictly correct. | No action. |
+| Dev-4 `cp src/runner/migrations/*.sql dist/runner/migrations/` in build | ACCEPT — TSC doesn't copy `.sql`; required for `pnpm exec ledger` invocation against compiled output. | No action. |
+| Dev-5 B2 guard response shape | ACCEPT — spec said "early return" as a fix description, not a mandated response shape. `event: close` for SSE + `{ task, events: [] }` for GET are strictly better than abrupt close / 404. | No action. |
+| Dev-6 `LogEventRow.tsx` + `TaskTypeBadge.tsx` UI cascade | ACCEPT — required by `pnpm -C app build` due to `from?` optionality (LogEventRow render path) and exhaustive switch over `TaskType` (TaskTypeBadge case for `noop`). Both fixes minimal and correct. | No action — spec's touch-up list was incomplete; cascade was unavoidable. |
+| S1 `listTasks` dynamic `db.prepare()` not cached | Should-fix. `store.ts:419` re-prepares on every call because the WHERE clause varies. Hot under repeated HTTP GET; not used by the scheduler. | Deferred to `04-api-endpoints` — flagged in this sub-leaf's Open Issues as a follow-up for that child. |
+| S2 `console.log` in production path | Should-fix. `server/src/runner/index.ts:23,26` — boot diagnostics on every server start. Spec Acceptance check item 6 explicitly expected these lines for operator verification, so correct as-is, but should migrate to a structured logger when one is established. | Deferred to `02-scheduler` or `04-api-endpoints` (whichever introduces the project-level logger first) — added as an inherited Open Issue note. |
+| N1 `@types/better-sqlite3` placement | Nit. Workspace-internal; impact zero. | No action. |
+| N2 `RawStatusRow` interface used once | Nit. Cosmetic. | No action. |
+| N3 `store.test.ts:66–67` guard style | Nit. Idiomatic-vitest stylistic preference. | No action. |
+
+Bundle delta vs `2c4faa2` baseline (reviewer-measured against a clean rebuild):
+
+| Asset | Baseline (`2c4faa2`) | This build | Delta |
+|---|---|---|---|
+| `index-*.js` (uncompressed) | 1,667.82 kB | 1,676.56 kB | +8.74 kB |
+| `index-*.js` (gzip) | 523.04 kB | 525.76 kB | +2.72 kB |
+| DagPanel chunk (gzip) | 505.23 kB | 505.23 kB | unchanged |
+
+The ~9 kB net is consistent with the `LogEventRow`/`TaskTypeBadge` UI cascade (Dev-6) plus the two `middleware.ts` guards. Type re-exports erase at build time (negligible). No regression on the DagPanel chunk.
+
+Test counts after review (matches implementer's report):
+
+| Workspace | Before | After | Delta |
+|---|---|---|---|
+| `server/` | 38 | 73 | +35 |
+| `packages/parser/` | 58 | 91 | +33 |
+| `app/` | 73 | 73 | 0 |
+| **Total** | **169** | **237** | **+68** |
+
+Reviewer's confidence notes (operator's stage-8 verification will exercise these):
+
+- Live server boot — DB creation, migration log line, idempotency on restart.
+- `sqlite3 .ledger/runner.db ".schema"` — confirm three tables + four task-indexes + one events-index in a production DB.
+- `ajv compile -s docs/_schemas/<each>.json` — meta-schema validation via the CLI (low risk; the schemas compile via ajv's JS API in tests).
+- `pnpm install` cold-cache prebuilt resolution on `darwin-arm64`.
+- UI smoke-test — `useTaskList` / `useLogStream` still render transcript-derived tasks after the type migration.
+- One additional reviewer observation: `task.schema.json` doesn't use `additionalProperties: false`. Spec's stated intent of defensive-on-hand-edit means unknown fields silently pass. Already covered by the existing Open Issue "no SQL CHECK constraints" (same hand-edit risk class); no action needed.
+
+Nothing punted. The two should-fix items are explicit cross-leaf deferrals; recorded above and (where applicable) inherited into the parent's Open Issues.
 
 ---
 

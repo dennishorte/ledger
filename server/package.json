@@ -6,19 +6,26 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "bin": { "ledger": "./dist/bin/ledger.js" },
+  "bin": {
+    "ledger": "./dist/bin/ledger.js"
+  },
   "scripts": {
     "dev": "tsx watch src/bin/ledger.ts --no-open",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "build": "tsc -b"
+    "build": "tsc -b && cp src/runner/migrations/*.sql dist/runner/migrations/"
   },
   "dependencies": {
-    "@ledger/parser": "workspace:*",
     "@hono/node-server": "^1.13.0",
+    "@ledger/parser": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^11.10.0",
     "hono": "^4.6.0",
     "open": "^10.0.0"
   },

@@ -233,6 +233,8 @@ export function deriveTask(entry: TranscriptEntry): Task {
       model !== undefined || persona !== undefined
         ? { model: model ?? "unknown", persona }
         : undefined,
+    dbRowVersion: 0,
+    priority: 0,
     createdAt: resolvedCreatedAt,
     startedAt: resolvedCreatedAt,
     completedAt,

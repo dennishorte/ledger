@@ -102,6 +102,12 @@ function startSseStream(
   }
 
   const taskId = task.id;
+  if (!task.transcriptPath) {
+    // Runner-emitted tasks have no JSONL transcript — nothing to stream.
+    res.write("event: close\ndata: {\"reason\":\"no_transcript\"}\n\n");
+    res.end();
+    return;
+  }
   const jsonlPath = task.transcriptPath;
 
   // Initial parse — send events with seq > lastSeq
@@ -221,6 +227,11 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): boolean {
     const task = taskMap.get(taskId);
     if (!task) {
       jsonNotFound(res);
+      return true;
+    }
+    if (!task.transcriptPath) {
+      // Runner-emitted tasks have no JSONL transcript — return the task with empty events.
+      jsonOk(res, { task, events: [] });
       return true;
     }
     const { events } = parseTranscriptFile(taskId, task.transcriptPath);
