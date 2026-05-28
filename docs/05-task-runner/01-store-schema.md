@@ -556,6 +556,58 @@ The app bundle delta vs baseline is minimal: the `types.ts` orchestration block 
 - **Item 10** (UI transcript-derived tasks still render, DAG still renders): requires running both dev servers and browser inspection.
 - **Item 5 spot-check** (`transcriptPath` guard placement correctness in middleware handlers): code review / manual test of a transcript-derived task's SSE stream.
 
+### Implementation Review (2026-05-27)
+
+Independent implementation review was run against this worktree (`worktree-agent-ad8ab8d0ae4474a65`, branched from main `2c4faa2`, no rebase needed — base equalled main HEAD). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, two should-fix (both explicit deferrals to later sub-leaves, not in-leaf fixes), three nits (cosmetic). All four high-leverage Spec Review closures confirmed in code. All 11 gates re-verified at exit 0.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 `noop` in TaskType | Confirmed: `packages/parser/src/runner/types.ts:32` lists `"noop"` with comment citing parent D8 + Spec Review B1. Also present in `task-input.schema.json` and `task.schema.json` type enums. | No action — confirmed. |
+| HL — B2 middleware.ts guards | Confirmed: `app/server/middleware.ts:105–110` guards SSE with `if (!task.transcriptPath)` → emits `event: close` + `reason: no_transcript`; `:232–235` guards the GET handler → returns `{ task, events: [] }`. Both bare reads now guarded. | No action — confirmed. |
+| HL — S3 PRAGMA outside tx | Confirmed: `server/src/runner/migrations/runner.ts:52–64` — `db.transaction(() => { ... })()` runs first, then `db.pragma(\`user_version = ...\`)` outside, with an inline comment citing S3. | No action — confirmed. |
+| HL — S4 status_change.from optional | Confirmed: `packages/parser/src/runner/types.ts:142` declares `from?: TaskStatus`; `store.ts:300–303` creation event passes `{ kind: "status_change", to: "PENDING" }` with no `from` field; `store.test.ts:71` asserts `expect("from" in evt).toBe(false)` — field absent, not just `undefined`. | No action — confirmed. |
+| Dev-1 INSERT OR IGNORE on migrations | ACCEPT — belt-and-suspenders idempotency over the primary `user_version <= currentVersion` guard. Semantically correct. | No action. |
+| Dev-2 `fileParallelism: false` in server vitest | ACCEPT — SQLite WAL-mode writer exclusion is real; 73-test serial run is 2.55s, negligible. | No action. |
+| Dev-3 `createStoreForProject({ projectRoot: string })` | ACCEPT — factory is called DURING `loadProjectContext` before `ProjectContext` is assembled; structural subtype is strictly correct. | No action. |
+| Dev-4 `cp src/runner/migrations/*.sql dist/runner/migrations/` in build | ACCEPT — TSC doesn't copy `.sql`; required for `pnpm exec ledger` invocation against compiled output. | No action. |
+| Dev-5 B2 guard response shape | ACCEPT — spec said "early return" as a fix description, not a mandated response shape. `event: close` for SSE + `{ task, events: [] }` for GET are strictly better than abrupt close / 404. | No action. |
+| Dev-6 `LogEventRow.tsx` + `TaskTypeBadge.tsx` UI cascade | ACCEPT — required by `pnpm -C app build` due to `from?` optionality (LogEventRow render path) and exhaustive switch over `TaskType` (TaskTypeBadge case for `noop`). Both fixes minimal and correct. | No action — spec's touch-up list was incomplete; cascade was unavoidable. |
+| S1 `listTasks` dynamic `db.prepare()` not cached | Should-fix. `store.ts:419` re-prepares on every call because the WHERE clause varies. Hot under repeated HTTP GET; not used by the scheduler. | Deferred to `04-api-endpoints` — flagged in this sub-leaf's Open Issues as a follow-up for that child. |
+| S2 `console.log` in production path | Should-fix. `server/src/runner/index.ts:23,26` — boot diagnostics on every server start. Spec Acceptance check item 6 explicitly expected these lines for operator verification, so correct as-is, but should migrate to a structured logger when one is established. | Deferred to `02-scheduler` or `04-api-endpoints` (whichever introduces the project-level logger first) — added as an inherited Open Issue note. |
+| N1 `@types/better-sqlite3` placement | Nit. Workspace-internal; impact zero. | No action. |
+| N2 `RawStatusRow` interface used once | Nit. Cosmetic. | No action. |
+| N3 `store.test.ts:66–67` guard style | Nit. Idiomatic-vitest stylistic preference. | No action. |
+
+Bundle delta vs `2c4faa2` baseline (reviewer-measured against a clean rebuild):
+
+| Asset | Baseline (`2c4faa2`) | This build | Delta |
+|---|---|---|---|
+| `index-*.js` (uncompressed) | 1,667.82 kB | 1,676.56 kB | +8.74 kB |
+| `index-*.js` (gzip) | 523.04 kB | 525.76 kB | +2.72 kB |
+| DagPanel chunk (gzip) | 505.23 kB | 505.23 kB | unchanged |
+
+The ~9 kB net is consistent with the `LogEventRow`/`TaskTypeBadge` UI cascade (Dev-6) plus the two `middleware.ts` guards. Type re-exports erase at build time (negligible). No regression on the DagPanel chunk.
+
+Test counts after review (matches implementer's report):
+
+| Workspace | Before | After | Delta |
+|---|---|---|---|
+| `server/` | 38 | 73 | +35 |
+| `packages/parser/` | 58 | 91 | +33 |
+| `app/` | 73 | 73 | 0 |
+| **Total** | **169** | **237** | **+68** |
+
+Reviewer's confidence notes (operator's stage-8 verification will exercise these):
+
+- Live server boot — DB creation, migration log line, idempotency on restart.
+- `sqlite3 .ledger/runner.db ".schema"` — confirm three tables + four task-indexes + one events-index in a production DB.
+- `ajv compile -s docs/_schemas/<each>.json` — meta-schema validation via the CLI (low risk; the schemas compile via ajv's JS API in tests).
+- `pnpm install` cold-cache prebuilt resolution on `darwin-arm64`.
+- UI smoke-test — `useTaskList` / `useLogStream` still render transcript-derived tasks after the type migration.
+- One additional reviewer observation: `task.schema.json` doesn't use `additionalProperties: false`. Spec's stated intent of defensive-on-hand-edit means unknown fields silently pass. Already covered by the existing Open Issue "no SQL CHECK constraints" (same hand-edit risk class); no action needed.
+
+Nothing punted. The two should-fix items are explicit cross-leaf deferrals; recorded above and (where applicable) inherited into the parent's Open Issues.
+
 ---
 
 ## Verification
