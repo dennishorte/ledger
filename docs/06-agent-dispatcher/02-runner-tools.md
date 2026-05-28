@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/02-runner-tools`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete, all gates green)
+**Last Updated:** 2026-05-28 (VERIFY → COMPLETE — operator manually verified five tools advertised, status_pre_check rejection, task_not_bound rejection, cross-task get_task, activeSessions tracking via live server)
 
 **Dependencies:** `06-agent-dispatcher/01-mcp-server` (MCP scaffolding, session-lifecycle hooks, `ProjectContext.mcp`), `05-task-runner` (transitively: `RunnerHandle`, `Store`, the `Task` / `LogEvent` types and their ajv validators)
 
