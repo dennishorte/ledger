@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Curl wrapper for the Vite UI dev server.
+#
+# Sibling of api-curl. Where api-curl targets the Hono API on 4180 and
+# requires /api/<path>, this wrapper targets the UI on 4179
+# (LEDGER_UI_PORT) and accepts any route Vite serves — /, /tasks, /dag,
+# /docs, /logs/<id>, /health, /assets/..., /@vite/..., etc.
+#
+# Path convention: the path MUST be the last positional argument. The
+# wrapper rewrites the final arg if it starts with "/" — earlier args
+# beginning with "/" (e.g. -o /dev/null) are left as-is so curl flag
+# values pass through unchanged. Absolute URLs (anything containing
+# "://") are rejected, so the wrapper cannot be coerced into calling
+# arbitrary hosts.
+#
+# Pass -j / --json to suppress the curl progress meter and pretty-print
+# the response body through jq (falling back to python3 -m json.tool, or
+# raw if neither is available + the body isn't valid JSON). Useful when
+# fetching a route that happens to return JSON.
+#
+# All other curl features pass through: -X, -H, -d, -N, --max-time, -o,
+# -i, -w, etc.
+#
+# Usage:
+#   ui-curl [opts] /<path>
+#
+# Examples:
+#   ui-curl /tasks                                                        # GET /tasks (HTML)
+#   ui-curl -o /dev/null -w '%{http_code}\n' /tasks                       # confirm route loads
+#   ui-curl /tasks | head -20                                             # inspect HTML head
+#   ui-curl -i /                                                          # headers + body
+#   ui-curl -N --max-time 3 /logs/<id>                                    # stream (LogStream panel HTML)
+#   ui-curl -j /api/transcripts                                           # JSON via Vite proxy/middleware
+set -euo pipefail
+
+if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
+
+ui_port="${LEDGER_UI_PORT:-4179}"
+json_mode=0
+
+# Pass 1 — peel off wrapper-owned flags + reject absolute URLs.
+filtered=()
+for arg in "$@"; do
+  case "$arg" in
+    -j|--json) json_mode=1 ;;
+    *://*)
+      echo "ui-curl: absolute URLs are not allowed; use /<path>" >&2
+      exit 2
+      ;;
+    *) filtered+=("$arg") ;;
+  esac
+done
+
+if [[ ${#filtered[@]} -eq 0 ]]; then
+  echo "ui-curl: missing /<path> argument" >&2
+  exit 2
+fi
+
+host="http://localhost:${ui_port}"
+
+# Pass 2 — rewrite the LAST arg if it's path-shaped. Earlier args are
+# left alone so flag values like `-o /dev/null` pass through. This is
+# the cost of accepting any "/<route>" path — unlike api-curl's narrow
+# ^/api(/|$) which can match anywhere, "/..." is ambiguous with flag
+# values, so we anchor on argument position.
+last_idx=$((${#filtered[@]} - 1))
+last="${filtered[$last_idx]}"
+
+if [[ "$last" != "/" ]] && [[ ! "$last" =~ ^/[a-zA-Z0-9_@.-] ]]; then
+  echo "ui-curl: last argument must be a /<path> (got: $last)" >&2
+  exit 2
+fi
+
+filtered[$last_idx]="${host}${last}"
+
+if (( json_mode )); then
+  body=$(curl -sS "${filtered[@]}")
+  if command -v jq >/dev/null 2>&1 && printf '%s' "$body" | jq . >/dev/null 2>&1; then
+    printf '%s' "$body" | jq .
+  elif command -v python3 >/dev/null 2>&1 && printf '%s' "$body" | python3 -m json.tool >/dev/null 2>&1; then
+    printf '%s' "$body" | python3 -m json.tool
+  else
+    printf '%s\n' "$body"
+  fi
+else
+  exec curl "${filtered[@]}"
+fi

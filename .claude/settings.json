@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(.claude/scripts/api-curl *)",
+      "Bash(.claude/scripts/ui-curl *)",
       "Bash(.claude/scripts/lines *)",
       "Bash(.claude/scripts/wait-ready)",
       "Bash(.claude/scripts/wait-ready *)",
