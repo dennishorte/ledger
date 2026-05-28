@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import { validateProjectMetadata } from "@ledger/parser";
 import type { ProjectMetadata, ValidationError } from "@ledger/parser";
 import { assertContained } from "./pathSafety.js";
-import { createStoreForProject } from "./runner/index.js";
-import type { Store } from "./runner/index.js";
+import { createRunnerForProject } from "./runner/index.js";
+import type { Store, Runner } from "./runner/index.js";
 
 export interface ProjectContext {
   projectRoot: string;
@@ -12,7 +12,8 @@ export interface ProjectContext {
   project: ProjectMetadata;
   port: number;
   startedAt: string;
-  store: Store;
+  store: Store;   // same reference as runner.store — kept for backwards compat (D12)
+  runner: Runner; // NEW — wired in this sub-leaf per Requirements item 9
 }
 
 export class ContextError extends Error {
@@ -54,7 +55,7 @@ export async function loadProjectContext(opts: {
     throw new ContextError(`docs path escapes project root: docs=${result.metadata.docs}`);
   }
 
-  const store = createStoreForProject({ projectRoot });
+  const runner = createRunnerForProject({ projectRoot });
 
   return {
     projectRoot,
@@ -62,6 +63,7 @@ export async function loadProjectContext(opts: {
     project: result.metadata,
     port: opts.port,
     startedAt: new Date().toISOString(),
-    store,
+    store: runner.store,
+    runner,
   };
 }
