@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/01-mcp-server`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — stage-4 implementation complete; all gates green)
+**Last Updated:** 2026-05-28 (VERIFY → COMPLETE — operator manually verified all 5 acceptance items via running server)
 
 **Dependencies:** `05-task-runner` (workspace, server package, `ProjectContext`, Hono app)
 
