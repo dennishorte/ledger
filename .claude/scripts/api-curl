@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
-# Curl wrapper restricted to the local ledger API server.
+# Curl wrapper restricted to the local ledger services.
 #
 # Passes every argument through to curl unchanged EXCEPT the URL, which must
 # be a relative path starting with /api/ — the wrapper prepends
-# http://127.0.0.1:${LEDGER_PORT:-4180}. Absolute URLs (anything containing
-# "://") are rejected, so the wrapper cannot be coerced into calling arbitrary
-# hosts.
+# http://localhost:<port>. Host is hardcoded to localhost (resolves to either
+# 127.0.0.1 or ::1, matching whichever address family Vite/Hono bind to).
+# Absolute URLs (anything containing "://") are rejected, so the wrapper
+# cannot be coerced into calling arbitrary hosts.
+#
+# By default the port is the Hono API server (LEDGER_PORT, default 4180).
+# Pass --via-ui to route through the Vite dev server on 4179 instead — needed
+# for endpoints served by Vite middleware that the API proxy never sees
+# (e.g. /api/transcripts/* via app/server/middleware.ts).
 #
 # All curl features pass through: -X, -H, -d, -N, --max-time, -o, -w, etc.
 #
 # Usage:
 #   api-curl /api/<path>
 #   api-curl [curl options] /api/<path> [more options]
+#   api-curl --via-ui /api/transcripts/<id>
 #
 # Examples:
 #   api-curl /api/tasks
@@ -19,27 +26,41 @@
 #   api-curl -N --max-time 3 /api/tasks/<id>/stream
 #   api-curl -H 'Last-Event-ID: 0' -N --max-time 3 /api/tasks/<id>/stream
 #   api-curl -o /dev/null -w '%{http_code}\n' /api/tasks/missing
+#   api-curl --via-ui /api/transcripts/<id>
 set -euo pipefail
 
 if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
-port="${LEDGER_PORT:-4180}"
-host="http://127.0.0.1:${port}"
+api_port="${LEDGER_PORT:-4180}"
+ui_port="${LEDGER_UI_PORT:-4179}"
+port="$api_port"
 
 rewritten=()
 path_count=0
 for arg in "$@"; do
+  if [[ "$arg" == "--via-ui" ]]; then
+    port="$ui_port"
+    continue
+  fi
   if [[ "$arg" == *"://"* ]]; then
     echo "api-curl: absolute URLs are not allowed; use /api/<path>" >&2
     exit 2
-  elif [[ "$arg" =~ ^/api(/|$) ]]; then
-    rewritten+=("${host}${arg}")
+  fi
+  rewritten+=("$arg")
+done
+
+host="http://localhost:${port}"
+
+final=()
+for arg in "${rewritten[@]}"; do
+  if [[ "$arg" =~ ^/api(/|$) ]]; then
+    final+=("${host}${arg}")
     path_count=$((path_count + 1))
   else
-    rewritten+=("$arg")
+    final+=("$arg")
   fi
 done
 
@@ -48,4 +69,4 @@ if [[ $path_count -eq 0 ]]; then
   exit 2
 fi
 
-exec curl "${rewritten[@]}"
+exec curl "${final[@]}"
