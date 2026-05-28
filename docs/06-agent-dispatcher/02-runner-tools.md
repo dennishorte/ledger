@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/02-runner-tools`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
+**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 2 blocking + 4 should-fix + 4 nits from independent review; parent doc amended for B2 scope conformance)
 
 **Dependencies:** `06-agent-dispatcher/01-mcp-server` (MCP scaffolding, session-lifecycle hooks, `ProjectContext.mcp`), `05-task-runner` (transitively: `RunnerHandle`, `Store`, the `Task` / `LogEvent` types and their ajv validators)
 
@@ -41,7 +41,7 @@ In scope for v1:
     - **`runner.emit_event`** ajv path: a malformed `event` body (e.g., `kind: "reasoning"` with missing required `text`) round-trips an `InvalidParams` McpError with the ajv `errors` array in `data`.
     - **`runner.await_human_review`** side effect: `store.updateReviewPayload(taskId, payload)` is observed in a follow-up `loadTask(taskId)` (the `reviewPayload` column reflects the new value); the subsequent `awaitHumanReview` transition lands a status_change event.
     - **`store.updateReviewPayload`** unit-test: round-trip against `:memory:`. Update succeeds; update on missing id throws.
-    - **`setToolRequestHandlers()` cast retired.** `01-mcp-server`'s Open Issue noted this; the test that previously failed without the cast (`tools/list` returning `MethodNotFound`) now passes naturally because `registerTool` re-enters the same code path through a public surface. The leaf removes the cast call from `dispatcher/mcp/server.ts` and verifies via the existing `01-mcp-server` test that the `tools` capability is still advertised at handshake time — the SDK's `registerTool` now drives it.
+    - **`setToolRequestHandlers()` cast retired.** `01-mcp-server`'s Open Issue noted this; the test that previously failed without the cast (`tools/list` returning `MethodNotFound`) now passes naturally because `registerTool` re-enters the same code path through a public surface. The leaf removes the cast call from `dispatcher/mcp/server.ts` and verifies via the existing `01-mcp-server` test that the `tools` capability is still advertised at handshake time — the SDK's `registerTool` now drives it. **Cross-doc closure ceremony (Spec Review N4):** the Open Issue entry in `01-mcp-server.md` is edited directly in this leaf's commit to mark it RESOLVED, with the resolution text; the commit message references the closure. Direct file edit, not commit-message-only.
 11. **Build / typecheck / lint / test green** across the workspace. Bundle delta on `app/` zero (no UI changes). Server `dist/` delta reported in Implementation Notes against the post-`01-mcp-server` baseline.
 
 **Out of scope for this child:**
@@ -80,7 +80,8 @@ ledger/
 │   │           ├── binding.ts                      # NEW — createBindingRegistry(), BindingRegistry interface
 │   │           ├── tools.ts                        # NEW — registerRunnerTools(server, ctx, binding)
 │   │           ├── toolSchemas.ts                  # NEW — Zod schemas for all five tools
-│   │           └── types.ts                        # modified — BindingRegistry type
+│   │           └── types.ts                        # unchanged — McpServerHandle, MCPSessionId, listener
+│   │                                                #   types stay here; BindingRegistry lives in binding.ts
 │   └── test/
 │       └── dispatcher/
 │           └── mcp/
@@ -140,6 +141,10 @@ export const getTaskShape = {
 ```ts
 // server/src/dispatcher/mcp/tools.ts
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+// Import path verification (Spec Review N3 / Confidence note): the SDK's package.json exports map
+// has an explicit `./types.js` entry via its `./*` catch-all glob. nodenext module resolution
+// honours this in practice; implementer re-confirms post-install. If resolution fails, McpError
+// is also re-exported transitively via @modelcontextprotocol/sdk/server/mcp.js — fall back there.
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { validateLogEvent } from "@ledger/parser";
 import type { BindingRegistry } from "./binding.js";
@@ -251,6 +256,26 @@ export function registerRunnerTools(server: McpServer, deps: RunnerToolDeps): vo
 
 The tool callback signature is `(args, extra) => ToolResult`. `extra` carries `sessionId` (the SDK's stateful-session id, populated by the transport on every request after `initialize`). The pre-bound `taskId` returned by `requireBound` is the *bound* task id from the registry — for non-`get_task` tools, we use this rather than `args.task_id` to defend against the case where `args.task_id` matched but the binding entry had a different (impossible) value. In practice `requireBound` already enforces equality, so the returned value equals `args.task_id`; the assignment is documentation that the bound id is the authoritative one.
 
+**Status pre-check on transition tools (Spec Review N2).** `runner.complete_task`, `runner.fail_task`, and `runner.await_human_review` each call `RunnerHandle.complete` / `fail` / `awaitHumanReview` which expect the task to be RUNNING. The current `Store.updateTaskStatus` does NOT enforce `from === actual_status` outside the OCC path — a double-call would silently write a misleading `RUNNING → COMPLETE` status_change event onto an already-COMPLETE task. The handlers defend by reading `store.getStatus(taskId)` before the transition and throwing `McpError(InvalidParams, "task_not_running", { reason, actual: currentStatus })` when the task is not RUNNING:
+
+```ts
+async (args, extra) => {
+  const taskId = binding.requireBound(extra.sessionId, args.task_id);
+  const current = store.getStatus(taskId);
+  if (current !== "RUNNING") {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      "task_not_running",
+      { reason: "task_not_running", actual: current, expected: "RUNNING" },
+    );
+  }
+  const task = handle.complete(taskId);  // or fail / awaitHumanReview
+  return { content: [{ type: "text", text: JSON.stringify({ status: task.status }) }] };
+},
+```
+
+This is one cheap `getStatus` read per transition call (already a prepared statement in `Store`); the cost is negligible and the latent-double-call hazard is closed at the leaf level without pushing scope into `05-task-runner/01-store-schema`. Test coverage adds a "complete an already-COMPLETE task → InvalidParams task_not_running" case for each of the three transition tools.
+
 ### Binding registry
 
 ```ts
@@ -353,7 +378,14 @@ updateReviewPayload(taskId, reviewPayload) {
 }
 ```
 
-`ReviewPayload` is the existing type in `@ledger/parser/runner/types.ts` (added by `03-hitl-gate`); no new type. The `info.changes === 0` check is the typed-error path; the prepared statement caches at construction time per the existing store pattern.
+`ReviewPayload` does NOT currently exist as a named exported type in `@ledger/parser/src/runner/types.ts` — the struct `{ summary: string; diffRef?: string }` is currently inlined on the `reviewPayload` fields of `Task` and `TaskInput` (verified at draft time; Spec Review B1). The implementer adds:
+
+```ts
+// packages/parser/src/runner/types.ts (additive)
+export type ReviewPayload = { summary: string; diffRef?: string };
+```
+
+Then updates the inline-typed fields on `Task.reviewPayload` and `TaskInput.reviewPayload` to reference the alias (mechanical rename — no shape change). `@ledger/parser/src/index.ts` re-exports `ReviewPayload` alongside the other runner types. The `info.changes === 0` check is the typed-error path; the prepared statement caches at construction time per the existing store pattern.
 
 ### Wiring at `loadProjectContext`
 
@@ -404,16 +436,13 @@ Order in `loadProjectContext` is critical: hook subscriptions before tool regist
 
 The cast disappears entirely. The first `server.registerTool(...)` call in `registerRunnerTools` (now invoked during `loadProjectContext` per the wiring above) re-enters the same internal handler-registration path through the SDK's `_createRegisteredTool → setToolRequestHandlers` chain — confirmed in `mcp.js` line 650. The existing test in `01-mcp-server`'s test file that asserts `tools/list` returns an empty array continues to pass (now returns the five registered tools after this leaf — that test gets a corresponding update OR moves to assert "tools/list returns at least one tool" in keeping with backwards-compat).
 
-The corresponding Open Issue in `01-mcp-server.md` (`setToolRequestHandlers() private-method cast for eager capability advertisement`) is closed in this leaf's commit via a sibling-edit note in §Implementation Notes; the entry is updated to "RESOLVED 2026-05-28 by `02-runner-tools` registerTool() side effect."
+The corresponding Open Issue in `01-mcp-server.md` (`setToolRequestHandlers() private-method cast for eager capability advertisement`) is **edited directly** in this leaf's commit — the entry's status line is rewritten to "RESOLVED 2026-05-28 by `02-runner-tools` registerTool() side effect" so future readers see the closure inline rather than chasing commit messages. The implementer's stage-4 commit message references the cross-doc closure for traceability.
 
 ### `01-mcp-server`'s test update
 
-`server/test/dispatcher/mcp/server.test.ts` has a test asserting `tools/list` returns `{ tools: [] }` — pre-this-leaf accurate, post-this-leaf wrong. Two options:
+`server/test/dispatcher/mcp/server.test.ts` has a test asserting `tools/list` returns `{ tools: [] }` — pre-this-leaf accurate, post-this-leaf wrong. The leaf's existing `makeHandle()` test helper constructs a bare `McpServerHandle` without tool registration; making the original assertion count five tools would require the test helper to also call `registerRunnerTools(...)`, coupling the transport-only test fixture to domain logic.
 
-- **A.** Update the existing test to assert `tools` count ≥ 5 and that all five tool names match.
-- **B.** Add new tests in this leaf's `tools.test.ts` that cover the five-tool advertisement; relax the existing `01-mcp-server` test to assert "tools array is present" without count.
-
-Decision: **A**. The advertised-tool set is meaningful behaviour; under-asserting is worse than the slight cross-leaf coupling. The change is one line in the existing test; it's mechanical and documents that "now there are tools."
+Decision (Spec Review S2): relax the existing `01-mcp-server` test rather than couple. The existing assertion `expect(tools).toHaveLength(0)` is rewritten to `expect(Array.isArray(tools)).toBe(true)` — verifies the response shape without claiming a count. The exhaustive "five tools registered with the right names and descriptions" assertion lives in this leaf's `tools.test.ts` (which CAN cleanly call `registerRunnerTools` because it owns that wiring). Result: `01-mcp-server`'s transport test stays scoped to transport; this leaf's tool tests own the tool-advertisement assertions. Single-line edit in `server.test.ts`; cross-leaf coupling avoided.
 
 ### Acceptance check (manual, end-to-end)
 
@@ -444,8 +473,8 @@ Decision: **A**. The advertised-tool set is meaningful behaviour; under-assertin
 | D7 | `requireBound`'s rejection mode taxonomy (`no_session`, `session_not_bound`, `task_id_mismatch`) is internal-data-only; the user-visible message is always `"task_not_bound"` | The agent doesn't need to distinguish the three modes operationally — all three mean "you cannot mutate this task." The reason taxonomy is useful for the operator debugging via the agent's emitted error log and for tests asserting on specific rejection cases. Keeping the message string stable and surfacing the reason via `data` is the standard JSON-RPC error convention. |
 | D8 | `runner.get_task` does NOT check the binding; cross-task reads are open per parent D8 | The agent has filesystem access to `.ledger/runner.db` and could read any task by querying SQLite directly. The MCP tool exposing the same read is no more permissive than the existing capability. The benefit is ergonomic: the agent doesn't need to know SQLite's schema; the tool returns a structured response. Mutations remain bound (D7 enforces). |
 | D9 | `Runner` interface gains a `handle: RunnerHandle` getter — the existing internal `handle` from `createRunner` becomes a public read-only property | The tools layer needs `RunnerHandle` to call `emit` / `complete` / `fail` / `awaitHumanReview`. The existing surface (`createTask`, `registerExecutor`, `tick`) is the executor-facing API; the tools layer is a sibling consumer that needs the executor-style handle without being an executor. Exposing it preserves the executor's invariant (handle is callable from any async context, not just executor `run()`) — `better-sqlite3`'s synchronous-on-single-connection model already serializes mutations. |
-| D10 | `store.updateReviewPayload` is a one-liner non-transactional UPDATE; the follow-up `awaitHumanReview` transition handles durability | Composing the two in a transaction would force the tool handler to participate in a `better-sqlite3` transaction, which would couple this leaf's tools to the Store's transaction primitive in a way the existing approve/reject endpoints do not. The status_change event from `awaitHumanReview` IS the durability boundary; if the handler crashes between the UPDATE and the transition, the task is still RUNNING (no status change), and the operator-visible state is consistent (next agent retry, or operator cancel, drives forward). Logged as a TRIVIAL Open Issue. |
-| D11 | Zod added as a direct `dependencies` entry in `server/package.json`, not relied on as a transitive of the SDK | The SDK declares Zod as a non-optional peer with version range `^3.25 || ^4.0`. Relying on the transitive means our import resolves through pnpm's phantom-dependency rules, which lint can flag and which break if the SDK's peer range narrows. Direct dep is explicit, lint-clean, and pinned next to the SDK in `package.json`. The dep is the same physical install — no bundle delta. |
+| D10 | `store.updateReviewPayload` is a one-liner non-transactional UPDATE; the follow-up `awaitHumanReview` transition handles durability | Composing the two in a transaction would force the tool handler to participate in a `better-sqlite3` transaction, which would couple this leaf's tools to the Store's transaction primitive in a way the existing approve/reject endpoints do not. The status_change event from `awaitHumanReview` IS the durability boundary. Failure-mode precision (Spec Review S3): if the handler crashes between the UPDATE and the transition, the task is still RUNNING with an updated `reviewPayload` but no `AWAITING_HUMAN_REVIEW` transition. The approve/reject endpoints from `03-hitl-gate` gate on `status === AWAITING_HUMAN_REVIEW` and return 409 otherwise, so they cannot drive recovery from this state. Recovery paths: (a) the agent retries `runner.await_human_review` — the UPDATE is idempotent, the transition then lands; (b) the operator cancels the task via `05-dispatch-api`'s upcoming cancel endpoint. Both are correct end states. Logged as a TRIVIAL Open Issue. |
+| D11 | Zod added as a direct `dependencies` entry in `server/package.json`, not relied on as the SDK's transitive | The SDK lists Zod as BOTH a peer dep (`^3.25 \|\| ^4.0`, non-optional) and a bundled `dependencies` entry (same range). pnpm resolves the bundled copy automatically, so there is no phantom-dep risk per se — but `server/src` directly imports `zod`, and listing the dep explicitly is the hygiene that matches the codebase's existing pattern (every package that imports a symbol declares the symbol's owner). Pins the version alongside `@modelcontextprotocol/sdk`'s range and documents the server's direct Zod usage rather than treating it as an SDK implementation detail. The physical install is the same as the bundled copy — no bundle delta. |
 | D12 | The five tool registrations happen in `loadProjectContext`, not in `01-mcp-server`'s `createMcpServerAsync` factory | The factory's job is transport scaffolding; tool registration is a domain concern. Co-locating in `loadProjectContext` keeps the McpServer factory generic (testable with no domain coupling) and puts the wiring next to `runner` + `mcp` which the tools need. Mirrors the pattern from `01-mcp-server`'s §Design: factory creates, context wires. |
 | D13 | The `runner.emit_event` handler rejects `event.kind === "status_change"` with `InvalidParams` | Status-change events are written transactionally by `RunnerHandle.complete` / `fail` / `awaitHumanReview` and by the scheduler. Allowing the agent to inject a synthetic `status_change` via `runner.emit_event` would race the real transition, corrupt the events stream's ordering invariant (status changes interleave with their causing transition), and provide no value the existing transition tools don't already cover. Explicit rejection with a helpful message is the right shape. |
 
@@ -459,7 +488,39 @@ Decision: **A**. The advertised-tool set is meaningful behaviour; under-assertin
 - **`runner.await_human_review` non-transactional UPDATE.** D10 acknowledges: the `updateReviewPayload` UPDATE and the subsequent `awaitHumanReview` transition are two writes; a crash between them leaves the task RUNNING with the new `reviewPayload`. Functionally benign (operator cancel or agent retry both drive forward), but a strict-correctness argument for composing them in a transaction exists. The composition would couple the tool to `better-sqlite3`'s transaction primitive — out of scope for v1. *(Priority: TRIVIAL — benign failure mode; recovery paths handle it.)*
 - **`Runner.handle` exposure widens the executor-facing API to a tools-facing consumer.** D9 made the choice; the API now has two callers (executors via `run(task, handle)` and tools via `registerRunnerTools(mcp.server, { handle, ... })`). If a future leaf needs to constrain the tools' surface (e.g., disallow `complete` for certain agents), branding the consumer in the handle's type would help. Defer until needed. *(Priority: TRIVIAL.)*
 - **Binding registry is process-local; no cross-process awareness.** Inherited from `01-mcp-server`. Multi-process scenarios (one runner serving multiple subprocesses across machines) are out of scope; the registry would need a distributed map (Redis, etc.) and v1's MCP transport is bound to `127.0.0.1` regardless. *(Priority: TRIVIAL — Phase-2 concern.)*
-- **`status_change`-via-`runner.emit_event` rejection (D13) is enforced in the handler, not at the Zod schema** Catching this at the Zod level would require either a Zod discriminated-union over all valid kinds (duplicating the JSON Schema) or a `.refine()` callback. The handler-level reject is simpler and the failure mode (a single user-visible `InvalidParams` error) is identical. *(Priority: TRIVIAL.)*
+- **`status_change`-via-`runner.emit_event` rejection (D13) is enforced in the handler, not at the Zod schema.** Catching this at the Zod level would require either a Zod discriminated-union over all valid kinds (duplicating the JSON Schema) or a `.refine()` callback. The handler-level reject is simpler and the failure mode (a single user-visible `InvalidParams` error) is identical. **Second-line defense**: if the agent attempts to bypass the handler check via casing (`"STATUS_CHANGE"`) or whitespace (`"status_change "`), the subsequent `validateLogEvent` (ajv) rejects with `invalid_event_shape` — a less informative but still correct error; no malformed event enters the events table. *(Priority: TRIVIAL.)*
+
+---
+
+## Spec Review (2026-05-28)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: **NEEDS_MINOR_REVISIONS** — 2 Blocking (B1, B2), 4 Should-fix (S1–S4), 4 Nits (N1–N4), 6 Confidence notes. PRD coverage matrix returned Addressed across §5/§6.1/§6.2/§7; §9 marked Partially (D2 deferral, parent amendment landed this commit per B2); §11 N/A. All findings applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `ReviewPayload` does not currently exist as a named exported type in `@ledger/parser/src/runner/types.ts`; the struct `{ summary, diffRef? }` is inlined on `Task.reviewPayload` and `TaskInput.reviewPayload`. The `Store.updateReviewPayload(taskId, reviewPayload: ReviewPayload)` signature would not compile as spec'd. | §`store.updateReviewPayload` updated to explicitly require the implementer to add `export type ReviewPayload = { summary: string; diffRef?: string }` to `@ledger/parser/src/runner/types.ts`, refactor the inline-typed fields on `Task` and `TaskInput` to reference the alias, and re-export from the parser package's index. Mechanical rename, no shape change. |
+| B2 | Parent's Children manifest row for `02-runner-tools` named `docs/_schemas/dispatcher-tools.schema.json` as a deliverable; D2's deferral leans on a parenthetical in parent §MCP tool surface that read as documentation of the leaf's deferral rather than parent-level authorization. Scope-conformance audit at stage 10 would flag the gap. | Parent `00-agent-dispatcher.md` amended in the SPEC_REVIEW → APPROVED commit (two edits): §MCP tool surface rewritten to explicitly authorize the deferral and cite `02-runner-tools` D1/D2/D4 as the canonical decision; Children manifest row rewritten to remove the schema-file deliverable and add the deferral citation. Parent now explicitly endorses the leaf's deferral; stage-10 conformance audit will see aligned doc tree. |
+| S1 | D11's rationale mischaracterized the Zod-vs-SDK relationship — the SDK bundles Zod as both a peer AND a direct `dependencies` entry, so phantom-dep risk doesn't apply; the direct-dep hygiene argument stands on its own grounds. | D11 rationale rewritten to clarify the SDK's actual dep declaration and frame the direct-dep addition as pinning + documentation hygiene rather than phantom-dep avoidance. |
+| S2 | The proposed Option A update to `01-mcp-server`'s `tools/list` test (count five) would require the test fixture to call `registerRunnerTools` — coupling the transport-only test to domain logic. | §"01-mcp-server's test update" rewritten to pick Option B: relax the existing assertion to `expect(Array.isArray(tools)).toBe(true)`; exhaustive five-tool assertion lives in this leaf's `tools.test.ts` which owns the registration. Cross-leaf coupling eliminated. |
+| S3 | D10's recovery-story prose overstated what the approve/reject endpoints can do in the crash-window state — they cannot drive recovery from `RUNNING` with updated `reviewPayload`. | D10 prose tightened to enumerate the two real recovery paths: (a) agent retries `runner.await_human_review` (UPDATE is idempotent); (b) operator cancels via the upcoming `05-dispatch-api` cancel endpoint. Approve/reject explicitly noted as non-recovery paths in this state. |
+| S4 | §Repository layout marked `types.ts` as "modified — BindingRegistry type" but the §Design code samples placed `BindingRegistry` in `binding.ts`. | Layout entry changed to `types.ts # unchanged — McpServerHandle, MCPSessionId, listener types stay here; BindingRegistry lives in binding.ts`. |
+| N1 | The Open Issue acknowledging `status_change` rejection enforcement in the handler did not note the second-line defense (ajv catches the malformed event even if the handler check is bypassed via casing/whitespace). | Open Issue body extended with: "Second-line defense: if the agent bypasses via casing or whitespace, `validateLogEvent` rejects with `invalid_event_shape` — a less informative but still correct error; no malformed event enters the store." |
+| N2 | `runner.complete_task` / `fail_task` / `await_human_review` handlers called `RunnerHandle.complete` / `fail` / `awaitHumanReview` without checking the task is RUNNING; the current `Store.updateTaskStatus` does not enforce `from === actual_status` outside the OCC path, so a double-call would silently write a misleading status_change event. | New §"Status pre-check on transition tools" added under §Tool registration: handlers read `store.getStatus(taskId)` first and throw `McpError(InvalidParams, "task_not_running", ...)` when the task is not RUNNING. Test coverage adds one case per transition tool for the non-RUNNING rejection. |
+| N3 | `import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js"` resolves via the SDK's `./*` catch-all exports glob; the path is fragile under future SDK `exports` map narrowing. | Inline comment in the `tools.ts` code block flags the import path as verified-against-1.29.0 and identifies `@modelcontextprotocol/sdk/server/mcp.js` as the fallback path where `McpError` is also re-exported. Stage-4 implementer re-confirms post-install. |
+| N4 | Two contradictory statements about the `01-mcp-server` Open Issue closure ceremony — one said §Implementation Notes, the other said commit message only. | Both statements aligned: the Open Issue entry is **edited directly** in `01-mcp-server.md` (resolution status line rewritten) as part of this leaf's commit; the commit message references the closure for traceability. Direct-edit, not commit-message-only. |
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer to spot-check — verified-against-source claims):
+
+1. **`Runner.handle` exposure is genuinely required.** Reviewer confirmed `Runner` (lines 45–57 of `server/src/runner/scheduler.ts`) currently exposes `store`, `events`, `createTask`, `registerExecutor`, `tick`, `close` — but NOT `handle`. The `handle` variable (line 73 of `scheduler.ts`) is closed over inside `createRunner` and not on the returned `Runner`. D9's widening is real, not a documentation gap.
+2. **`setToolRequestHandlers()` cast retirement verified at `mcp.js` lines 57/144/650/704.** `_createRegisteredTool` calls `setToolRequestHandlers` at line 650; the method's idempotency guard is `_toolHandlersInitialized` (set true at line 144, early-returns at line 58). So the first `registerTool` call after the cast is removed re-enters the same code path and the SDK no-ops because the flag is already set. **Critical ordering**: the cast removal in `server.ts` and `registerRunnerTools` wiring in `loadProjectContext` MUST land in the same commit; the spec is correct on this.
+3. **`validateLogEvent` synthetic-prefix is throwaway-only.** Reviewer confirmed the `{ id: "_pre", taskId, seq: -1, at: "1970-01-01T00:00:00Z", ...candidate }` shape is constructed for ajv validation only; `handle.emit(taskId, candidate)` passes the clean `candidate` (without sentinel fields) to the store. No sentinel leakage.
+4. **Tool result shape `{ content: [{ type: "text", text: string }] }` accepted by `CallToolResultSchema`.** Verified at `types.js` lines 1015 and 1131 against the installed SDK. D5 is correct.
+5. **Zod is bundled by the SDK as both peer and direct dep.** Reviewer confirmed via the SDK's `package.json` at the extracted tarball. The direct-dep addition to `server/package.json` is hygiene, not phantom-dep avoidance — S1's rationale tightening applied.
+6. **`03-hitl-gate` approve/reject endpoints gate on `status === AWAITING_HUMAN_REVIEW`.** Reviewer confirmed at `hitl.ts` lines 30 and 83 — both return 409 if the task is not in that state. D10's recovery story (S3 fix) is now accurate.
+
+Reviewer's structural assessment: scope is appropriate for the parent's amended Children manifest row; tone matches `05-task-runner/01-store-schema.md` and `06-agent-dispatcher/01-mcp-server.md`. D1 (Zod over ajv at the tool-arg layer) is sound; D4 (ajv inside `emit_event` for the LogEvent body) preserves the parent's prescription for the heaviest validation surface. Spec internally consistent post-fixes. Ready for APPROVED.
+
+Nothing punted; all 2 blocking + 4 should-fix + 4 nits + 6 confidence notes landed.
 
 ---
 
