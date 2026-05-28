@@ -42,6 +42,8 @@ pnpm test                                                 # fans out across all 
 
 The UI's `/dag` panel consumes `GET /api/docs` live via TanStack Query (with a build-time placeholder fallback so the UI degrades gracefully if the server is down). The Vite dev proxy at `app/vite.config.ts` forwards `/api/*` → `http://127.0.0.1:4180/api/*` so every browser request is same-origin (no CORS).
 
+**Task-runner store**: on first server boot since `05-task-runner/01-store-schema` (2026-05-27), `.ledger/runner.db` is created (with `runner.db-wal` + `runner.db-shm` sidecars — WAL journal mode is pinned). All three are gitignored. Migration `001-initial` is applied transactionally on first boot; subsequent boots log `runner: schema is current at user_version=1` and no-op. `better-sqlite3@^11` is a native dep — `pnpm install` resolves a prebuilt on `darwin-arm64`/`linux-x64` etc.; cold-cache machines without a prebuilt fall back to `node-gyp rebuild`, which needs Xcode CLT on darwin. The store API is `server/src/runner/store.ts`; the scheduler that drives it (`02-scheduler`) is PLANNED.
+
 **Booting the server — three options:**
 
 | Command | When to use | Build prereq |
@@ -75,7 +77,7 @@ See `.claude/scripts/README.md` for the inventory. If you find yourself running 
 - **Single cream theme only** — no dark mode, no `data-theme` attribute, no alternate token block.
 - **React Router v7** (not TanStack Router — that was reversed for community depth; see `docs/01-ui/00-ui.md` D3).
 - **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`.
-- **Domain types in `src/lib/types.ts` arrive panel-by-panel.** First contributor was `02-dag` (`NodeId`, `NodeStatus`, `DocNode`). Add only what your panel needs; later panels refine.
+- **Domain types live where they're authoritative.** Doc-tree primitives (`NodeId`, `NodeStatus`, `DocNode`) are canonical in `@ledger/parser/src/coreTypes.ts` (per `04-api-server/02-parser-extraction` D5). Task-runner primitives (`Task`, `LogEvent`, `ResourceClaim`, `TaskInput`, `TaskType`, `TaskStatus`, `TaskSource`) are canonical in `@ledger/parser/src/runner/types.ts` (per `05-task-runner/01-store-schema`, 2026-05-27). `app/src/lib/types.ts` re-exports both so existing `@/lib/types` import sites keep compiling. New backend types added by future sub-leaves go in `@ledger/parser/src/<domain>/types.ts`; new UI-only types stay in `app/src/lib/types.ts`. Re-exports preserved either way.
 - **No mock data** at the shell level; each panel node defines its own data contract.
 
 ## Process notes
