@@ -200,6 +200,10 @@ export function withPublishing(store: Store, bus: EventBus): Store {
       bus.publish(id);
       return t;
     },
+    // NOTE: implementation uses `.bind(store)` (Implementation Notes §Deviations).
+    // The bare references shown here satisfy D12's intent (no arrow wrappers) but
+    // trip `@typescript-eslint/unbound-method` in lint. `.bind(store)` is the
+    // semantic-no-op fix that keeps the rule happy without a disable comment.
     loadTask: store.loadTask,
     getStatus: store.getStatus,
     listTasks: store.listTasks,
@@ -627,6 +631,47 @@ Items 5–8 from §Acceptance check require a live server + curl:
 6. `POST /api/tasks` with `{"type":"noop","title":"smoke"}` → 201 with `task.status === "COMPLETE"`. Subsequent `GET /api/tasks` returns the task; `GET /api/tasks/<id>` returns `{task, events}` with 3 events.
 7. SSE smoke: `curl -N .../api/tasks/<id>/stream` — frames arrive within ~10 ms of publish; `: ping\n\n` heartbeats every 15 s; stream auto-closes 60 s after task reaches terminal status.
 8. `Last-Event-ID: 0` resume: only events with `seq > 0` are emitted; client disconnect unsubscribes cleanly (no leaked intervals or callbacks).
+
+### Implementation Review (2026-05-27)
+
+Independent implementation review was run against this worktree (`worktree-agent-a518c43edcf86129b`, branched from main `7ce4c5d`, rebased — no-op since main had not advanced). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, no should-fix, three cosmetic nits. All 7 high-leverage Spec Review closures confirmed in code with file:line citations. All 10 gates re-verified at exit 0.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 (`result.input`) | Confirmed at `server/src/routes/tasks.ts:170` — `project.runner.createTask(result.input)` with inline comment citing B1. | No action — confirmed. |
+| HL — B2 (subscribe before flush) | Confirmed at `tasks.ts:97` (`unsubscribe = ...subscribe(id, ...)`) preceding `await flush()` at line 105. Comment cites B2. | No action — confirmed. |
+| HL — S1 (": ping\n\n" heartbeat) | Confirmed at `tasks.ts:113` — `stream.write(": ping\n\n").catch(() => undefined)`. Comment explicitly cites S1 + explains why `writeSSE({event:"ping",...})` was rejected. | No action — confirmed. |
+| HL — N2 (store.close before bus.close) | Confirmed at `events.ts:91-92`. Comment cites N2. | No action — confirmed. |
+| HL — D2/D4 (scheduler.ts minimal) | Confirmed: scheduler.ts changes are limited to (1) `EventBus` type import + `createEventBus` value import, (2) `events: EventBus` field added to `Runner` interface, (3) `bus: EventBus = createEventBus()` defaulted param to `createRunner`, (4) `events: bus` in returned object. Zero per-write-site `bus.publish` calls. | No action — confirmed. |
+| HL — D5 (snapshot iteration) | Confirmed at `events.ts:53` — `for (const cb of Array.from(set)) cb(taskId);` with comment citing D5. Dedicated regression test in `events.test.ts` (callback unsubscribes itself mid-publish; siblings still fire). | No action — confirmed. |
+| Dev-1 `.bind(store)` instead of bare refs (D12) | ACCEPT. The Store is factory-closure (no `this` usage); `.bind(store)` is a semantic no-op that satisfies `@typescript-eslint/unbound-method` without a disable comment. Test suite validates result equality rather than spy-identity on bound methods — the only mockability scenario that breaks (spy SET UP AFTER `withPublishing` call expecting the wrapper to call the new spy) doesn't appear in any test. Spec Design block updated with a note pointing to Implementation Notes for the actual code form. | Spec Design pseudocode block annotated with `// NOTE: implementation uses .bind(store)` (cosmetic nit fix, cross-references Implementation Notes §Deviations). |
+| Dev-2 POST reloads task after `runner.createTask` | ACCEPT. `runner.createTask` is fully synchronous for `noop` tasks (scheduler trampoline runs PENDING → RUNNING → COMPLETE in one synchronous call). The `store.loadTask(created.id) ?? created` reload captures post-tick state with no race window; the `?? created` fallback is defensive. `tasks.test.ts:172` validates `body.task.status === "COMPLETE"` end-to-end. | No action. |
+| Dev-3 D9 SSE auto-close test deferred to operator curl | ACCEPT WITH MINOR RESERVATION. Spec §Open Issues acknowledged "discovery risk" with `streamSSE` + `vi.useFakeTimers()` and named a fallback (module-internal-override). Implementer chose full deferral to operator. Given (a) the spec named this upfront, (b) the auto-close logic is mechanically simple (`setInterval` checking elapsed time), and (c) operator stage-8 verification covers it via live curl, this is acceptable. CI won't catch a subtle regression in the auto-close path — acceptable at v1 local-operator scale. | No action — deferred to operator; documented in Implementation Notes §Acceptance-check items NOT verifiable headlessly. |
+| N1 — Design pseudocode shows bare refs; implementation uses .bind | Cosmetic. Implementation Notes documents the deviation. Spec Design block now has a pointer comment to Implementation Notes. | Applied (above). |
+| N2 — `tasks.test.ts` missing dedicated SSE auto-close timer test | Covered by Dev-3 deferral. Operator verifies via live curl. | No action. |
+| N3 — Test count (30) exceeds spec's "≥13 + ≥5 = ≥18" minimum | Flag-only. Bigger test surface is strictly better. | No action. |
+
+Reviewer's bundle delta: app source untouched (`git diff main..HEAD -- app/` empty). Build hash rotation but byte-identical chunk sizes vs `7ce4c5d` baseline.
+
+Test counts:
+
+| Workspace | Before (main `7ce4c5d`) | After (this worktree) | Delta |
+|---|---|---|---|
+| `server/` | 110 (12 files) | 140 (14 files) | +30 tests, +2 files |
+| `packages/parser/` | 91 | 91 | 0 |
+| `app/` | (no suite) | (no suite) | 0 |
+
+Reviewer's **confidence notes** (operator's stage-8 verification will exercise these):
+- Live server boot + existing endpoint regression (`/api/_health`, `/api/project`, `/api/docs`).
+- `POST /api/tasks {"type":"noop","title":"smoke"}` → 201 with status COMPLETE; 3 events; `GET /:id` returns shape.
+- SSE smoke via `curl -N`: frame latency ~10 ms; `: ping\n\n` every 15 s; auto-close 60 s after terminal.
+- `Last-Event-ID: 0` resume emits only seq > 0.
+- Client disconnect cleans up subscriber + timers (no leak — observable by re-running `curl -N` against the same task and confirming behavior).
+- `GET /nonexistent/stream` → 404 HTTP (not SSE frame).
+- `POST` with `{"type":"bogus","title":"x"}` → 400 `{errors:[...]}`.
+- `POST` with non-JSON body → 400 `{"error":"invalid_json"}`.
+
+Nothing punted. The auto-close test deferral (Dev-3) is the only meaningful gap, explicitly named in Acceptance-check items 5–8 for operator coverage.
 
 ---
 
