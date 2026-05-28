@@ -75,7 +75,14 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
       esRef.current = null;
     }
 
-    const url = `/api/transcripts/${encodeURIComponent(taskId)}/stream`;
+    // Pick the SSE URL by the same ID-format discriminant as useTask (D3):
+    // transcript IDs contain ":" (session:<uuid> / agent:<id>); runner IDs are
+    // bare UUIDv4. The dep array [taskId, queryStatus, taskQuery.data] is
+    // unchanged — the runner stream opens/closes on the same transitions as the
+    // transcript stream (Spec Review N2).
+    const url = taskId.includes(":")
+      ? `/api/transcripts/${encodeURIComponent(taskId)}/stream`
+      : `/api/tasks/${encodeURIComponent(taskId)}/stream`;
     const es = new EventSource(url);
     esRef.current = es;
     setConnStatus("live");

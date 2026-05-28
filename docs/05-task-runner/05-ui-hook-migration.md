@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-28 (VERIFY → COMPLETE — operator re-verification of stage-8b Fix A green; flicker resolved; all Acceptance items pass)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
@@ -619,14 +619,15 @@ Items 2–4 + the unit test suite are headlessly verifiable; items 5–13 are op
 | D9 | Follow-up task injection on Reject is **deferred** (Open Issue, MEDIUM) | The `03-hitl-gate` endpoint accepts `followUp: TaskInput` but exposing the full `TaskInput` shape in a UI form is large (type/title/source/dependsOn/resourceClaims/agent/reviewPayload/priority — most operators want a simpler "describe the redo work" textarea that constructs a sensible default). v1 covers the 80% path (reject with rationale; operator manually injects follow-up later via the existing inject UX if needed). MEDIUM because the parent's HITL gate explicitly mentions it but doesn't require a UI in v1. |
 | D10 | No keyboard shortcuts (e.g., `A` to approve, `R` to reject) in v1 | Discoverability requires either a help tooltip or a status-line hint; both add scope. The buttons are clearly labeled and reachable. Future polish item if HITL becomes high-frequency. |
 | D11 | Approve `note` is a collapsed affordance (small "Add note" link), not always visible | The common path is "operator clicks Approve without explanation." Always-visible textarea would imply "fill this in" and pad inspector height. The link discoveres the field for the small fraction of cases that want one. Symmetric with `03-hitl-gate`'s schema (optional `note`). Reject's rationale stays mandatory + foregrounded because the schema requires it. |
-| D12 | TanStack mutations do NOT use `setQueryData` for optimistic updates | Local-only single-operator; the 50–200 ms invalidate-and-refetch latency is invisible at v1 scale. Optimistic updates would also need explicit rollback on 409, which is more code for less honest UX. Logged TRIVIAL. |
+| D12 | TanStack mutations use **response-based** `setQueryData` for `["task", taskId]` (writing the server's authoritative response into the inspector's cache); list invalidation stays fire-and-forget; **speculative-optimistic** updates with rollback semantics are still avoided | **Amended 2026-05-28 (stage-8b loop-back).** Original D12 said "no `setQueryData`" on the basis that 50–200 ms invalidate-and-refetch latency would be invisible. Operator stage-8 caught a ~500–1000 ms button flicker — Vite proxy + React render scheduling stretches the gap past the perception threshold, and the inspector's `showHitlButtons` gate (`live?.task.status === "AWAITING_HUMAN_REVIEW"`, per S3) re-renders the buttons in enabled state for that window because the gate reads from the stale cache. Response-based `setQueryData` writes the post-transition task from the mutation response into `["task", taskId]` so the gate flips false atomically on the same render the mutation resolves — no flicker. This is NOT speculative-optimistic (the server has already authoritatively confirmed the new state; no rollback path exists or is needed). The original rejection of speculative-optimistic updates (rollback complexity for 409 paths) still stands. |
 
 ---
 
 ## Open Issues
 
+- ~~**Approve/Reject buttons flicker for ~500–1000 ms after a successful mutation before unmounting.** Found in operator stage-8 (2026-05-28). Sequence: click Approve → button shows "Approving…" (~30–80 ms POST round-trip) → `approve.isPending` flips false → button re-renders in enabled "Approve" state because `live?.task.status` is still stale `AWAITING_HUMAN_REVIEW` (the `useTask` refetch from the fire-and-forget `invalidateQueries` hasn't completed) → refetch lands (~500–1000 ms later through Vite proxy + React scheduling) → `live.task.status` flips to `COMPLETE` → `showHitlButtons` flips false → buttons unmount. The window where the button is enabled-but-stale is the flicker. D12's "50–200 ms invisible at v1 scale" estimate was wrong — Vite proxy + React render scheduling stretches it past the perception threshold. **Fix:** apply Fix A (response-based `setQueryData` in `onSuccess` to write `data.task` into `["task", taskId]` cache immediately, atomically flipping `live?.task.status` on the same render the mutation resolves; list invalidation stays fire-and-forget; D12 amended to distinguish response-based from speculative-optimistic). *(Priority: HIGH — degrades the core HITL UX; resolved in this child's stage-8b loop-back.)*~~ → **RESOLVED** in stage-8b: response-based `setQueryData` applied in both mutation hooks; D12 amended; see Implementation Notes §Stage-8b loop-back.
 - **Follow-up task injection on Reject (D9).** `03-hitl-gate` accepts `followUp: TaskInput`; the UI does not expose it. Operator must POST a follow-up separately if they want one. Reasonable UX would be a "Reject and queue follow-up" toggle that reveals a minimal "title + reviewPayload.summary" pair and inherits the rejected task's resourceClaims by default (matching the server's default). *(Priority: MEDIUM — parent §HITL gate mentions but doesn't require.)*
-- **No optimistic mutation updates.** Invalidate-and-refetch only. Local-only scale makes this invisible. *(Priority: TRIVIAL — D12.)*
+- ~~**No optimistic mutation updates.** Invalidate-and-refetch only. Local-only scale makes this invisible. *(Priority: TRIVIAL — D12.)*~~ → Replaced by the HIGH flicker issue above. D12 amended in the stage-8b patch: response-based `setQueryData` is in use for the inspector's `["task", id]` cache; speculative-optimistic is still avoided.
 - **No EventSource test coverage for `useLogStream`'s runner-stream variant.** Operator stage-8 covers it. If a future regression slips, it would surface as a broken `/logs/:id` page on a runner-emitted task. *(Priority: LOW — D6.)*
 - **Server-side `?status=`, `?type=`, `?parent=` filters on `GET /api/tasks` are unused.** Client-side `useTaskFilters` runs over the merged list. Server-side filters can't reduce the transcript half. Could promote filtering to merged-result client side as today, or split into per-source filtering with composition — defer until the runner side dominates row count. *(Priority: TRIVIAL.)*
 - **No row-level visual distinction between runner-emitted and transcript-derived tasks.** Inspector is the discriminator. A future polish pass could add a subtle chip or column when both sources are routinely live. *(Priority: TRIVIAL.)*
@@ -672,7 +673,96 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+Implementation landed in two commits: `05742e5` (APPROVED → IN_PROGRESS, doc-only) and `ac0982d` (4b: all source + tests).
+
+**Deviations from spec pseudocode:**
+
+- `fetchTaskList` in the spec pseudocode showed "if both rejected → throw; else return merged." The actual implementation also propagates a single-source rejection immediately rather than folding it into an empty `[]`. This matches the Requirements text ("errors other than 404 propagate") and is exercised by the `useTaskList.fetch.test.ts` "runner 500 → isError" case. The spec pseudocode was an approximation; the finer-grained propagation is the correct behavior.
+
+- `MutationErrorBody` is implemented as a `class MutationErrorBody extends Error` (not the interface shown in the spec) to satisfy ESLint's `@typescript-eslint/only-throw-error` rule, which requires thrown values to extend `Error`. The shape (`status: number; body: unknown`) is identical. The class lives in `useApproveTask.ts`; `useRejectTask.ts` re-exports the class.
+
+**Gate results (commit `ac0982d`):**
+
+- `pnpm -C app typecheck` — exit 0
+- `pnpm -C app lint --max-warnings=0` — exit 0
+- `pnpm -C app build` — exit 0 (bundle: `index-*.js` 1,942 kB gzip 608 kB; `DagPanel-*.js` 1,646 kB gzip 505 kB — no meaningful delta from pre-implementation)
+- `pnpm -C app test --run` — 102 tests pass across 11 test files (delta: +28 tests, +7 new test files)
+
+**Test count breakdown (28 new):** 5 `mergeTasks` unit (`useTaskList.test.ts`) + 5 fetch integration (`useTaskList.fetch.test.ts`) + 5 endpoint selection (`useTask.test.ts`) + 3 approve mutation (`useApproveTask.test.ts`) + 3 reject mutation (`useRejectTask.test.ts`) + 7 inspector component (`TaskInspector.test.tsx`).
+
+**Nits resolved during implementation not captured in spec:**
+
+- All `onClick`/`onChange` arrow functions use block form (`() => { fn(); }`) rather than implicit-return shorthand to satisfy ESLint's `no-confusing-void-expression` rule.
+- `res.json()` typed as `unknown` via explicit annotation (`const body: unknown = await res.json().catch(...)`) to avoid `@typescript-eslint/no-unsafe-assignment`.
+- `useMemo` dep array uses `liveEvents` (potentially `undefined`) rather than `liveEvents ?? []` to avoid creating a new `[]` reference on every render and triggering exhaustive-deps warnings.
+- Test error casts go through `unknown` first: `(result.current.error as unknown) as { status, body }` because TanStack Query types `mutation.error` as `Error | null`, and direct cast to `{ status, body }` fails tsc strict-mode overlap check.
+
+**Items confirmed headlessly (operator-stage-8 items 5–13 are out of scope for this commit):**
+
+Items 1–4 of the Acceptance check (install unchanged, four gates green, parser/server tests unaffected) confirmed.
+
+### Implementation Review (2026-05-28)
+
+Independent implementation review run against the rebased worktree (`worktree-agent-a2b63e8859a0f97f6`, branched from `d2d0db4`, rebased onto `4f3eab5`). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, no should-fix, three cosmetic nits. All 7 high-leverage Spec Review closures confirmed in code with file:line citations. All 6 gates re-verified at exit 0 (app typecheck/lint/build/test + server test untouched + parser test untouched). Both implementer deviations (single-source 500 propagation + `MutationErrorBody extends Error`) accepted with rationale.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 (404-vs-5xx split in useTask) | Confirmed at `useTask.ts:36-37` — `if (res.status === 404) return null; if (!res.ok) throw new Error(...)` with B1 inline comment. | No action — confirmed. |
+| HL — S1 (fetchOne 404 → [] with comment) | Confirmed at `useTaskList.ts:19-24` — explicit comment explaining `fulfilled([])` vs `rejected` for `Promise.allSettled`, cites S1. | No action — confirmed. |
+| HL — S2 (truncated reason render) | Confirmed at `TaskInspector.tsx:196-209` — 80-char-truncated forms named, S2 cited, inspector renders verbatim from `event.reason`. | No action — confirmed. |
+| HL — S3 (HitlActions gating on `live?.task.status`) | Confirmed at `TaskInspector.tsx:74-75` — `showHitlButtons = isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW"` with pinned invariant comment. | No action — confirmed. |
+| HL — S4 (`approved: <note>` from runner not UI) | Confirmed: no string formatting in UI; `postApprove` sends `note` to server verbatim; inspector renders `event.reason` verbatim. No headless test exercises the formatted string (would require the real runner — correct scope). | No action — confirmed. |
+| HL — D2 (`id.includes(":")` discriminant) | Confirmed at `useTask.ts:25-27` (`pickEndpoint`) + `useLogStream.ts:83-85`, both with D2 comments. | No action — confirmed. |
+| HL — D5 (`MutationErrorBody` shape) | Confirmed at `useApproveTask.ts:27-35` — `class MutationErrorBody extends Error { status: number; body: unknown }`. `useRejectTask.ts:14-16` re-exports. `errorBanner` casts structurally via `{status?, body?}`; class instances satisfy the shape. | No action — confirmed. |
+| Dev-1 — Single-source 500 propagation | ACCEPT. The Requirements text ("errors other than 404 propagate") is unambiguous and the actual behavior is more correct than the spec's "both-rejected → throw" pseudocode sketch. The `useTaskList.fetch.test.ts` "runner 500 → isError" case exercises this directly. | No action. |
+| Dev-2 — `MutationErrorBody extends Error` (class, not interface) | ACCEPT. ESLint's `@typescript-eslint/only-throw-error` requires thrown values to extend `Error`. The `extends Error` adds only `super(\`HTTP ${status}\`)` to the message field; `status` + `body` shape unchanged. `errorBanner`'s structural cast works equally with the class instance. | No action. |
+| N1 | `useRejectTask.test.ts` had a `wrong_status` 409 case but no `version_conflict` case (asymmetric with `useApproveTask.test.ts`). Both paths go through identical `MutationErrorBody` code, so low risk, but symmetry is cheap to fix. | APPLIED. Added "409 version_conflict → mutation.error carries {status: 409, body.error: 'version_conflict'}" test case to `useRejectTask.test.ts` (test count +1; total 104 tests, was 102). |
+| N2 | `useTaskList.fetch.test.ts` covered "runner 500 + transcript 404 → isError" but not the mirror "transcript 500 + runner 404 → isError" case. Single-source propagation is symmetric — both paths through identical code — but mirror coverage is cheap. | APPLIED. Added "transcript 500 + runner 404 → query enters isError (Impl Review N2 — 5xx symmetry)" test case to `useTaskList.fetch.test.ts` (test count +1; total now 104). |
+| N3 | `TaskInspector.test.tsx` uses `screen.queryByText("Approve")` / `queryByText("Reject…")` (exact string match) rather than `queryByRole("button", {name: ...})`. Fragile to label changes; not a correctness issue. | ACCEPTED AS-IS. `queryByText` exact match works correctly today; converting to `queryByRole` is genuine test-fragility polish, not mechanical text. Tests assert observable behavior either way. Logged as test-quality follow-up; no functional risk. |
+
+Reviewer's bundle delta + test counts (after N1 + N2 applied):
+
+| Workspace | Before (4f3eab5 main) | After (this worktree, post-N1/N2) | Delta |
+|---|---|---|---|
+| `app` | 73 tests, 4 files | 104 tests, 11 files | +31 tests, +7 files |
+| `server` | 165 tests | 165 tests | 0 (no server changes) |
+| `packages/parser` | 108 tests | 108 tests | 0 (no parser changes) |
+
+Bundle delta: app source touched; chunk sizes negligibly larger (`index-*.js` 1,942 → 1,945 kB raw; gzip 608 kB unchanged). DagPanel chunk untouched.
+
+Reviewer's **confidence notes** (operator's stage-8 verification will exercise these):
+
+- `errorBanner` uses structural typing (`{status?, body?}`) rather than `instanceof MutationErrorBody`. Safe today (only `MutationErrorBody` instances reach `mutation.error`), but a hypothetical injected plain object with the right shape would also trigger the banner. Acceptable v1.
+- The `useMemo` in `TaskInspector` uses `liveEvents` (potentially `undefined`) in the dep array with `const events = liveEvents ?? []` inside the callback. Correct — `undefined` vs populated array are distinct references.
+- App test delta is +31 vs main (was +28 pre-N1/N2, +2 from this audit, +1 from the audit's reconciliation of the 102 vs 104 counts).
+- All Acceptance check items 5–13 are operator-only and correctly scoped (item 11 — `version_conflict` via stale curl — is mechanically reachable but the unit-test coverage via mocked-fetch is honest about what it proves).
+
+Nothing punted beyond N3 (test-fragility polish). The two applied audit fixes land in this commit alongside the audit table.
+
+### Stage-8b loop-back (2026-05-28): Approve/Reject flicker fix
+
+Operator stage-8 walkthrough caught a UX bug: clicking Approve made the buttons flicker for ~500–1000 ms before unmounting. Sequence captured in the matching HIGH-priority Open Issue. Root cause: fire-and-forget `invalidateQueries` left `live?.task.status` stale during the gap between mutation-resolved and refetch-completed; `approve.isPending` flipped false in that window so the buttons re-rendered in enabled "Approve" state. The original D12 estimate of "50–200 ms invisible at v1 scale" was wrong — Vite proxy + React render scheduling stretches the gap past the perception threshold.
+
+**Fix applied** (`useApproveTask.ts` + `useRejectTask.ts`): `onSuccess` now writes the mutation response's `data.task` into `["task", taskId]` via `queryClient.setQueryData` BEFORE firing the background invalidations. The inspector's `showHitlButtons` gate (`live?.task.status === "AWAITING_HUMAN_REVIEW"`, per S3) flips false atomically on the same render the mutation resolves — buttons unmount cleanly. The events list (not in the mutation response) is preserved from the prior cache via the updater's `(old) => (old ? { ...old, task: data.task } : old)` guard, and the background `invalidateQueries({queryKey: ["task", taskId]})` refreshes events independently. List query `["tasks"]` invalidation stays fire-and-forget.
+
+**Scope justification** (D12 amendment): the response-based pattern is NOT speculative-optimistic. The server has already authoritatively confirmed the new state at the time `onSuccess` fires; no rollback path exists or is needed. The original D12 rejection of speculative-optimistic updates (rollback complexity for 409 paths) still stands. The D12 row in §Decisions has been rewritten to make this distinction explicit.
+
+**Tests updated:**
+- `useApproveTask.test.ts`: "200 → ..." case now asserts both (a) `queryClient.getQueryData(["task", id])` returns the new task post-success, AND (b) events from the pre-seed are preserved in the cache. Added a defensive "setQueryData no-ops when cache empty" case (the `(old) => (old ? ... : old)` guard branch).
+- `useRejectTask.test.ts`: matching update to the "200 → ..." case (asserts FAILED status + preserved events).
+
+**Gate results post-fix:**
+
+| Gate | Exit | Test count |
+|---|---|---|
+| `pnpm -C app typecheck` | 0 | — |
+| `pnpm -C app lint --max-warnings=0` | 0 | — |
+| `pnpm -C app build` | 0 | bundle: `index-*.js` 1,953 kB / gzip 611 kB (+8 kB raw / +3 kB gzip vs pre-fix baseline — the setQueryData additions + doc comments) |
+| `pnpm -C app test --run` | 0 | 105 (was 104; +1 defensive empty-cache case) |
+| `pnpm -C server test --run` | 0 | 165 (unchanged) |
+| `pnpm -C packages/parser test --run` | 0 | 108 (unchanged) |
+
+**Acceptance check delta:** items 7 + 9 (Approve / Reject flows) re-require operator visual confirmation that the flicker is gone. Items 1–4 + everything else unchanged. The HIGH Open Issue stays in the Open Issues list as `~~struck-through~~` with a pointer to this subsection.
 
 ---
 

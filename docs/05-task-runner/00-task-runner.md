@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-28 (APPROVED → COMPLETE — all 5 children COMPLETE; `05-ui-hook-migration` closed the parent via stage-8b Fix A for the Approve/Reject button flicker)
 
 **Dependencies:** `04-api-server`
 
@@ -487,7 +487,7 @@ When this parent moves to `VERIFY` (all children COMPLETE), the verifier confirm
 | `02-scheduler` | Scheduler tick (event-driven), conflict primitive (`runner/conflict.ts`), executor registry with `noop` built-in, dep-met check, status_change event emission, process-restart crash recovery (`RUNNING → FAILED` orphan transition) | `01-store-schema` | COMPLETE (v1, 2026-05-27) |
 | `03-hitl-gate` | `human_review` executor + suspension semantics (`RUNNING → AWAITING_HUMAN_REVIEW`, claims held), `POST /api/tasks/:id/approve` + `/reject` endpoints with rationale capture and optional follow-up enqueue, restart durability for suspended tasks | `02-scheduler`, `04-api-endpoints` | COMPLETE (v1, 2026-05-28) |
 | `04-api-endpoints` | Read endpoints (`GET /api/tasks`, `/:id`, `/:id/stream` SSE with `Last-Event-ID` resume), operator-injection endpoint (`POST /api/tasks`) with `TaskInput` validation against the schema, in-process pub/sub bridge (`runner/events.ts`) closing `02-scheduler`'s pub/sub Open Issue | `02-scheduler` | COMPLETE (v1, 2026-05-27) |
-| `05-ui-hook-migration` | **UI hook migration + inspector UX for runner tasks.** `useTaskList`/`useTask`/`useLogStream` flip to additive dual-source (`/api/tasks*` + `/api/transcripts*` merger using `transcriptPath` presence as runner-vs-transcript discriminator); `TaskInspector` Approve/Reject buttons gated on `runner-emitted ∧ AWAITING_HUMAN_REVIEW` (sending the observed `dbRowVersion` on each request per PRD §8.4 optimistic locking); `BLOCKED` row reason surfaced from latest `status_change` event's `reason` field (resolves the Open Issue "UI affordance for `BLOCKED` reason inspection") | `03-hitl-gate`, `04-api-endpoints` | APPROVED |
+| `05-ui-hook-migration` | **UI hook migration + inspector UX for runner tasks.** `useTaskList`/`useTask`/`useLogStream` flip to additive dual-source (`/api/tasks*` + `/api/transcripts*` merger using `transcriptPath` presence as runner-vs-transcript discriminator); `TaskInspector` Approve/Reject buttons gated on `runner-emitted ∧ AWAITING_HUMAN_REVIEW` (sending the observed `dbRowVersion` on each request per PRD §8.4 optimistic locking); `BLOCKED` row reason surfaced from latest `status_change` event's `reason` field (resolves the Open Issue "UI affordance for `BLOCKED` reason inspection") | `03-hitl-gate`, `04-api-endpoints` | COMPLETE (v1, 2026-05-28) |
 
 Build order is determined by the dependency edges above. Sequential: `01` → `02` → `{03, 04}` (parallelizable after `02` — `03` adds endpoints + executor; `04` adds read endpoints + injection; no file overlap) → `05` (consumes both). The manual workflow today serializes the parallel pair; the runner's eventual ability to declare claims on shared spec files (e.g., `server/src/routes/tasks.ts` if both `03` and `04` were to write to it) would catch the conflict — but the planned carve-up keeps `03`'s endpoints in their own router file mounted alongside `04`'s, so even concurrent dispatches wouldn't clash.
 

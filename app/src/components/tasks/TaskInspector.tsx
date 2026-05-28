@@ -1,9 +1,14 @@
+import { useMemo, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import { TaskStatusChip } from "@/components/tasks/TaskStatusChip";
 import { useShellStore } from "@/stores/shell";
 import { formatDuration, formatRelativeTime } from "@/lib/formatDuration";
+import { useTask } from "@/lib/useTask";
+import { useApproveTask } from "@/lib/useApproveTask";
+import { useRejectTask } from "@/lib/useRejectTask";
+import { cn } from "@/lib/cn";
 import type { Task, ResourceClaim } from "@/lib/types";
 
 interface TaskInspectorProps {
@@ -17,17 +22,68 @@ interface TaskInspectorProps {
  * Pattern mirrors NodeInspector (02-dag): opened via useShellStore.openInspector().
  * The "Parent task [open]" button calls openInspector again to swap content.
  * Per 04-tasks S1 / D8 — pure shell-store update, no navigation.
+ *
+ * 05-ui-hook-migration additions:
+ * - Calls useTask(taskProp.id) internally for live data + events.
+ * - Renders Status reason row from latest status_change event's reason field.
+ * - Renders Approve/Reject buttons for runner-emitted AWAITING_HUMAN_REVIEW tasks.
  */
 export function TaskInspector({
-  task,
+  task: taskProp,
   allTasks,
 }: TaskInspectorProps): JSX.Element {
   const openInspector = useShellStore.getState().openInspector;
   const now = Date.now();
 
+  // Live task + events from the GET /:id endpoint (runner OR transcript,
+  // by id-format discrimination — see useTask). The prop is the fallback
+  // until the query resolves.
+  const taskQuery = useTask(taskProp.id);
+  const live = taskQuery.data;
+  const task = live?.task ?? taskProp;
+  const liveEvents = live?.events;
+
   const parent = task.parentTaskId
     ? allTasks.find((t) => t.id === task.parentTaskId)
     : null;
+
+  // Latest status_change event's `reason` field, if any. Parent §Status
+  // reasons enumerates the canonical values (blocked_by_dep:<id>, …).
+  // Use liveEvents directly in the dep array (not `liveEvents ?? []`) to
+  // avoid a new [] reference on every render triggering unnecessary recomputes.
+  const latestStatusReason = useMemo<string | undefined>(() => {
+    const events = liveEvents ?? [];
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev !== undefined && ev.kind === "status_change" && ev.reason !== undefined) {
+        return ev.reason;
+      }
+    }
+    return undefined;
+  }, [liveEvents]);
+
+  // Approve/Reject gating: runner-emitted ∧ AWAITING_HUMAN_REVIEW.
+  // `transcriptPath === undefined` is the discriminant per parent §Type
+  // coordination. Use the *live* task status so a successful mutation's
+  // invalidation removes the buttons on next render without a manual close.
+  // Spec Review S3: gating on `live?.task.status` (not `taskProp.status`)
+  // ensures the buttons only render when the query has resolved — so the
+  // `task` reference inside <HitlActions> is always the live task with a
+  // fresh dbRowVersion, never the closed-over prop. Invariant pinned here.
+  const isRunnerEmitted = task.transcriptPath === undefined;
+  const showHitlButtons =
+    isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW";
+
+  // "task no longer found" branch (404 from the right endpoint — D2).
+  if (taskQuery.status === "success" && live === null) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="text-xs text-[color:var(--color-muted)]">
+          Task no longer found.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,6 +193,21 @@ export function TaskInspector({
         )}
       </Field>
 
+      {/* Status reason (NEW) — between Resource claims and Timing.
+          Surfaces the latest status_change event's reason field. Works for
+          blocked_by_dep:<id>, blocked_no_executor, orphaned_on_restart,
+          rejected:<truncated>, approved, etc. Hidden when no reason set.
+          The 80-char-truncated form is what shows here per Spec Review S2;
+          the full untruncated rejection rationale is in the LogStream panel's
+          ErrorRow. */}
+      {latestStatusReason !== undefined && (
+        <Field label="Status reason">
+          <span className="text-xs text-[color:var(--color-fg)] break-all">
+            {latestStatusReason}
+          </span>
+        </Field>
+      )}
+
       {/* Timing */}
       <Field label="Timing">
         <div className="flex flex-col gap-0.5 text-xs">
@@ -150,6 +221,12 @@ export function TaskInspector({
         </div>
       </Field>
 
+      {/* HITL buttons (NEW) — above the Open log stream link.
+          Only rendered when runner-emitted ∧ live status === AWAITING_HUMAN_REVIEW.
+          When showHitlButtons is true, `task` is guaranteed to be the live task
+          (not the prop fallback) because gating requires live?.task.status. */}
+      {showHitlButtons && <HitlActions task={task} />}
+
       {/* Open log stream */}
       <Link
         to={`/logs/${encodeURIComponent(task.id)}`}
@@ -161,6 +238,183 @@ export function TaskInspector({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// HitlActions — Approve / Reject buttons for AWAITING_HUMAN_REVIEW tasks.
+// Sibling component in the same file (single inspector concern — spec D11 pattern).
+// ---------------------------------------------------------------------------
+
+function HitlActions({ task }: { task: Task }): JSX.Element {
+  const approve = useApproveTask();
+  const reject = useRejectTask();
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
+
+  // The most recent error from either mutation, for the 409 banner.
+  const lastError = reject.error ?? approve.error;
+  const banner = errorBanner(lastError);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {banner !== null && (
+        <div
+          className={cn(
+            "rounded border px-2 py-1 text-xs",
+            banner.tone === "conflict"
+              ? "border-[color:var(--color-warning)] bg-[color:var(--color-warning-soft)]"
+              : "border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)]",
+          )}
+        >
+          {banner.text}
+        </div>
+      )}
+
+      {!rejectOpen ? (
+        <>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={approve.isPending}
+              onClick={() => {
+                approve.mutate({
+                  taskId: task.id,
+                  dbRowVersion: task.dbRowVersion,
+                  ...(note.length > 0 ? { note } : {}),
+                });
+              }}
+              className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-accent)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-accent-fg)] hover:opacity-90 disabled:opacity-50"
+            >
+              {approve.isPending ? "Approving…" : "Approve"}
+            </button>
+            <button
+              type="button"
+              disabled={reject.isPending}
+              onClick={() => { setRejectOpen(true); }}
+              className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)] disabled:opacity-50"
+            >
+              Reject…
+            </button>
+          </div>
+
+          {/* Optional approve note — collapsed by default (D11). */}
+          <NoteAffordance
+            noteOpen={noteOpen}
+            note={note}
+            setNoteOpen={setNoteOpen}
+            setNote={setNote}
+          />
+        </>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={reason}
+            onChange={(e) => { setReason(e.target.value); }}
+            placeholder="Rejection rationale (required)"
+            className="min-h-20 max-h-40 resize-y rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1 text-xs text-[color:var(--color-fg)]"
+            aria-label="Rejection rationale"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={reason.trim().length === 0 || reject.isPending}
+              onClick={() => {
+                reject.mutate({
+                  taskId: task.id,
+                  dbRowVersion: task.dbRowVersion,
+                  reason: reason.trim(),
+                });
+              }}
+              className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-danger-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:opacity-90 disabled:opacity-50"
+            >
+              {reject.isPending ? "Rejecting…" : "Confirm reject"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRejectOpen(false);
+                setReason("");
+              }}
+              className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NoteAffordance — "Add note" link that reveals a single-line input for the
+// optional approve note (D11: collapsed by default, not in the way).
+// ---------------------------------------------------------------------------
+
+function NoteAffordance({
+  noteOpen,
+  note,
+  setNoteOpen,
+  setNote,
+}: {
+  noteOpen: boolean;
+  note: string;
+  setNoteOpen: (v: boolean) => void;
+  setNote: (v: string) => void;
+}): JSX.Element {
+  if (!noteOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setNoteOpen(true); }}
+        className="self-start text-[10px] text-[color:var(--color-muted)] underline hover:text-[color:var(--color-fg)]"
+      >
+        Add note
+      </button>
+    );
+  }
+  return (
+    <input
+      type="text"
+      value={note}
+      onChange={(e) => { setNote(e.target.value); }}
+      placeholder="Optional approval note"
+      className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1 text-xs text-[color:var(--color-fg)]"
+      aria-label="Approval note"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// errorBanner — maps a mutation error to a banner tone + text, or null.
+// ---------------------------------------------------------------------------
+
+function errorBanner(
+  err: unknown,
+): { tone: "conflict" | "generic"; text: string } | null {
+  if (err === null || err === undefined) return null;
+  const e = err as { status?: number; body?: { error?: string } };
+  if (e.status === 409) {
+    if (e.body?.error === "version_conflict") {
+      return {
+        tone: "conflict",
+        text: "This task was updated elsewhere — please refresh.",
+      };
+    }
+    if (e.body?.error === "wrong_status") {
+      return {
+        tone: "conflict",
+        text: "Task is no longer awaiting review.",
+      };
+    }
+  }
+  return { tone: "generic", text: "Action failed — see browser console." };
+}
+
+// ---------------------------------------------------------------------------
+// Field / TimingRow / ClaimDisplay — unchanged layout helpers.
+// ---------------------------------------------------------------------------
 
 function Field({
   label,
