@@ -7,9 +7,9 @@
  * JSON-RPC InvalidParams response without our handler being called.
  *
  * All five tools share the base `task_id: z.string().min(1)` argument.
- * The `runner.emit_event` tool's `event` field uses `.passthrough()` so
- * kind-specific payload fields ride through; validateLogEvent (ajv) gates them
- * inside the handler (D4).
+ * The `runner.emit_event` tool's `event` field uses `z.looseObject(...)` (Zod 4's
+ * replacement for `.passthrough()`) so kind-specific payload fields ride through;
+ * validateLogEvent (ajv) gates them inside the handler (D4).
  *
  * Spec: docs/06-agent-dispatcher/02-runner-tools.md §Design §"Zod schemas + tool registration"
  */

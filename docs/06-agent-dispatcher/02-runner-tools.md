@@ -526,7 +526,7 @@ Nothing punted; all 2 blocking + 4 should-fix + 4 nits + 6 confidence notes land
 
 ## Implementation Notes
 
-**Delivered 2026-05-28 (v1).** All five MCP tools, binding registry, `store.updateReviewPayload`, `Runner.handle` exposure, and cast retirement shipped together. Verification gate results: 211 server tests pass, 108 parser tests pass, 105 app tests pass (424 total). typecheck + lint both exit zero. App bundle delta: zero (no UI changes). Server `dist/` delta: ~12K vs the post-`01-mcp-server` baseline (new `dispatcher/mcp/binding.js`, `toolSchemas.js`, `tools.js`).
+**Delivered 2026-05-28 (v1).** All five MCP tools, binding registry, `store.updateReviewPayload`, `Runner.handle` exposure, and cast retirement shipped together. Verification gate results: 211 server tests pass, 108 parser tests pass, 105 app tests pass (424 total). typecheck + lint both exit zero. App bundle delta: zero (no UI changes). Server `dist/`: 360K (post-build), +40K vs the post-`01-mcp-server` baseline of 320K (new `dispatcher/mcp/binding.js`, `toolSchemas.js`, `tools.js` plus their `.js.map` source-map sidecars; the `.js`-only delta is ~12K — original Implementation Notes figure corrected by Implementation Review (2026-05-28) to include source maps).
 
 **SDK ordering constraint (critical deviation from spec prose).** The spec's §"Wiring at `loadProjectContext`" code block and Confidence note #2 both imply `registerTool` can be called after `server.connect(transport)`. This is incorrect for SDK 1.29.0: `registerTool` internally calls `setToolRequestHandlers()` → `registerCapabilities()`, which throws `"Cannot register capabilities after connecting to transport"` if called post-connect. The implementation uses `createMcpServer` (the synchronous pre-connect factory, already shipped by `01-mcp-server`) to defer `_connect()` until after `registerRunnerTools` returns. The `context.ts` wiring sequence is: `createMcpServer` → wire hooks → `registerRunnerTools` → `_connect()`. `McpServerHandleInternal` (with the `_connect()` method) is now exported from `dispatcher/index.ts` for context.ts use. Same pre-connect pattern applied in `tools.test.ts` and `binding-hook-wiring` test inline fixture.
 
@@ -538,9 +538,31 @@ Nothing punted; all 2 blocking + 4 should-fix + 4 nits + 6 confidence notes land
 
 **Zod v4 `looseObject`.** `emitEventShape.event` uses `z.looseObject({ kind: z.string() })` — the Zod 4 replacement for `.passthrough()`. The eslint rule flags `.passthrough()` as deprecated.
 
----
+### Implementation Review (2026-05-28)
 
-## Verification
+Independent implementation review was run against the rebased worktree branch (`worktree-agent-a3ae863d4f46b526f`) in a clean Sonnet context. Verdict: **READY_WITH_FOLLOWUPS** — all 8 gates PASS (parser build, server build, server typecheck, server lint, app typecheck, app lint, server tests 211/211, workspace tests 424/424), every Spec Review (B1, B2, S1–S4, N1–N4) closure HONOURED, all 6 confidence notes PASS, all 3 implementer-flagged deviations assessed as correct + necessary. No blocking, no should-fix, two nits applied as documentation cleanup. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| N1 | `types.ts` JSDoc for `McpServerHandleInternal` said "Not exported from `dispatcher/index.ts`" but the SDK-ordering deviation (#1) required it to BE exported so `context.ts` can call `_connect()` post-tool-registration. JSDoc was now factually wrong. | JSDoc rewritten in `server/src/dispatcher/mcp/types.ts` to: "Exported from `server/src/dispatcher/index.ts` so context.ts can drive the pre-connect tool-registration sequence; the `_connect()` method is intentionally absent from the public `McpServerHandle` type." |
+| N2 | `toolSchemas.ts` file-level JSDoc still said `.passthrough()` even though the implementation (correctly) uses `z.looseObject()` (Zod 4 replacement). | JSDoc updated to `"uses z.looseObject(...) (Zod 4's replacement for .passthrough())"`. Internal one-line code comment was already correct; only the file-level header was stale. |
+
+Reviewer's structural observations (informational, no action):
+
+- **`createMcpServerAsync` is now only used by `server.test.ts` and `01-mcp-server`'s test helpers** — `context.ts` calls the sync `createMcpServer` + `_connect()` directly per deviation #1. The async wrapper is borderline dead code outside tests but harmless; will be retired naturally if/when `01-mcp-server`'s test fixture is refactored.
+- **Bundle delta correction.** Original Implementation Notes said "~12K" — that's the `.js`-only delta. Including source maps the actual `server/dist/` delta is +40K (320K → 360K). Reviewer verified by `du -sh`; numbers above corrected.
+- **`getStatus` returning `undefined` for a deleted task** is conflated with `task_not_running` in the three transition tools (the `if (current !== "RUNNING")` check fires for `undefined`). Pathological in practice — binding enforces task-id validity at session init — and the error remains correct (a deleted-or-missing task is correctly rejected). No code fix; informational only.
+- **`emit_event` malformed-event test exercises ajv path on missing fields, not on `STATUS_CHANGE`-casing bypass** of the handler check. The ajv schema's `oneOf` on `kind` rejects unknown values regardless, so the second-line defense (Open Issue N1) is correct by construction. Test coverage is adequate even without explicit casing-bypass case.
+
+Reviewer's deviation assessments (all three implementer-flagged deviations):
+
+1. **SDK ordering — tools register before `server.connect(transport)`** — CORRECT AND WELL-HANDLED. Only viable ordering for SDK 1.29.0; `createMcpServer`'s sync factory was already designed to support this. No spec change required (Implementation Notes deviation entry is adequate); `types.ts` JSDoc updated per N1.
+2. **`seq: 0` sentinel** — CORRECT. `seq: -1` would have failed ajv against `minimum: 0`; `seq: 0` satisfies the schema and the store overwrites on `appendEvent` regardless. No semantic impact.
+3. **`McpError.message` non-enumerable** — CORRECT TEST-MECHANICS WORKAROUND. Production code unaffected (`throw`/`catch` reads via direct property access); test workaround uses `(err as Error).message` rather than `toMatchObject` traversal, which is the correct pattern.
+
+Reviewer's `events.ts` out-of-spec change assessment: **CORRECT AND NECESSARY.** `withPublishing` decorator must proxy the new `updateReviewPayload` method to satisfy the `Store` interface contract; the implementer chose pass-through (no separate `task-changed` event) because `runner.await_human_review` calls `handle.awaitHumanReview` synchronously after, which DOES emit `task-changed` via the existing decorator path. Emitting a separate event for the review-payload write would double-fire with inconsistent state. Inline comment in `events.ts` explains the reasoning.
+
+Nothing punted on correctness; both nits applied as documentation cleanup.
 
 When this leaf moves from `VERIFY` to `COMPLETE`, the verifier confirms:
 
