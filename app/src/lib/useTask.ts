@@ -1,8 +1,12 @@
 /**
  * TanStack Query hook for fetching a single task + its log events.
  *
- * Returns `status: "missing"` when /api/transcripts/:id 404s.
- * See D11 for the graceful-degradation strategy.
+ * Endpoint is selected by ID format (D2):
+ * - id.includes(":") → /api/transcripts/:id  (transcript IDs: session:<uuid>, agent:<id>)
+ * - else             → /api/tasks/:id         (runner IDs: bare UUIDv4)
+ *
+ * Returns null on 404 (task no longer exists / not yet visible).
+ * Throws on non-404 errors so the query enters isError (Spec Review B1).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -14,9 +18,23 @@ export interface TaskDetail {
   events: LogEvent[];
 }
 
+function pickEndpoint(id: TaskId): string {
+  // Transcript IDs are namespaced (session:<uuid> or agent:<id>); runner IDs
+  // are bare UUIDv4. The colon discriminant is sufficient — D2. If a future
+  // ID-format change breaks this assumption, useTask would need a fallback.
+  return id.includes(":")
+    ? `/api/transcripts/${encodeURIComponent(id)}`
+    : `/api/tasks/${encodeURIComponent(id)}`;
+}
+
 async function fetchTask(id: TaskId): Promise<TaskDetail | null> {
-  const res = await fetch(`/api/transcripts/${encodeURIComponent(id)}`);
-  if (!res.ok) return null;
+  const res = await fetch(pickEndpoint(id));
+  // Mirror useTaskList's 404-vs-5xx split (Spec Review B1): 404 → null
+  // (task genuinely doesn't exist); other non-ok → throw so the query
+  // enters isError instead of silently rendering "task no longer found"
+  // during a server outage.
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`${pickEndpoint(id)}: ${String(res.status)}`);
   return res.json() as Promise<TaskDetail>;
 }
 
