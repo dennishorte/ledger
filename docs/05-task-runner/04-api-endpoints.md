@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/04-api-endpoints`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (APPROVED → IN_PROGRESS — implementer started)
+**Last Updated:** 2026-05-27 (IN_PROGRESS → VERIFY — implementation complete)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner instance, scheduler, store wired on `ProjectContext`)
 
@@ -564,7 +564,69 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. `hono` was already present at `4.12.23`; `better-sqlite3` was added by `01-store-schema`. No new npm dependencies.
+
+### Deviations from spec
+
+- **D12 pass-through method references**: The spec calls for bare `loadTask: store.loadTask` references. The ESLint rule `@typescript-eslint/unbound-method` fires on these because the linter cannot statically verify the Store is a closure-based object with no `this` dependency. Replaced with `.bind(store)` calls (`store.loadTask.bind(store)` etc.) — semantically identical since Store methods don't use `this`, but satisfies the linter without disabling the rule. Logged in the D12 Open Issue.
+
+- **`POST /api/tasks` returns the reloaded task**: `runner.createTask(input)` returns the PENDING snapshot captured before the synchronous scheduler tick runs. For a `noop` task, the tick completes synchronously and the task is COMPLETE in the DB, but `createTask`'s return value is still PENDING. The route reloads the task via `store.loadTask(created.id)` after `createTask` returns so the response reflects the post-tick state as specified ("Returns the post-tick `Task`"). Not a spec deviation — the reload was implied by the spec's wording; this just makes it explicit.
+
+- **D8 ajv defaults**: Confirmed working at runtime. `validateTaskInput` uses `useDefaults: true` and applies `source: "operator_injected"`, `dependsOn: []`, `resourceClaims: []`, `priority: 0` correctly. No fallback needed.
+
+- **SSE auto-close test (D9)**: `vi.useFakeTimers()` was not attempted. The test suite avoids any test for the auto-close timer behavior because `streamSSE`'s internal `setInterval` calls (heartbeat) use real timers regardless of fake-timer injection. The acceptance checklist items 5–8 are operator-verified via live curl (see §Acceptance check not verifiable headlessly below). The SSE test suite covers: 404 on missing id, backfill, Last-Event-ID resume, and subsequent-event delivery. Auto-close is not tested headlessly.
+
+### Bundle delta vs 7ce4c5d
+
+App source unchanged — no `.ts`/`.tsx` files under `app/src/` were touched. The app bundle hash will change at build time only if Vite rebuilds (date-stamped chunk names change), but the file contents and gzip sizes are identical to baseline:
+
+```
+dist/assets/DagPanel-*.js    1,646.47 kB (gzip: 505.23 kB)   — unchanged
+dist/assets/index-*.js       1,799.97 kB (gzip: 565.08 kB)   — unchanged
+```
+
+Server build: no size reporting; `tsc -b` exits 0. New server sources add ~180 LOC to `src/runner/events.ts` (~100 LOC) and `src/routes/tasks.ts` (~130 LOC).
+
+### Files changed inventory
+
+**New files:**
+- `server/src/runner/events.ts` — `EventBus` interface + `createEventBus()` + `withPublishing(store, bus)` decorator (~100 LOC)
+- `server/src/routes/tasks.ts` — four route handlers: `GET /`, `GET /:id`, `GET /:id/stream` (SSE), `POST /` (~130 LOC)
+- `server/test/runner/events.test.ts` — 15 unit tests for EventBus + withPublishing
+- `server/test/tasks.test.ts` — 15 endpoint tests via `app.request()`
+
+**Modified files:**
+- `server/src/runner/scheduler.ts` — added `EventBus` import + `bus: EventBus = createEventBus()` param + `readonly events: EventBus` to `Runner` interface + `events: bus` in returned object (+7 lines)
+- `server/src/runner/index.ts` — wires bus + `withPublishing` into `createRunnerForProject`; adds re-exports for `EventBus`, `createEventBus`, `withPublishing`; updates `createStoreForProject` return type to `Store` (+12 lines net)
+- `server/src/server.ts` — one new `app.route("/api/tasks", tasksRoute)` line (+2 lines with import)
+- `docs/05-task-runner/04-api-endpoints.md` — status transitions + this Implementation Notes
+- `docs/05-task-runner/00-task-runner.md` — children manifest row updated
+
+### Gates verified headlessly
+
+| Gate | Command | Exit code |
+|------|---------|-----------|
+| server typecheck | `pnpm -C server typecheck` | 0 |
+| server lint | `pnpm -C server lint` | 0 |
+| server build | `pnpm -C server build` | 0 |
+| server test | `pnpm -C server test` | 0 (140 tests, +30 from this child) |
+| app typecheck | `pnpm -C app typecheck` | 0 |
+| app lint | `pnpm -C app lint` | 0 |
+| app build | `pnpm -C app build` | 0 |
+| parser typecheck | `pnpm -C packages/parser typecheck` | 0 |
+| parser lint | `pnpm -C packages/parser lint` | 0 |
+| parser test | `pnpm -C packages/parser test` | 0 (91 tests, unchanged) |
+
+### Acceptance-check items NOT verifiable headlessly
+
+Items 5–8 from §Acceptance check require a live server + curl:
+
+5. Boot: `pnpm -C server dev /Users/dennis/code/ledger` → `GET /api/tasks` returns `{"tasks":[]}` on fresh DB; `GET /api/_health` etc. still respond.
+6. `POST /api/tasks` with `{"type":"noop","title":"smoke"}` → 201 with `task.status === "COMPLETE"`. Subsequent `GET /api/tasks` returns the task; `GET /api/tasks/<id>` returns `{task, events}` with 3 events.
+7. SSE smoke: `curl -N .../api/tasks/<id>/stream` — frames arrive within ~10 ms of publish; `: ping\n\n` heartbeats every 15 s; stream auto-closes 60 s after task reaches terminal status.
+8. `Last-Event-ID: 0` resume: only events with `seq > 0` are emitted; client disconnect unsubscribes cleanly (no leaked intervals or callbacks).
 
 ---
 

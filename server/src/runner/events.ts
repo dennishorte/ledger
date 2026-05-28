@@ -1,0 +1,95 @@
+/**
+ * In-process pub/sub bridge for the task runner.
+ *
+ * EventBus: lightweight Map<TaskId, Set<callback>> — one bus per Runner instance.
+ * withPublishing: Store decorator that calls bus.publish(taskId) after every
+ * successful write, without changing any method's return value or throwing
+ * behaviour. Closes the 02-scheduler Open Issue "No in-process pub/sub for events".
+ *
+ * Key invariants:
+ * - D5: publish iterates Array.from(set) snapshot — a subscriber can unsubscribe
+ *   itself mid-publish without skipping siblings.
+ * - N2: withPublishing.close() closes store first, then bus (defensive ordering).
+ * - D12: read method pass-through uses method references, not wrapper closures.
+ */
+
+import type { TaskId } from "@ledger/parser";
+import type { Store } from "./store.js";
+
+export type TaskChangedCallback = (taskId: TaskId) => void;
+
+export interface EventBus {
+  /** Subscribe to publish events for one taskId. Returns an unsubscribe fn. */
+  subscribe(taskId: TaskId, cb: TaskChangedCallback): () => void;
+  /** Notify all subscribers for a taskId. No-op if no subscribers. */
+  publish(taskId: TaskId): void;
+  /** Drop all subscriptions. */
+  close(): void;
+}
+
+export function createEventBus(): EventBus {
+  const subs = new Map<TaskId, Set<TaskChangedCallback>>();
+
+  return {
+    subscribe(taskId, cb) {
+      let set = subs.get(taskId);
+      if (set === undefined) {
+        set = new Set();
+        subs.set(taskId, set);
+      }
+      set.add(cb);
+      return () => {
+        const s = subs.get(taskId);
+        if (s === undefined) return;
+        s.delete(cb);
+        if (s.size === 0) subs.delete(taskId);
+      };
+    },
+    publish(taskId) {
+      const set = subs.get(taskId);
+      if (set === undefined) return;
+      // D5: snapshot — a callback can unsubscribe itself mid-iteration without
+      // skipping siblings (live-Set iteration would skip the next element).
+      for (const cb of Array.from(set)) cb(taskId);
+    },
+    close() {
+      subs.clear();
+    },
+  };
+}
+
+export function withPublishing(store: Store, bus: EventBus): Store {
+  return {
+    createTask(input) {
+      const t = store.createTask(input);
+      bus.publish(t.id);
+      return t;
+    },
+    appendEvent(taskId, event) {
+      const ev = store.appendEvent(taskId, event);
+      bus.publish(taskId);
+      return ev;
+    },
+    updateTaskStatus(id, transition, expected) {
+      const t = store.updateTaskStatus(id, transition, expected);
+      bus.publish(id);
+      return t;
+    },
+    // D12: pass-through method references (bound to satisfy the linter's
+    // unbound-method rule). The Store is a factory-closure pattern — methods
+    // don't use `this`, so .bind() is a no-op semantically. Binding avoids
+    // the per-call closure allocation that arrow wrappers would introduce.
+    loadTask: store.loadTask.bind(store),
+    getStatus: store.getStatus.bind(store),
+    listTasks: store.listTasks.bind(store),
+    listPendingEligible: store.listPendingEligible.bind(store),
+    getEvents: store.getEvents.bind(store),
+    close() {
+      // Spec Review N2: store first, bus second. If a future Store-close handler
+      // observed bus state it would still be valid; better-sqlite3 db.close()
+      // has no callbacks today but the reverse order is the safer default.
+      store.close();
+      bus.close();
+    },
+  };
+}
