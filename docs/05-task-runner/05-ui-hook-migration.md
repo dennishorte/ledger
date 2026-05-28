@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-28 (APPROVED → IN_PROGRESS — beginning implementation)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
