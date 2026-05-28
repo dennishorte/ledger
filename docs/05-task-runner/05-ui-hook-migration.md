@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-28)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — stage-8b Fix A landed; gates green; awaiting operator re-verification of Approve/Reject flicker resolution)
+**Last Updated:** 2026-05-28 (VERIFY → COMPLETE — operator re-verification of stage-8b Fix A green; flicker resolved; all Acceptance items pass)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
