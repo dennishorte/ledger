@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/02-scheduler`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
+**Last Updated:** 2026-05-27 (APPROVED → IN_PROGRESS — implementer started)
 
 **Dependencies:** `05-task-runner/01-store-schema` (Store API, runner types, `.ledger/runner.db`)
 
