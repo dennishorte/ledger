@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/02-scheduler`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW — dispatching reviewer)
+**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `05-task-runner/01-store-schema` (Store API, runner types, `.ledger/runner.db`)
 
@@ -193,23 +193,23 @@ export function createRunner(store: Store, registry: ExecutorRegistry = createDe
   let ticking = false;
   let pending = false;
 
-  function makeHandle(): RunnerHandle {
-    return {
-      emit(taskId, event) {
-        return store.appendEvent(taskId, event);
-      },
-      complete(taskId) {
-        const t = store.updateTaskStatus(taskId, { from: "RUNNING", to: "COMPLETE" });
-        scheduleTick();
-        return t;
-      },
-      fail(taskId, reason) {
-        const t = store.updateTaskStatus(taskId, { from: "RUNNING", to: "FAILED", reason });
-        scheduleTick();
-        return t;
-      },
-    };
-  }
+  // One handle per Runner — handle methods are taskId-keyed and stateless, so
+  // a singleton avoids per-dispatch allocation. (Spec Review S6.)
+  const handle: RunnerHandle = {
+    emit(taskId, event) {
+      return store.appendEvent(taskId, event);
+    },
+    complete(taskId) {
+      const t = store.updateTaskStatus(taskId, { from: "RUNNING", to: "COMPLETE" });
+      scheduleTick();
+      return t;
+    },
+    fail(taskId, reason) {
+      const t = store.updateTaskStatus(taskId, { from: "RUNNING", to: "FAILED", reason });
+      scheduleTick();
+      return t;
+    },
+  };
 
   function scheduleTick(): void {
     if (ticking) { pending = true; return; }
@@ -239,8 +239,10 @@ export function createRunner(store: Store, registry: ExecutorRegistry = createDe
         // Eligible — check executor.
         const exec = registry.get(task.type);
         if (exec === undefined) {
-          // Step 5: blocked_no_executor (yield — no point continuing).
-          if (task.status !== "BLOCKED") {
+          // Step 5: blocked_no_executor. Symmetric reason-equality guard with
+          // step 6 below — re-evaluating a no-executor task on every tick must
+          // not spam redundant status_change events. (Spec Review B1.)
+          if (task.status !== "BLOCKED" || lastReason(task.id) !== reasons.BLOCKED_NO_EXECUTOR) {
             store.updateTaskStatus(
               task.id,
               { from: task.status as TaskStatus, to: "BLOCKED", reason: reasons.BLOCKED_NO_EXECUTOR },
@@ -284,7 +286,6 @@ export function createRunner(store: Store, registry: ExecutorRegistry = createDe
   }
 
   function dispatch(task: Task, exec: Executor): void {
-    const handle = makeHandle();
     try {
       const result = exec.run(task, handle);
       if (result instanceof Promise) {
@@ -307,6 +308,8 @@ export function createRunner(store: Store, registry: ExecutorRegistry = createDe
           task.id,
           { from: "RUNNING", to: "FAILED", reason: `executor_error: ${msg}` },
         );
+        scheduleTick(); // Spec Review B2: symmetric with the async branch above —
+                        // newly-eligible downstream tasks must be re-evaluated.
       }
     }
   }
@@ -481,7 +484,7 @@ server/test/runner/
 
 **`scheduler.test.ts`** (against an in-memory `:memory:` DB constructed via `createStore(new Database(":memory:"))` after applying migrations directly):
 1. Inject one `noop` task → `runner.tick()` transitions it `PENDING → RUNNING → COMPLETE`; events seq 0 (creation), 1 (RUNNING), 2 (COMPLETE).
-2. Inject two unrelated `noop` tasks → both reach COMPLETE in a single `tick()` invocation (trampoline dispatches both).
+2. Inject two unrelated `noop` tasks → both reach COMPLETE inside one outer `runner.tick()` call. (Each `tickOnce` invocation dispatches at most one task before yielding via `return scheduleTick()`; the outer trampoline iterates `tickOnce` twice. Spec Review S3.)
 3. Inject task A then task B with `B.dependsOn = [A.id]` → `tick` dispatches A (B stays BLOCKED with `blocked_by_dep:<A.id>`); on A's completion, B becomes eligible and dispatches.
 4. Inject task A with claim `{ kind: "node", nodeId: "x", mode: "write" }` then B with the same claim → A dispatches; B transitions to BLOCKED with `blocked_by_claim_conflict:<A.id>`; on A's completion, B dispatches.
 5. Inject task A and B both with `{ kind: "node", nodeId: "x", mode: "read" }` → both dispatch concurrently (no conflict).
@@ -545,16 +548,18 @@ Operator note: items 1–4 + 6–9 are headless-verifiable; item 5 requires a li
 | D9 | `BLOCKED → BLOCKED` reason updates emit a new `status_change` event, gated on reason inequality | Without the gate, every tick on a long-running dep would spam events. With the gate, the event log records only meaningful changes — e.g., "deps satisfied, now blocked by conflict" is one event. The cost is one `getEvents` scan per BLOCKED candidate per tick; bounded at v1. |
 | D10 | The `lastReason` helper reads from the event log, not from a denormalized column on `tasks` | Adding a `last_reason` column would be a migration in `01-store-schema` (already shipped) or a fresh migration here. Event-log read is O(n_events × n_blocked_tasks) per tick — at v1 (≤100 events × ≤10 blocked) this is microseconds. Defer the denormalization until a profile shows it matters. |
 | D11 | `createStoreForProject` is preserved as a one-line wrapper around `createRunnerForProject` | Backwards compat with `01-store-schema`'s context wiring + tests. The factory's old contract ("returns a Store") is honored by returning `runner.store`. New callers should use `createRunnerForProject`; old callers don't have to migrate. |
-| D12 | `ProjectContext.store` is **kept** alongside the new `runner` field, not removed | Removing it would force every test in `01-store-schema`'s suite that touches `ctx.store` to migrate at the same time. Keeping both — where `ctx.store === ctx.runner.store` — lets the migration be a non-event. `04-api-endpoints` decides whether to drop `ctx.store` once its routes consume `ctx.runner` exclusively. |
+| D12 | `ProjectContext.runner: Runner` is added by **this** sub-leaf, not deferred to `04-api-endpoints`; `ProjectContext.store` is kept as a same-reference alias | Two reasons: (a) orphan recovery needs to run at boot, which means the Runner must be constructed during `loadProjectContext` — there is no other sensible site; (b) keeping `ctx.store` as `runner.store` lets every `01-store-schema` test that destructures `ctx.store` keep working without a coordinated edit. The parent's Children manifest row for `04-api-endpoints` mentions "Runner instance wired onto ProjectContext" as that child's deliverable; this sub-leaf's deviation just front-loads the construction by one leaf. `04-api-endpoints` decides whether to drop `ctx.store` once its routes consume `ctx.runner` exclusively. (Spec Review N5 consolidates this rationale; previously split between §Requirements item 9 and a sparser D12.) |
 | D13 | Executor errors are captured via `try/catch` (sync) AND `.catch()` on returned Promise (async); both paths transition to FAILED with `executor_error: <message>` prefix | Symmetric handling — operators can't tell from the event log whether the executor threw sync or async, and shouldn't need to. The `executor_error:` prefix distinguishes scheduler-captured failures from `handle.fail(taskId, reason)` calls (which use the operator-supplied `reason` verbatim). |
 | D14 | The `recoverOrphans` function does NOT also recover `BLOCKED` rows (re-evaluate them at boot) | A boot-time forced re-evaluation is unnecessary — the first tick after boot (triggered by any task creation or an explicit `runner.tick()` call) re-evaluates all BLOCKED rows naturally. Adding a "boot tick" to `createRunnerForProject` would couple boot to tick semantics; the cleaner pattern is "boot recovers orphans; first task creation triggers first tick." |
+| D15 | `RunnerHandle` is a Runner-scoped **singleton**, not allocated per-dispatch | The handle methods (`emit`, `complete`, `fail`) all take `taskId` as their first arg — the handle has no per-task closure state. A per-dispatch allocation would be a fresh object literal on every executor invocation. Hoisting the handle to once-per-Runner removes the allocation without changing semantics. (Spec Review S6.) When `03-hitl-gate` adds `awaitHumanReview(taskId)`, the same singleton pattern applies. |
 
 ---
 
 ## Open Issues
 
 - **Tick fairness under starvation.** A perpetually-eligible high-priority task can starve lower-priority ones. v1 has no aging or quotas. At single-operator scale, the operator notices and rebalances priorities manually. Revisit if multi-stakeholder dispatch becomes a thing. *(Priority: LOW.)*
-- **`Store.updateTaskStatus({ from: "BLOCKED", to: "BLOCKED" })` allowance.** The implementation relies on Store accepting a same-status transition (for the BLOCKED → BLOCKED reason-update case in tick step 6). The Store doesn't reject this today (see `store.ts:312`), but neither does the spec for `01-store-schema` make it explicit. If a future audit tightens the Store to reject same-status transitions, this sub-leaf's tick code needs a workaround (e.g., a dedicated `Store.updateBlockedReason(taskId, reason)` method). Logged here so the implementer of `01-store-schema`'s next audit pass knows. *(Priority: LOW — coordination note.)*
+- **`Store.updateTaskStatus({ from: "BLOCKED", to: "BLOCKED" })` allowance — verified at spec-review time.** Spec Review S1 confirmed: `store.ts:312-369` performs no `from`-vs-stored-status validation, so same-status transitions pass through and `writeEventInTx` still writes the `status_change` event. If a future audit tightens the Store to reject same-status transitions, this sub-leaf's tick code needs a workaround (e.g., a dedicated `Store.updateBlockedReason(taskId, reason)` method). Logged here so the implementer of `01-store-schema`'s next audit pass knows. *(Priority: LOW — coordination note.)*
+- **`createStoreForProject` backwards-compat shim issues a no-op orphan-recovery scan on every call.** The current `01-store-schema` tests (`context.test.ts`, `docs.test.ts`, `project.test.ts`) call `loadProjectContext` repeatedly against the same fixture; each call now constructs a fresh Runner, which runs `recoverOrphans` over rows that have already been recovered (or were never RUNNING). The scan is a single indexed `SELECT * FROM tasks WHERE status = 'RUNNING'` — sub-millisecond at fixture scale — but it accumulates as the fixture grows. (Spec Review S5.) *(Priority: TRIVIAL.)*
 - **`lastReason` cost at scale.** O(n_events) scan per BLOCKED candidate per tick. At v1 scale negligible. At v1000-tasks scale, a denormalized `last_reason` column on `tasks` (added via migration 002) is the right answer. *(Priority: LOW — surfaces as a perf concern when the runner is loaded; defer.)*
 - **No back-pressure on `runner.tick()` from external code.** A script that calls `runner.tick()` in a tight loop just no-ops via the `ticking` flag once nothing is eligible. Acceptable. Adding a "tick batching" facade would be premature. *(Priority: TRIVIAL.)*
 - **Executor registry overwrite emits `console.warn`.** A future structured logger replaces this; until then, the warning is the right surfacing. Inherited from `01-store-schema` Open Issue "console.log in production path." *(Priority: LOW — inherited.)*
@@ -567,7 +572,39 @@ Operator note: items 1–4 + 6–9 are headless-verifiable; item 5 requires a li
 
 ## Spec Review (2026-05-27)
 
-*(none yet — pre-review)*
+Independent spec review was run against this DRAFT in a clean general-purpose Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — 2 blocking, 6 should-fix, 6 nits. PRD coverage matrix returned Addressed across §5/§6.3/§6.5/§7.1/§10/§11; §8.4 was flagged Partial (OCC `expectedDbRowVersion` correctly unused by the scheduler itself — that surface is `03-hitl-gate`'s; breakpoints + priority override correctly deferred). All findings landed:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | Stale BLOCKED-no-executor reason: the spec's pseudocode guarded the dep/conflict BLOCKED transitions on reason inequality (D9), but the no-executor branch only guarded `task.status !== "BLOCKED"`. Re-evaluating a no-executor task every tick would emit a redundant `status_change` event, contradicting D9. | Updated the pseudocode at §Runner class + tick loop: the no-executor branch now reads `if (task.status !== "BLOCKED" || lastReason(task.id) !== reasons.BLOCKED_NO_EXECUTOR)`. Symmetric with step 6. |
+| B2 | Sync executor `try/catch` missing `scheduleTick()` after the `RUNNING → FAILED` transition. The async branch (`.catch()` on returned Promise) calls `scheduleTick()`; the sync branch did not. Asymmetric — a downstream task depending on the sync-failed task would stall until the next external trigger. | Added `scheduleTick()` to the sync catch path with an inline comment citing B2. |
+| S1 | `Store.updateTaskStatus({ from: "BLOCKED", to: "BLOCKED" })` allowance was logged as an unverified assumption Open Issue. Reviewer verified against `store.ts:312-369`: the function performs no `from`-vs-stored-status validation; same-status transitions pass through cleanly and still write the `status_change` event. | Promoted the Open Issue text from "relies on" to "verified at spec-review time" with the file:line citation; kept the Open Issue as a coordination note for future audits of `01-store-schema`. |
+| S2 | `lastReason` walking the events array backwards depends on `getEvents` returning ASCENDING order; spec needed an explicit confidence note. | Verified against `store.ts:204-206` (`ORDER BY seq ASC`). Recorded in §Confidence notes below. |
+| S3 | Test plan item 2 said "both reach COMPLETE in a single tick() invocation (trampoline dispatches both)" — ambiguous between "single `tickOnce`" and "single outer `tick()`". The trampoline trace shows `tickOnce` actually dispatches one task per call and yields; the outer `do/while` re-iterates. | Reworded test item 2 to "inside one outer `runner.tick()` call. (Each `tickOnce` invocation dispatches at most one task before yielding via `return scheduleTick()`; the outer trampoline iterates `tickOnce` twice. Spec Review S3.)" |
+| S4 | Duplicate of B2. | Covered by B2's fix. |
+| S5 | `createStoreForProject` backwards-compat shim issues a no-op orphan-recovery scan on every call (used by `context.test.ts` + sibling tests against the same fixture). Not a correctness bug; not previously logged. | Added to Open Issues as TRIVIAL with a citation to Spec Review S5. The scan is a single indexed SELECT — sub-ms at fixture scale. |
+| S6 | Per-dispatch `makeHandle()` allocation has no per-task state — handle methods are taskId-keyed. Stylistic / no-perf-test-catches-it; worth pinning. | Hoisted `handle` to a Runner-scoped singleton (initialized once in the factory). Added D15 to the Decisions table. |
+| N1 | Decisions table format match. | No action — verified against `01-store-schema.md`. |
+| N2 | Open Issues priority-tag consistency. | No action — verified. |
+| N3 | Test count realism (~27 tests is lean for the integration surface). | Acknowledged. The implementer should add a test that explicitly counts `tickOnce` entries for the trampoline behavior (S3) and a test for `console.warn` on registry overwrite. Logged in §Confidence notes for stage-4 spot-check, not as a spec change. |
+| N4 | Acceptance check item 7 (REPL example showing `COMPLETE` immediately after `createTask`) verified by the trampoline trace. | Recorded in §Confidence notes. |
+| N5 | D12's "context.ts wiring" rationale was split between §Requirements item 9 prose and a sparser D12. | D12 rewritten to consolidate the rationale (two reasons: orphan-recovery boot constraint + zero-cost backwards compat alias). The §Requirements item 9 prose remains as the briefer surface description. |
+| N6 | Spec Review placeholder present. | Resolved by this audit table replacing the placeholder. |
+
+Reviewer's **decomposition assessment** was **Stay bundled** — the conflict primitive (~30 LOC), executor registry (~40 LOC), Runner class (~150 LOC), and orphan recovery (~15 LOC) are mutually-referential. Splitting would force a half-state intermediate commit. The natural split if the implementer wall-clocks out is `[conflict + registry + standalone tests]` first, `[Runner + factory + orphan recovery + context wiring]` second; not recommended preemptively.
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer):
+
+- `Store.updateTaskStatus({from: "BLOCKED", to: "BLOCKED"})` works — verified `store.ts:312-369`.
+- `store.getEvents` orders ASC by seq — verified `store.ts:204-206`; the `lastReason` backward-walk is correct.
+- `Store.updateTaskStatus` requires `from: TaskStatus` (not optional) — verified `store.ts:136, 314`.
+- `Store.listTasks({status: TaskStatus[]})` array-filter shape — verified `store.ts:400-405` builds dynamic `status IN (?, ...)` correctly.
+- Seq-0 creation event omits `from` — verified by existing test `store.test.ts:66-73` (`expect("from" in evt).toBe(false)`).
+- `listPendingEligible` returns `PENDING ∪ BLOCKED` ordered `priority DESC, created_at ASC` — verified `store.ts:199-202`.
+- **Implementer spot-check at stage 4:** add a test that asserts `tickOnce` is invoked N times for N non-conflicting `noop` tasks (S3 trampoline verification — register a spy executor or instrument the lookupExecutor call site).
+- **Implementer spot-check:** the spec's test #13 (sync executor throws) should be extended to assert a downstream task with `dependsOn: [throwerId]` transitions correctly after the throw (proves the B2 fix is wired).
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
