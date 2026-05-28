@@ -381,6 +381,16 @@ The Acceptance check is intentionally narrower than the parent's roll-up (parent
 - **`MCPSessionId` is `string` not a branded type.** The leaf's types use `string`. Mixing with `TaskId` (also currently `string` in `@ledger/parser/runner/types.ts`) at the binding-registry call site loses some type safety. Branding both would help; defer until either type sees a real swap-bug. *(Priority: TRIVIAL.)*
 - **Double-close ordering on teardown.** `McpServerHandle.close()` calls `server.close()` then `transport.close()`. The SDK may close the transport transitively inside `server.close()`; if so, the second call may throw or be a no-op. The d.ts at 1.29.0 exposes both methods (`McpServer.close()` line in `mcp.d.ts`; `transport.close()` on line 252 of `webStandardStreamableHttp.d.ts`) but does not document whether the server cascades closure to its connected transport. The implementer either (a) wraps the second call in `try { await transport.close(); } catch { /* already closed */ }`, or (b) reads the SDK source post-install and picks the right ordering. Since v1 never calls `close()` (no project teardown path), the question is academic until the framework lands a multi-project hot-swap mode. *(Priority: LOW — surfaces only at teardown, which is not exercised in v1.)*
 - **Tests use the SDK client against an in-process Hono fetch handle, not a real network round-trip.** The acceptance check item 5 calls out a real `curl` invocation, but the automated test layer uses `app.fetch(request)` directly (Hono's testing convention) to avoid spinning a TCP listener. The two paths exercise the same `WebStandardStreamableHTTPServerTransport.handleRequest` code, so coverage is equivalent; the operator's manual `curl` step in §Acceptance check is the integration smoke. *(Priority: TRIVIAL — documented to prevent future "why no real fetch?" question.)*
+- **`setToolRequestHandlers()` private-method cast for eager capability advertisement.** The current implementation forces the tools capability to be advertised at handshake time by calling a private SDK method via `(server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers()` — without it, `tools/list` returns `-32601 Method not found` until `registerTool()` is first called. The cast is correct at runtime but bypasses TypeScript's `private` modifier; if the SDK renames or removes this method in a minor release, the call throws at runtime and the test suite catches it. A cleaner public-API path exists for `02-runner-tools` to migrate to when it lands tools:
+  ```ts
+  import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+  server.server.registerCapabilities({ tools: {} });
+  server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+  server.server.setRequestHandler(CallToolRequestSchema, async () => {
+    throw new McpError(ErrorCode.MethodNotFound, "No tools registered yet");
+  });
+  ```
+  `02-runner-tools`' `registerTool(...)` calls re-enter `setToolRequestHandlers()` idempotently (confirmed at `mcp.js` line 650), so the natural clean-up point is when that sub-leaf wires its first tool — replace the cast in `dispatcher/mcp/server.ts` with the public path above and the leaf's behaviour is unchanged. *(Priority: LOW — surfaces only on an SDK internal rename, and `02-runner-tools` retires the cast as a side effect of its real work.)*
 
 ---
 
@@ -450,6 +460,36 @@ Nothing punted; all 7 findings + 4 confidence notes landed.
 - Item 6: `Mcp-Session-Id` round-trip against a running server; bad/missing session ids return 400/404.
 - Item 7: `GET /api/_health` shows `activeSessions: 1` after an open session; `activeSessions: 0` after DELETE.
 - Item 9: No regressions on existing UI panels (DAG, Tasks, Logs).
+
+### Implementation Review (2026-05-28)
+
+Independent implementation review was run against the rebased worktree branch (`worktree-agent-a0d9ba4671b58b490`) in a clean Sonnet context. Verdict: **READY_WITH_FOLLOWUPS** — all 7 gates PASS, every Spec Review (S1–S3, N1–N4) closure HONOURED, all 4 confidence-note re-verifications ACCURATE, no blocking defects. Two findings recorded; one nit applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `setToolRequestHandlers()` cast: cleaner public-API path exists via `server.server.registerCapabilities({ tools: {} }) + setRequestHandler(ListToolsRequestSchema, ...)` — would avoid bypassing TS `private`. | Punted to `02-runner-tools`. That sub-leaf's `registerTool()` calls re-enter the same internal method idempotently, so the cleanup happens as a side-effect of its real work. Logged as a new Open Issue (LOW priority) with the public-API recipe baked into the body so `02-runner-tools` doesn't re-derive it. The deviation stays correct at runtime; test suite catches an SDK rename. |
+| S2 | The `setToolRequestHandlers()` deviation was documented in Implementation Notes but not surfaced in §Open Issues — so future spec reviews would not see it. | New Open Issue added (see above). The recipe quoted verbatim from the implementation review so `02-runner-tools`' stage-4 implementer has the fix ready. |
+| N1 | `health.test.ts` cast its response as `{ ok, startedAt }` and did not assert on the new `dispatcher` field — a future refactor that drops the field would not be caught by the health test suite. | New test case added in `server/test/health.test.ts`: `"includes a dispatcher field with status 'ready' and a numeric activeSessions count"`. Verifies field presence + shape; complements the MCP test file's session-count behaviour coverage. |
+
+Reviewer's gate report (replicated for COMPLETE verification audit trail):
+
+| Gate | Result |
+|---|---|
+| `pnpm -C packages/parser build` | PASS |
+| `pnpm -C server build` | PASS |
+| `pnpm -C server typecheck` | PASS (0 errors) |
+| `pnpm -C server lint` | PASS (0 warnings, `--max-warnings=0`) |
+| `pnpm -C app typecheck` | PASS (0 errors) |
+| `pnpm -C app lint` | PASS |
+| `pnpm -C server test` | PASS — 176 tests, 17 files, 4.61s (now 177 with the N1 health test addition) |
+
+Reviewer's structural observations (recorded but not actioned — they are informational):
+
+- `createMcpServer` (sync factory) is exported from `dispatcher/mcp/server.ts` but NOT from `dispatcher/index.ts`. Tests deep-import it; `02-runner-tools` will use `createMcpServerAsync` from the barrel. Deliberate; documents that the sync factory is an implementation detail.
+- `health.test.ts` calls `loadProjectContext()` which spins a real `McpServerHandle` per test. Heavier than the in-memory stub pattern used in `tasks.test.ts` / `hitl.test.ts`, but functionally correct. Worth revisiting if `loadProjectContext` ever does heavy work that slows the test suite materially.
+- The listener-unsubscribe test (lines ~1978–2051 of `server.test.ts`) uses two handles to work around the SDK's stateful single-initialize constraint. Setup includes a cosmetically-redundant double-register on `handle2` that relies on `Set` deduplication; the assertion passes for the right reason. Not worth changing.
+
+Nothing punted on the technical correctness front; the cast finding is the only deferred item and its disposition is "natural cleanup by `02-runner-tools`."
 
 ---
 

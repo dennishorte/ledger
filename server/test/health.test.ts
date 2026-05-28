@@ -24,4 +24,19 @@ describe("GET /api/_health", () => {
     const body = await res.json() as { ok: boolean; startedAt: string };
     expect(body.startedAt).toBe(project.startedAt);
   });
+
+  it("includes a dispatcher field with status 'ready' and a numeric activeSessions count", async () => {
+    const project = await loadProjectContext({ projectPath: sampleProject, port: 0 });
+    const app = createServer(project);
+    const res = await app.request("/api/_health");
+    const body = await res.json() as {
+      ok: boolean;
+      startedAt: string;
+      dispatcher: { status: string; activeSessions: number };
+    };
+    expect(body.dispatcher).toBeDefined();
+    expect(body.dispatcher.status).toBe("ready");
+    expect(typeof body.dispatcher.activeSessions).toBe("number");
+    expect(body.dispatcher.activeSessions).toBeGreaterThanOrEqual(0);
+  });
 });
