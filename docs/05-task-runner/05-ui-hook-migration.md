@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW — dispatching reviewer)
+**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
@@ -61,11 +61,11 @@ In scope for v1:
    - Both hooks live in `app/src/lib/` (sibling to `useTask.ts`) so consumers import from `@/lib/...` uniformly.
 5. **`app/src/components/tasks/TaskInspector.tsx`** — modified:
    - Calls `useTask(task.id)` internally to obtain the live `{ task, events }`. The prop `task: Task` becomes the fallback for the closed-over snapshot; the inspector renders from the freshest `useTask` result when available (so a successful Approve mutation's invalidation refreshes the inspector without remount). When `useTask` is still pending the prop's value is used; when `useTask` resolves to `null` (id 404'd between row click and inspector open) the inspector shows a "task no longer found" message.
-   - **BLOCKED-reason / status-reason row** added between "Resource claims" and "Timing": scans the events list for the latest `kind: "status_change"` entry, renders `event.reason` as a single line under the label `Status reason` when non-empty. Hidden when no status_change has a reason (e.g., a happy-path task that went `PENDING → RUNNING → COMPLETE` with no `reason` ever set). For rejections, the truncated 80-char reason (`rejected: <…>`) is what shows here — the full untruncated rationale is in the `kind: "error"` detail event and renders in the LogStream panel via existing `ErrorRow`. (See `03-hitl-gate` D4 for the dual-storage rationale; this inspector intentionally surfaces the truncated form because it's the row-level summary.)
+   - **BLOCKED-reason / status-reason row** added between "Resource claims" and "Timing": scans the events list for the latest `kind: "status_change"` entry, renders `event.reason` as a single line under the label `Status reason` when non-empty. Hidden when no status_change has a reason (e.g., a happy-path task that went `PENDING → RUNNING → COMPLETE` with no `reason` ever set). For approvals-with-note the 80-char truncated form (`approved: <note>`) is what shows here; for rejections the truncated 80-char rationale (`rejected: <…>`) shows here — both truncations are emitted by `03-hitl-gate`'s `reasons.approvedWithNote` / `reasons.rejected` builders (Spec Review S2). The full untruncated rejection rationale lives in the `kind: "error"` detail event and renders in the LogStream panel via existing `ErrorRow`. (See `03-hitl-gate` D4 for the dual-storage rationale; this inspector intentionally surfaces the truncated form because it's the row-level summary.)
    - **Approve / Reject buttons** rendered conditionally:
      - Condition: `task.transcriptPath === undefined && liveTask?.status === "AWAITING_HUMAN_REVIEW"`. The `liveTask` reference comes from `useTask`'s data — important because the prop snapshot may be stale (e.g., the row showed AWAITING two seconds ago; the operator's other tab just approved). `transcriptPath === undefined` is the runner-emitted discriminant (parent §Type coordination).
      - Layout: a two-button row above the "Open log stream" link. Approve is the primary action (cream accent background, same style as the existing "Open log stream" link); Reject is secondary (outline-only). Both occupy the same row when collapsed; clicking Reject expands an inline textarea + "Confirm reject" / "Cancel" pair (the textarea is `min-h-20`, `max-h-40`, autosizing). No keyboard shortcuts in v1 (D10).
-     - Both mutations send `dbRowVersion: liveTask.dbRowVersion` — read from the freshest `useTask` snapshot, never from the closed-over prop (defensive against the two-tab race).
+     - Both mutations send `dbRowVersion: liveTask.dbRowVersion` — read from the freshest `useTask` snapshot, never from the closed-over prop (defensive against the two-tab race). Because `showHitlButtons` requires `liveTask?.status === "AWAITING_HUMAN_REVIEW"`, the buttons are only rendered when `live` has resolved — so the `task` reference passed to `HitlActions` IS the live task, not the prop fallback (Spec Review S3 — invariant pinned in the pseudocode comment below).
      - On 409 (`version_conflict` or `wrong_status`): inline error banner above the buttons; the banner text differentiates the two cases ("This task was updated elsewhere — please refresh." vs "Task is no longer awaiting review."). On non-409 errors: generic "Approve/reject failed — see browser console" with the response body logged. (D5.)
    - Plumbed dependency: the inspector now needs a `QueryClient` for the invalidation calls in the mutations. Already present at the root via `01-ui/01-shell`'s `<QueryClientProvider>`.
 6. **`app/src/lib/useTaskList.ts` + `useTask.ts` + `useLogStream.ts` types** — no public type changes. `Task`, `LogEvent`, `TaskDetail`, `UseLogStreamResult` keep their current shapes. The dual-source migration is encapsulated in the hooks' implementations.
@@ -86,7 +86,8 @@ In scope for v1:
      - `id` with `:` → fetches `/api/transcripts/:id`, returns `{task, events}`.
      - `id` without `:` → fetches `/api/tasks/:id`.
      - 404 on the chosen endpoint → returns `null` (no fallback).
-     - Verifies no cross-endpoint requests (`fetch` called exactly once).
+     - 5xx on the chosen endpoint → query enters `isError` and the inspector shows its existing error branch rather than "task no longer found" (Spec Review B1 + S5).
+     - Verifies no cross-endpoint requests (`fetch` called exactly once per resolve).
    - `app/src/lib/useApproveTask.test.ts` / `useRejectTask.test.ts`:
      - 200 → returns `{task}`; invalidates both `["tasks"]` and `["task", id]` query keys.
      - 409 `version_conflict` → mutation `error` carries `{status: 409, body: {error: "version_conflict", expected, actual}}`.
@@ -161,6 +162,10 @@ import type { Task, TaskId } from "./types.js";
 
 async function fetchOne(url: string): Promise<Task[]> {
   const res = await fetch(url);
+  // 404 = "source not available" — degrade silently (D7). The 404 is
+  // consumed here as fulfilled([]) so Promise.allSettled below sees
+  // `fulfilled`, not `rejected`. Non-404 errors throw and surface as
+  // `rejected` in the caller's allSettled result.
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`${url}: ${String(res.status)}`);
   const data = (await res.json()) as { tasks: Task[] };
@@ -234,7 +239,12 @@ function pickEndpoint(id: TaskId): string {
 
 async function fetchTask(id: TaskId): Promise<TaskDetail | null> {
   const res = await fetch(pickEndpoint(id));
-  if (!res.ok) return null;
+  // Mirror useTaskList's 404-vs-5xx split (Spec Review B1): 404 → null
+  // (task genuinely doesn't exist); other non-ok → throw so the query
+  // enters `isError` instead of silently rendering "task no longer found"
+  // during a server outage.
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`${pickEndpoint(id)}: ${String(res.status)}`);
   return res.json() as Promise<TaskDetail>;
 }
 
@@ -273,7 +283,7 @@ function pickStreamUrl(id: TaskId): string {
 // auto-close behavior — so the consumer code needs no semantic change.
 ```
 
-The `useLogStream` change is a one-line URL selection. The hook's contract (`UseLogStreamResult`, the `status` / `reconnectVisible` semantics) is unchanged.
+The `useLogStream` change is a one-line URL selection. The hook's contract (`UseLogStreamResult`, the `status` / `reconnectVisible` semantics) is unchanged. The `useEffect` dep array `[taskId, queryStatus, taskQuery.data]` is unchanged — the runner-stream SSE opens/closes on the same transitions as the transcript stream (Spec Review N2).
 
 ### `useApproveTask` + `useRejectTask`
 
@@ -412,9 +422,13 @@ export function TaskInspector({
   // `transcriptPath === undefined` is the discriminant per parent §Type
   // coordination. Use the *live* task so a successful mutation's
   // invalidation removes the buttons on next render without a manual close.
+  // Spec Review S3: gating on `live?.status` (not `taskProp.status`) ensures
+  // the buttons only render when the query has resolved — so the `task`
+  // reference inside <HitlActions> is always the live task with a fresh
+  // dbRowVersion, never the closed-over prop. Invariant pinned here.
   const isRunnerEmitted = task.transcriptPath === undefined;
   const showHitlButtons =
-    isRunnerEmitted && task.status === "AWAITING_HUMAN_REVIEW";
+    isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW";
 
   // ... existing render path (Header / Type / Source / Agent / Parent task /
   //     Depends on / Resource claims) unchanged ...
@@ -447,7 +461,7 @@ export function TaskInspector({
 }
 ```
 
-`HitlActions` is a sibling component in the same file (single inspector concern; no separate file). Sketch:
+`HitlActions` is a sibling component in the same file (single inspector concern; no separate file). The sketch below uses `cn(...)` for class merging — at implementation time check the existing utility (`app/src/lib/cn.ts` per the file tree); a sibling component (`TaskTypeBadge`, `LogEventRow`) already imports it. Spec Review N4. Sketch:
 
 ```tsx
 function HitlActions({ task }: { task: Task }): JSX.Element {
@@ -573,13 +587,13 @@ function errorBanner(err: unknown):
 After this child merges, a reviewer running the worktree must observe:
 
 1. `pnpm install` unchanged.
-2. `pnpm -C app typecheck`, `lint`, `build`, `test` exit zero. App test count delta ≈ +35 (5 mergeTasks unit + 5 fetch integration + 4 useTask + 6 approve/reject mutation + 8–10 inspector + 5 helper tests; pinned in §Tests above).
+2. `pnpm -C app typecheck`, `lint`, `build`, `test` exit zero. App test count delta ≈ +28 (5 `mergeTasks` unit + 5 `useTaskList` fetch integration + 5 `useTask` (incl. 5xx → isError per S5) + 6 approve/reject mutation + 7 inspector; pinned in §Tests above — Spec Review N3 + N5 reconciled the count).
 3. `pnpm -C server test` and `pnpm -C packages/parser test` unchanged.
 4. Boot the server (`pnpm -C server dev /Users/dennis/code/ledger`) and the UI (`pnpm -C app dev`) in two terminals.
 5. **Dual-source list:** `curl -X POST /api/tasks -d '{"type":"noop","title":"runner smoke"}'` creates a runner task; the `/tasks` panel shows the new row alongside existing transcript-derived rows. The runner row's `task.transcriptPath === undefined`; the transcript rows' is set. Both surface visually identically.
 6. **Runner task inspector:** clicking the runner row opens the inspector; the inspector shows the same fields as a transcript row PLUS the "Status reason" row when the task has a non-empty latest `status_change.reason` (e.g., a BLOCKED runner task will show `blocked_by_dep:<id>` or `blocked_no_executor`).
 7. **Approve flow:** inject a `human_review` task (`curl -X POST /api/tasks -d '{"type":"human_review","title":"approve me","reviewPayload":{"summary":"x"}}'`); the row appears with status `AWAITING_HUMAN_REVIEW`; clicking opens the inspector with Approve / Reject buttons visible. Clicking Approve transitions the task to `COMPLETE` within ≤1 s (TanStack invalidate); buttons disappear; the LogStream panel for the same task shows the approval `status_change` event live (SSE delivery).
-8. **Approve with note:** click "Add note" → enter "lgtm" → Approve. Inspector's Status reason updates to `approved: lgtm` after invalidation.
+8. **Approve with note:** click "Add note" → enter "lgtm" → Approve. Inspector's Status reason updates to `approved: lgtm` after invalidation. (The `approved: lgtm` string is emitted by the runner's `reasons.approvedWithNote` and truncated at 80 chars per `03-hitl-gate` D4; the inspector renders it verbatim from `event.reason` — Spec Review S4.)
 9. **Reject flow:** inject another `human_review` task; click Reject in the inspector; type a rationale; Confirm. Task transitions to `FAILED`; inspector's Status reason shows `rejected: <truncated>`; the LogStream panel shows BOTH the `kind: "error"` detail event (with full rationale in the expandable stack) AND the `status_change` event (with truncated reason).
 10. **409 conflict path:** Open two browser tabs on the inspector for the same AWAITING task. Click Approve in tab 1 → success. Click Approve in tab 2 (still showing AWAITING) → the inline error banner appears: "Task is no longer awaiting review." (status was already moved to COMPLETE → `wrong_status`).
 11. **409 version conflict (synthetic):** if the operator wants to exercise the `version_conflict` specifically, they can inject a `human_review`, observe `dbRowVersion`, then via curl approve with a stale `dbRowVersion-1`. The UI doesn't easily simulate this since the inspector always reads the live version; the test suite covers it via mocked-`fetch` (D5).
@@ -623,9 +637,36 @@ Items 2–4 + the unit test suite are headlessly verifiable; items 5–13 are op
 
 ---
 
-## Spec Review
+## Spec Review (2026-05-28)
 
-*(none yet — pre-review)*
+Independent spec review run against the DRAFT in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — 1 blocking, 5 should-fix, 5 nits. PRD coverage matrix returned full Addressed across §5/§6.3/§7.1/§8.4/§11. All findings landed:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `useTask`'s `fetchTask` returned `null` on **any** non-ok status, swallowing 5xx as "task no longer found" — contradicting the Requirements text that pinned "404 → null" with non-404 errors propagating. Mirror `useTaskList`'s 404-vs-5xx split. | Pseudocode rewritten: `if (res.status === 404) return null; if (!res.ok) throw new Error(...)`. Test plan gains a 5xx → `isError` case for `useTask.test.ts`. Inline comment cites B1. |
+| S1 | `useTaskList`'s `fetchOne` returned `[]` on 404 silently — a future implementer might "correct" this to `throw`, breaking the per-source degradation contract. Needed an explicit comment at the 404-consumption site, not just at the `fetchTaskList` level. | Inline comment added to `fetchOne` explaining `Promise.allSettled` sees `fulfilled([])` rather than `rejected`, and that the behavior is deliberate per D7. |
+| S2 | The 80-char truncation contract (`reasons.approvedWithNote` / `reasons.rejected` in `03-hitl-gate` D4) was mentioned only once in the inspector section and was missing from the Verification list. Cross-leaf coupling gap with `03-hitl-gate`'s Open Issue about the same drift risk. | §Design's status-reason row paragraph now explicitly names both `approved: <note>` and `rejected: <…>` as the 80-char-truncated forms emitted by `03-hitl-gate`'s reason builders. Verification item 7 amended to call out the truncation contract + LogStream's `ErrorRow` as the full-text surface. |
+| S3 | `HitlActions` received `task: Task` derived from `live?.task ?? taskProp`. If the query was still pending, `task` was the prop snapshot — the mutation would fire with stale `dbRowVersion`. The spec text said "never from the closed-over prop" but the pseudocode didn't enforce it. | §Design's gating block rewritten: `showHitlButtons` now gates on `live?.task.status === "AWAITING_HUMAN_REVIEW"` (not `task.status`). This makes the invariant explicit — the buttons only render once `live` has resolved, so `task` IS the live task whenever `<HitlActions>` is mounted. Inline pseudocode comment cites S3. |
+| S4 | Acceptance check item 8 claimed the Status reason updates to `approved: lgtm` without citing that the string format is owned by `03-hitl-gate`'s `reasons.approvedWithNote`, not by this UI. Reads as if the inspector formats it. | Parenthetical added to item 8: "(the `approved: lgtm` string is emitted by the runner's `reasons.approvedWithNote` and truncated at 80 chars per `03-hitl-gate` D4; the inspector renders it verbatim from `event.reason`)." |
+| S5 | The "fetch called exactly once" invariant for `useTask` was specified in the test plan but missing from the Verification list. | Verification item 4 amended to include both the 5xx → `isError` case (from B1) and the "fetch called exactly once per resolve" invariant. |
+| N1 | D2's `app/server/deriveTask.ts:104-107` citation verified — no change needed. | No action — recorded for the stage-4 implementer's confidence notes. |
+| N2 | `useLogStream`'s `useEffect` dep array `[taskId, queryStatus, taskQuery.data]` is unchanged — spec didn't note it. | One sentence added at the end of §Design's `useLogStream` paragraph. |
+| N3 | Acceptance check item 2's test-count math: "5 + 5 + 4 + 6 + 8–10 + 5 helper = ≈ +35" — the "5 helper tests" line wasn't enumerated anywhere and the inspector range was inconsistent with the 7 cases the test plan listed. | Reconciled to `≈ +28` with the explicit breakdown 5 + 5 + 5 + 6 + 7. The phantom "helper tests" line dropped; useTask gains 5 cases (was 4) via the B1+S5 5xx test addition. |
+| N4 | `HitlActions` sketch used `cn(...)` without importing it. | Sentence added pointing the implementer at `app/src/lib/cn.ts` (the file the file-tree already lists), noting sibling components already import it. |
+| N5 | Acceptance check said "8–10 inspector" tests but the enumerated test plan listed 7. | Resolved as part of N3 — count is "7 inspector" everywhere. |
+
+Reviewer's **decomposition assessment**: **Stay bundled.** Three hook rewrites + two new mutation hooks + inspector modifications are tightly coupled; mutations only meaningful in the dual-source + live-task context. ~200–250 LOC application + ~150–200 LOC tests, comparable to `03-hitl-gate` (~170 LOC route + ~39 test LOC). No natural split point.
+
+Reviewer's **Confidence notes** (recorded so the stage-4 implementer spot-checks them):
+
+- `Task.transcriptPath?: string` confirmed at `packages/parser/src/runner/types.ts:81` — discriminant `task.transcriptPath === undefined` valid.
+- `Task.dbRowVersion: number` (non-optional, defaults 0 on insert) confirmed at `packages/parser/src/runner/types.ts:74`.
+- Runner IDs are bare UUIDv4 (no colon) confirmed at `server/src/runner/ids.ts`; transcript IDs are `session:${uuid}` / `agent:${id}` confirmed at `app/server/deriveTask.ts:104-107`. The `id.includes(":")` discriminant is sufficient.
+- Vite proxy at `app/vite.config.ts:21-24` forwards `/api/*` → `127.0.0.1:4180` in dev; in production build no transcript middleware exists, so `/api/transcripts*` 404s and `/api/tasks*` is the only live source. Dual-source degradation honors this.
+- `LogEvent.status_change.reason?: string` confirmed at `packages/parser/src/runner/types.ts:144` — `latestStatusReason` scan handles the optional correctly.
+- 409 body shapes from `03-hitl-gate` confirmed: `{ error: "version_conflict", expected, actual }` at `hitl.ts:282-284`; `{ error: "wrong_status", expected: "AWAITING_HUMAN_REVIEW", actual }` at `hitl.ts:254-257`. The inspector's `errorBanner` switches on these exact shapes.
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
@@ -642,7 +683,7 @@ When this child moves to `VERIFY`, the verifier confirms:
 1. The full Acceptance check list (1–13) passes.
 2. `mergeTasks` is deterministic: runner-precedence on ID collision; `createdAt DESC` sort; empty/empty → empty; runner-only / transcript-only → that source unchanged.
 3. `useTaskList`: both 200 → merged; runner 404 + transcript 200 → transcript only; runner 200 + transcript 404 → runner only; both 404 → `[]`; both 500 → `isError`.
-4. `useTask`: colon-id → transcripts endpoint; no-colon-id → tasks endpoint; 404 → `null`; no cross-endpoint requests.
+4. `useTask`: colon-id → transcripts endpoint; no-colon-id → tasks endpoint; 404 → `null`; 5xx → query `isError` (per Spec Review B1 + S5); fetch called exactly once per resolve (no cross-endpoint fallback).
 5. `useLogStream`: SSE URL is `/api/tasks/:id/stream` for runner IDs, `/api/transcripts/:id/stream` for transcript IDs. (Operator-verified.)
 6. `useApproveTask` / `useRejectTask`: 200 → invalidates `["tasks"]` and `["task", id]`; 409 → `mutation.error` carries `{status: 409, body}`.
 7. `TaskInspector`:
@@ -651,7 +692,7 @@ When this child moves to `VERIFY`, the verifier confirms:
    - Reject textarea: Confirm disabled until rationale is non-empty (after trim).
    - 409 `version_conflict` → banner "This task was updated elsewhere — please refresh."
    - 409 `wrong_status` → banner "Task is no longer awaiting review."
-   - Status reason row visible when latest `status_change.reason` is non-empty; hidden when not.
+   - Status reason row visible when latest `status_change.reason` is non-empty; hidden when not. Rejections render the 80-char-truncated form (`rejected: <…>`) — the full untruncated rationale is reachable via the LogStream panel's `ErrorRow` only (Spec Review S2; `03-hitl-gate` D4).
 8. `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test` exit zero at the workspace root.
 9. No regressions on `01-ui/04-tasks`'s table/row/filter behavior, `01-ui/05-logs`'s LogStream panel for transcript-derived tasks, `01-ui/02-dag`, `01-ui/03-docs`, or any other panel.
 10. Parent `05-task-runner` flips to `COMPLETE` upon this merge (all five children COMPLETE). The parent's manifest row for this child reads `COMPLETE (v1, YYYY-MM-DD)`; the parent's Status header flips to `COMPLETE (v1, YYYY-MM-DD)`; CLAUDE.md round-2 line + PRD §14 reflect the closure.
