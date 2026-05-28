@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW — dispatching independent reviewer in clean context)
+**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — independent review applied; all 10 findings landed in audit table below)
 
 **Dependencies:** `05-task-runner`
 
@@ -138,8 +138,8 @@ Five tools. All take `task_id` as their first parameter; all return either an ac
 |---|---|---|---|
 | `runner.emit_event` | `task_id: string, event: LogEvent` (kind-specific payload validated against `log-event.schema.json` from `05-task-runner/01-store-schema`) | `{ event_id, seq }` | `handle.emit(taskId, event)` |
 | `runner.complete_task` | `task_id: string` | `{ status: "COMPLETE" }` | `handle.complete(taskId)` |
-| `runner.fail_task` | `task_id: string, reason: string` | `{ status: "FAILED" }` | `handle.fail(taskId, reason)` |
-| `runner.await_human_review` | `task_id: string, review_payload: { summary: string, diffRef?: string }` | `{ status: "AWAITING_HUMAN_REVIEW" }` | `handle.awaitHumanReview(taskId)` (and writes `review_payload` via the store before transitioning) |
+| `runner.fail_task` | `task_id: string, reason: string` | `{ status: "FAILED" }` | `handle.fail(taskId, reason)` (reason interpolated into `reasons.subprocessFailed(reason)` only when the *executor* itself emits — agent-supplied reasons via this tool are stored verbatim) |
+| `runner.await_human_review` | `task_id: string, review_payload: { summary: string, diffRef?: string }` | `{ status: "AWAITING_HUMAN_REVIEW" }` | `store.updateReviewPayload(taskId, reviewPayload)` (new one-liner store method — `UPDATE tasks SET review_payload = ? WHERE id = ?`, added to `02-runner-tools`'s scope) → `handle.awaitHumanReview(taskId)` |
 | `runner.get_task` | `task_id: string` | `{ task: Task, events: LogEvent[] }` | `store.loadTask(taskId)` + `store.getEvents(taskId)` |
 
 The tools are deliberately narrow. The agent already has its own `Read`/`Edit`/`Write`/`Bash` tools — it does not need `runner.read_doc` or `runner.write_doc` from the MCP server. The dispatcher's MCP server is *only* for runner control; doc-tree manipulation goes through the agent's native filesystem tools.
@@ -160,6 +160,7 @@ export const claudeCodeExecutor: Executor = {
       mcpConfigPath,
       promptFile: await writePromptFile(prompt),                     // pass via --prompt-file
     });
+    await waitForSessionId(subprocess);                              // Spec Review N3 — D9 stderr line
     mcp.bindSession(subprocess.mcpSessionId, task.id);               // §Binding map
     const exit = await subprocess.exited;
     mcp.unbindSession(subprocess.mcpSessionId);
@@ -178,7 +179,7 @@ export const claudeCodeExecutor: Executor = {
 };
 ```
 
-Subprocess management uses `execa` (already a transitive dep via Vite tooling; pin direct to `server/package.json` for clarity). The MCP-session-ID is read from the subprocess's first stderr line — Claude Code emits a `mcp: connected session=<uuid>` line on stderr when its MCP client initialises (verified against `claude --version 2.1.148`; D9). The dispatcher waits for that line before considering the subprocess "live."
+Subprocess management uses `execa` (new direct dep on `server/package.json`; confirmed not currently present in deps or devDeps as of 2026-05-28 per Spec Review N2). The MCP-session-ID is read from the subprocess's first stderr line — Claude Code emits a `mcp: connected session=<uuid>` line on stderr when its MCP client initialises (pinned against `claude --version 2.1.148`; D9). The dispatcher waits for that line via an `await waitForSessionId(subprocess)` step before considering the subprocess "live" and calling `mcp.bindSession(subprocess.mcpSessionId, task.id)`. The async gap is explicit in the pseudocode below (Spec Review N3).
 
 **Exit-code mapping** (`lifecycle.ts`):
 
@@ -284,15 +285,21 @@ Visibility rule: shown when `task.status === "RUNNING"` AND `!task.id.includes("
 
 ### Type coordination across packages
 
-Three new status-reason strings, added to the `reasons` const in `server/src/runner/scheduler.ts` (the canonical reason registry from `05-task-runner/02-scheduler`):
+Three new status-reason strings, added to the `reasons` const in `server/src/runner/scheduler.ts` (the canonical reason registry from `05-task-runner/02-scheduler`). The existing `reasons` const mixes bare-string constants and builder functions; the new additions follow the same split (Spec Review B2):
 
-| Reason | Emitted by |
-|---|---|
-| `subprocess_exit_without_terminal_status` | `ClaudeCodeExecutor`'s lifecycle table row 2 |
-| `subprocess_failed:<short>` | `ClaudeCodeExecutor`'s lifecycle table rows 3 + 5 |
-| `cancelled_by_operator` | `POST /api/tasks/:id/cancel` |
+| Reason | Form | Emitted by |
+|---|---|---|
+| `subprocess_exit_without_terminal_status` | bare constant: `reasons.SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS` | `ClaudeCodeExecutor`'s lifecycle table row 2 |
+| `subprocess_failed:<short>` | builder function: `reasons.subprocessFailed(tail: string)` → `\`subprocess_failed:${tail.slice(0, 80)}\`` (mirrors `reasons.rejected`'s 80-char truncation) | `ClaudeCodeExecutor`'s lifecycle table rows 3 + 5 |
+| `cancelled_by_operator` | bare constant: `reasons.CANCELLED_BY_OPERATOR` | `POST /api/tasks/:id/cancel` |
+
+The pseudocode in §ClaudeCodeExecutor's exit-code mapping uses `handle.fail(task.id, reasons.subprocessFailed(tail(exit.stderr, 200)))` — the inline template-literal form in the pseudocode is shorthand; the implementer uses the typed builder.
+
+One implicit `Task.agent` semantic decision (Spec Review S1): `POST /api/dispatch/:nodeId`'s synthesised `TaskInput` sets `agent: { model: "claude-code", persona: task.type }` as the dispatch metadata. The persona doubles as the prompt-template selector at the executor level; the model string stays opaque ("claude-code" — the actual underlying model is whatever the user's `claude` CLI is configured to dispatch). A per-dispatch `model` override is not in scope; agents that need it can be configured at the Claude Code level.
 
 No new top-level `Task` or `LogEvent` fields. The MCP server transports existing `LogEvent` shapes verbatim. No new `TaskType` values either — the eight types the dispatcher executes are already enumerated in `@ledger/parser/runner/types.ts`.
+
+Note for the additive-coexistence story (Spec Review N1): `01-ui/10-orchestration`'s transcript-derived task-type inference (keyword table at lines 199–210 of that spec) does not produce `project_status_review` — it falls through to `agent_task`. The dispatcher's executor for `project_status_review` is fully wired in this node, but transcript tasks of that conceptual type will continue to render as `agent_task` in the UI until either the keyword table is updated or transcripts are retired. Not a blocker; documented so the implementing agent does not try to backport the keyword update into this node's scope.
 
 ### Acceptance check (end-to-end, manual)
 
@@ -335,7 +342,7 @@ Distributed across sub-leaf verification gates; the parent's roll-up:
 
 ## Open Issues
 
-- **Zombie subprocesses after eager cancel.** D14 acknowledges: a subprocess that does not respond to `SIGTERM` (e.g., stuck in a `Bash` syscall that traps signals) keeps running indefinitely after the task is CANCELLED. The runner's orphan recovery does not catch it because the task is already terminal. Operator must `ps` + `kill -9` manually. Mitigations to consider in v2: the cancel route sends `SIGTERM` then `SIGKILL` after a short grace; or the executor tracks pid → task and the runner's startup logic kills any orphaned dispatcher pids. *(Priority: MEDIUM — surfaces in practice when cancellation is heavily used.)*
+- **Zombie subprocesses after eager cancel.** D14 acknowledges: a subprocess that does not respond to `SIGTERM` (e.g., stuck in a `Bash` syscall that traps signals) keeps running indefinitely after the task is CANCELLED. The runner's orphan recovery does not catch it because the task is already terminal. Operator must `ps` + `kill -9` manually. Mitigation to consider in v2: the *executor* starts a SIGKILL escalation timer (5–10 s) after the cancel route delivers SIGTERM; on the timer firing, the executor sends SIGKILL and emits a `subprocess_killed` log event. Putting the timer in the executor (not the cancel route) keeps the cancel route's response synchronous and centralises subprocess-handle ownership where it belongs (Spec Review S2). *(Priority: MEDIUM — surfaces in practice when cancellation is heavily used.)*
 - **Claude Code version pinning.** D9 hard-pins `≥2.1.148` for the stderr session-id line. A Claude Code minor bump that changes the line format silently breaks the dispatcher (the executor fails every task with `mcp_session_id_not_observed`). Mitigations: a smoke test in CI that dispatches a `noop`-equivalent against the installed Claude Code version on every test run; or a more robust correlation mechanism (the server-side MCP session-creation hook records the `User-Agent` or a custom header sent by the subprocess). *(Priority: MEDIUM — surfaces on every Claude Code upgrade.)*
 - **Prompt-template iteration ergonomics.** D10 trades hot-reload for unit-testability. Iterating on a prompt today requires server restart + new dispatch — slow feedback loop when tuning a template. A `--reload-prompts` flag that hot-reloads the prompt module on file change would help; not v1. *(Priority: LOW — surfaces when prompt-tuning becomes a focused activity.)*
 - **No retry semantics on FAILED dispatcher tasks.** The runner has no automatic retry (inherits `05-task-runner` D11 — `FAILED` dependencies block dependents forever). An operator who wants to retry a failed dispatch must `POST /api/dispatch/:nodeId` again, which creates a *new* task with a new ID. The original `FAILED` task stays in the DB as provenance. This is correct behaviour but produces ID churn in the inspector. A `POST /api/tasks/:id/retry` that resets a FAILED task to PENDING is a v2 polish item. *(Priority: LOW.)*
@@ -346,9 +353,34 @@ Distributed across sub-leaf verification gates; the parent's roll-up:
 
 ---
 
-## Spec Review (YYYY-MM-DD)
+## Spec Review (2026-05-28)
 
-*(none yet — pre-review)*
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — two blocking, four should-fix, four nits. PRD coverage matrix returned full Addressed across §5/§6.3/§7/§8.4/§10/§11; §8.4 breakpoint + priority-override correctly inherited as deferred from `05-task-runner`. All findings applied or explicitly resolved. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `runner.fail_task`'s "Maps to RunnerHandle" cell did not show the `reason` argument explicitly; pseudocode-vs-actual-signature gap risked an arity-swap by the implementer. | §MCP tool surface row for `runner.fail_task` now spells out `handle.fail(taskId, reason)` and notes that agent-supplied reasons are stored verbatim (not interpolated through `reasons.subprocessFailed` — that builder is only used by the *executor's* own failure paths). |
+| B2 | Three new status-reason strings were declared without specifying their form in the existing mixed bare-string + builder-function `reasons` const. `subprocess_failed:<short>` in particular is parameterised and must be a builder, not a constant. | §Type coordination's reason table now has a Form column. `subprocess_failed:<tail>` → `reasons.subprocessFailed(tail)` with 80-char truncation mirroring the existing `reasons.rejected`. The other two are bare constants (`SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS`, `CANCELLED_BY_OPERATOR`). |
+| S1 | `Task.agent` field never specified for dispatcher-emitted tasks; would silently default to NULL despite the operator's UI being able to render meaningful agent metadata. | §Type coordination now declares: `POST /api/dispatch/:nodeId` synthesises `agent: { model: "claude-code", persona: task.type }` on the `TaskInput`. The persona doubles as the prompt-template selector at the executor level. Per-dispatch model override is out of scope. |
+| S2 | Zombie-subprocess Open Issue mitigation framed the SIGKILL escalation timer as living in the cancel route, contradicting D14's "cancel route returns synchronously after SIGTERM." | Reworded: the timer lives in the *executor* (which owns the subprocess handle), not the cancel route. Emits a `subprocess_killed` log event on firing. Cancel route stays synchronous. |
+| S3 | §MCP tool surface claimed `runner.await_human_review` "writes review_payload via the store before transitioning" but no such store method exists on the current `Store` interface from `05-task-runner/01-store-schema`. | §MCP tool surface now explicitly names `store.updateReviewPayload(taskId, reviewPayload)` as a *new* one-liner store method (`UPDATE tasks SET review_payload = ?`) added to `02-runner-tools`'s scope. The Children manifest row for `02-runner-tools` updated to call this out. |
+| S4 | PRD §14 row's description for `06-agent-dispatcher` (in `docs/00-project.md`) still reads "replaces `10-orchestration`'s transcript ingestion as the data source" — conflicts with D15's explicit decision to keep transcripts live. | Cross-doc sync landed in the SPEC_REVIEW → APPROVED commit per leaf-workflow stage 3: PRD §14 row description rewritten to "MCP-based interface; Claude Code as first integration; transcript ingestion stays additive (D15) — full retirement deferred to a future node." |
+| N1 | `project_status_review` is in this dispatcher's executor set but not in `01-ui/10-orchestration`'s transcript-derived `TaskType` keyword table — transcript tasks of that conceptual type would render as `agent_task`. | §Type coordination final paragraph now notes this asymmetry explicitly; flagged as documentation only, not in this node's scope to fix. |
+| N2 | `execa` claimed as "already a transitive dep via Vite tooling" — incorrect; not in `server/package.json` deps or devDeps as of 2026-05-28 (verified). | §ClaudeCodeExecutor's subprocess-management paragraph now says "new direct dep on `server/package.json`; confirmed not currently present." |
+| N3 | Executor pseudocode called `mcp.bindSession(subprocess.mcpSessionId, ...)` immediately after `spawnClaudeCode(...)` without an explicit async wait for the stderr session-ID line — implementer would likely race the binding against an empty session-id. | Pseudocode now has an explicit `await waitForSessionId(subprocess)` step between spawn and bind, and the surrounding prose calls out the gap explicitly. |
+| N4 | Spec Review section had placeholder body; needed populating in the SPEC_REVIEW → APPROVED transition. | This audit table is the population. Per stage 3 of the leaf-workflow, the audit + status bump + cross-doc sync land in a single commit. |
+
+Reviewer's **Confidence notes** (recorded so the stage-4 implementer of `03-claude-code-executor` spot-checks them — these are the highest-risk unverifiable claims):
+
+- D9 stderr line format (`mcp: connected session=<uuid>`) — must be verified against a live `claude --version 2.1.148` invocation before wiring `spawn.ts`'s session-id regex. Absent or different format → every task fails with `mcp_session_id_not_observed` after a 5-s timeout. Mitigation: add a single-shot smoke test on first executor registration that spawns `claude --help` and looks for the flag inventory.
+- `--prompt-file` flag existence on `claude 2.1.148` — confirm with `claude --help`. If the flag name differs (`--input-file`, `--file`, stdin pipe), the whole executor spawn breaks.
+- `--mcp-config` flag JSON shape (`"type": "http"` vs `"type": "sse"` vs `"type": "streamable-http"`) — pin the exact format that Claude Code's bundled MCP SDK version recognises. The MCP `2025-06-18` spec renamed transports; the flag's accepted JSON may lag.
+- `@modelcontextprotocol/sdk` streamable-HTTP server API surface — `McpServer` + `StreamableHttpServerTransport` class names and the `Mcp-Session-Id` header semantics must be pinned at implementation time to the exact SDK version on npm.
+- `store.loadTask` + `store.getEvents` are non-throwing for foreign `taskId`s (the `runner.get_task` tool exposes cross-task reads per D8). The current store implementation in `05-task-runner/01-store-schema` returns `null` for unknown ids — confirm before the tool handler ships.
+
+Reviewer's **decomposition assessment**: 5-leaf split is appropriate. `01 → 02 → {03, 04} → 05` mirrors `05-task-runner`'s structure. `05-dispatch-api` was flagged as a watch-item (two endpoints + two hooks + two UI buttons) but is comparable in density to `05-task-runner/05-ui-hook-migration`. The real density concern is `03-claude-code-executor` (subprocess spawn + stderr session-id correlation + lifecycle table + temp-file management + session binding) — flagged so its stage-4 implementer pays explicit attention to N3's async gap and D9's stderr-line race. No structural re-cut recommended.
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
@@ -378,7 +410,7 @@ When this parent moves to `VERIFY` (all children COMPLETE), the verifier confirm
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
 | `01-mcp-server` | MCP server scaffolding mounted at `POST /mcp`: streamable-HTTP transport via `@modelcontextprotocol/sdk`, server factory + Hono route mount, `serverInfo` discovery, internal session lifecycle (open/close hooks for the binding registry from `02-runner-tools`) | `05-task-runner` | PLANNED |
-| `02-runner-tools` | The five MCP tools (`runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`), thin adapters over `RunnerHandle`; tool-argument JSON Schema in `docs/_schemas/dispatcher-tools.schema.json`; task-id binding registry + cross-task rejection (`task_not_bound` MCP error); ajv validation on tool inbound | `01-mcp-server` | PLANNED |
+| `02-runner-tools` | The five MCP tools (`runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`), thin adapters over `RunnerHandle`; tool-argument JSON Schema in `docs/_schemas/dispatcher-tools.schema.json`; task-id binding registry + cross-task rejection (`task_not_bound` MCP error); ajv validation on tool inbound; **new `store.updateReviewPayload(taskId, reviewPayload)` one-liner method on the `Store` interface** (extends `05-task-runner/01-store-schema`'s API; used only by the `runner.await_human_review` handler — Spec Review S3) | `01-mcp-server` | PLANNED |
 | `03-claude-code-executor` | `ClaudeCodeExecutor` registered for the eight real task types; subprocess spawn via `execa` with `--mcp-config` + `--prompt-file` + `LEDGER_TASK_ID` env; stderr session-id correlation (D9); exit-code → task-status lifecycle table; new status reasons `subprocess_exit_without_terminal_status` / `subprocess_failed:*` registered in `runner/scheduler.ts` reasons const | `02-runner-tools` | PLANNED |
 | `04-prompt-templates` | Eight per-task-type TS prompt templates (`implement`, `spec_review`, `verify`, `spec_draft`, `reverify`, `doc_refactor`, `issue_triage`, `project_status_review`) plus a `shared.ts` helper (persona preamble, MCP-tool contract reminder, required-reading composition); template registry in `prompts/index.ts`; default resource-claim declarations per type (D11) | `02-runner-tools` | PLANNED |
 | `05-dispatch-api` | **Dispatch + cancel endpoints + UI integration.** `POST /api/dispatch/:nodeId` with lifecycle-driven task-type inference (APPROVED → implement, VERIFY → verify, DRAFT → spec_review); `POST /api/tasks/:id/cancel` with eager-CANCELLED transition + SIGTERM (D14) + `cancelled_by_operator` reason; `useDispatch` / `useCancelTask` mutation hooks; `NodeInspector` Dispatch button (visibility on APPROVED/VERIFY/DRAFT); `TaskInspector` Cancel button (visibility on RUNNING ∧ runner-emitted) | `03-claude-code-executor`, `04-prompt-templates` | PLANNED |
