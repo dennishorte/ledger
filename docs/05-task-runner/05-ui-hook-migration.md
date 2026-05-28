@@ -700,6 +700,44 @@ Implementation landed in two commits: `05742e5` (APPROVED → IN_PROGRESS, doc-o
 
 Items 1–4 of the Acceptance check (install unchanged, four gates green, parser/server tests unaffected) confirmed.
 
+### Implementation Review (2026-05-28)
+
+Independent implementation review run against the rebased worktree (`worktree-agent-a2b63e8859a0f97f6`, branched from `d2d0db4`, rebased onto `4f3eab5`). Verdict: **READY_FOR_OPERATOR_VERIFICATION** — no blocking, no should-fix, three cosmetic nits. All 7 high-leverage Spec Review closures confirmed in code with file:line citations. All 6 gates re-verified at exit 0 (app typecheck/lint/build/test + server test untouched + parser test untouched). Both implementer deviations (single-source 500 propagation + `MutationErrorBody extends Error`) accepted with rationale.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| HL — B1 (404-vs-5xx split in useTask) | Confirmed at `useTask.ts:36-37` — `if (res.status === 404) return null; if (!res.ok) throw new Error(...)` with B1 inline comment. | No action — confirmed. |
+| HL — S1 (fetchOne 404 → [] with comment) | Confirmed at `useTaskList.ts:19-24` — explicit comment explaining `fulfilled([])` vs `rejected` for `Promise.allSettled`, cites S1. | No action — confirmed. |
+| HL — S2 (truncated reason render) | Confirmed at `TaskInspector.tsx:196-209` — 80-char-truncated forms named, S2 cited, inspector renders verbatim from `event.reason`. | No action — confirmed. |
+| HL — S3 (HitlActions gating on `live?.task.status`) | Confirmed at `TaskInspector.tsx:74-75` — `showHitlButtons = isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW"` with pinned invariant comment. | No action — confirmed. |
+| HL — S4 (`approved: <note>` from runner not UI) | Confirmed: no string formatting in UI; `postApprove` sends `note` to server verbatim; inspector renders `event.reason` verbatim. No headless test exercises the formatted string (would require the real runner — correct scope). | No action — confirmed. |
+| HL — D2 (`id.includes(":")` discriminant) | Confirmed at `useTask.ts:25-27` (`pickEndpoint`) + `useLogStream.ts:83-85`, both with D2 comments. | No action — confirmed. |
+| HL — D5 (`MutationErrorBody` shape) | Confirmed at `useApproveTask.ts:27-35` — `class MutationErrorBody extends Error { status: number; body: unknown }`. `useRejectTask.ts:14-16` re-exports. `errorBanner` casts structurally via `{status?, body?}`; class instances satisfy the shape. | No action — confirmed. |
+| Dev-1 — Single-source 500 propagation | ACCEPT. The Requirements text ("errors other than 404 propagate") is unambiguous and the actual behavior is more correct than the spec's "both-rejected → throw" pseudocode sketch. The `useTaskList.fetch.test.ts` "runner 500 → isError" case exercises this directly. | No action. |
+| Dev-2 — `MutationErrorBody extends Error` (class, not interface) | ACCEPT. ESLint's `@typescript-eslint/only-throw-error` requires thrown values to extend `Error`. The `extends Error` adds only `super(\`HTTP ${status}\`)` to the message field; `status` + `body` shape unchanged. `errorBanner`'s structural cast works equally with the class instance. | No action. |
+| N1 | `useRejectTask.test.ts` had a `wrong_status` 409 case but no `version_conflict` case (asymmetric with `useApproveTask.test.ts`). Both paths go through identical `MutationErrorBody` code, so low risk, but symmetry is cheap to fix. | APPLIED. Added "409 version_conflict → mutation.error carries {status: 409, body.error: 'version_conflict'}" test case to `useRejectTask.test.ts` (test count +1; total 104 tests, was 102). |
+| N2 | `useTaskList.fetch.test.ts` covered "runner 500 + transcript 404 → isError" but not the mirror "transcript 500 + runner 404 → isError" case. Single-source propagation is symmetric — both paths through identical code — but mirror coverage is cheap. | APPLIED. Added "transcript 500 + runner 404 → query enters isError (Impl Review N2 — 5xx symmetry)" test case to `useTaskList.fetch.test.ts` (test count +1; total now 104). |
+| N3 | `TaskInspector.test.tsx` uses `screen.queryByText("Approve")` / `queryByText("Reject…")` (exact string match) rather than `queryByRole("button", {name: ...})`. Fragile to label changes; not a correctness issue. | ACCEPTED AS-IS. `queryByText` exact match works correctly today; converting to `queryByRole` is genuine test-fragility polish, not mechanical text. Tests assert observable behavior either way. Logged as test-quality follow-up; no functional risk. |
+
+Reviewer's bundle delta + test counts (after N1 + N2 applied):
+
+| Workspace | Before (4f3eab5 main) | After (this worktree, post-N1/N2) | Delta |
+|---|---|---|---|
+| `app` | 73 tests, 4 files | 104 tests, 11 files | +31 tests, +7 files |
+| `server` | 165 tests | 165 tests | 0 (no server changes) |
+| `packages/parser` | 108 tests | 108 tests | 0 (no parser changes) |
+
+Bundle delta: app source touched; chunk sizes negligibly larger (`index-*.js` 1,942 → 1,945 kB raw; gzip 608 kB unchanged). DagPanel chunk untouched.
+
+Reviewer's **confidence notes** (operator's stage-8 verification will exercise these):
+
+- `errorBanner` uses structural typing (`{status?, body?}`) rather than `instanceof MutationErrorBody`. Safe today (only `MutationErrorBody` instances reach `mutation.error`), but a hypothetical injected plain object with the right shape would also trigger the banner. Acceptable v1.
+- The `useMemo` in `TaskInspector` uses `liveEvents` (potentially `undefined`) in the dep array with `const events = liveEvents ?? []` inside the callback. Correct — `undefined` vs populated array are distinct references.
+- App test delta is +31 vs main (was +28 pre-N1/N2, +2 from this audit, +1 from the audit's reconciliation of the 102 vs 104 counts).
+- All Acceptance check items 5–13 are operator-only and correctly scoped (item 11 — `version_conflict` via stale curl — is mechanically reachable but the unit-test coverage via mocked-fetch is honest about what it proves).
+
+Nothing punted beyond N3 (test-fragility polish). The two applied audit fixes land in this commit alongside the audit table.
+
 ---
 
 ## Verification

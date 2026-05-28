@@ -1,6 +1,7 @@
 /**
  * Tests for useRejectTask mutation hook.
- * Three cases: 200 + invalidation, 409 conflict, 400 schema-failure.
+ * Four cases: 200 + invalidation, 409 wrong_status, 409 version_conflict
+ * (symmetry with useApproveTask per Impl Review N1), 400 schema-failure.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -109,6 +110,36 @@ describe("useRejectTask", () => {
     const err = (result.current.error as unknown) as { status: number; body: { error: string } };
     expect(err.status).toBe(409);
     expect(err.body.error).toBe("wrong_status");
+  });
+
+  it("409 version_conflict → mutation.error carries {status: 409, body.error: 'version_conflict'} (Impl Review N1 — symmetry with useApproveTask)", async () => {
+    const task = makeTask("runner-uuid-r-vc");
+    const conflictBody = {
+      error: "version_conflict",
+      expected: 5,
+      actual: 7,
+    };
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse(conflictBody, 409),
+    );
+
+    const { wrapper } = makeWrapperWithClient();
+    const { result } = renderHook(() => useRejectTask(), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        taskId: task.id,
+        dbRowVersion: task.dbRowVersion,
+        reason: "stale version",
+      });
+    });
+
+    await waitFor(() => { expect(result.current.isError).toBe(true); });
+
+    const err = (result.current.error as unknown) as { status: number; body: { error: string } };
+    expect(err.status).toBe(409);
+    expect(err.body.error).toBe("version_conflict");
   });
 
   it("400 schema-failure (empty reason) → mutation.error carries {status: 400}", async () => {

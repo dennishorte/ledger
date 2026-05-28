@@ -1,6 +1,8 @@
 /**
  * Mocked-fetch integration tests for useTaskList.
  * Exercises both-200, partial-404, both-404, and 5xx-error cases.
+ * 5xx symmetry: both runner-500 and transcript-500 paths covered per
+ * Impl Review N2.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -105,6 +107,17 @@ describe("useTaskList (mocked fetch)", () => {
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(new Response("server error", { status: 500 }))
       .mockResolvedValueOnce(new Response("not found", { status: 404 }));
+
+    const { result } = renderHook(() => useTaskList(), { wrapper: makeWrapper() });
+    await waitFor(() => { expect(result.current.isError).toBe(true); });
+
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("transcript 500 + runner 404 → query enters isError (Impl Review N2 — 5xx symmetry)", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(new Response("server error", { status: 500 }));
 
     const { result } = renderHook(() => useTaskList(), { wrapper: makeWrapper() });
     await waitFor(() => { expect(result.current.isError).toBe(true); });
