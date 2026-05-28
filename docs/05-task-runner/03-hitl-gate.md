@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/03-hitl-gate`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT — pre-review)
+**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW — dispatching reviewer)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner + RunnerHandle + tick + claim-set query), `05-task-runner/04-api-endpoints` (`tasks.ts` routes + EventBus already wired)
 
