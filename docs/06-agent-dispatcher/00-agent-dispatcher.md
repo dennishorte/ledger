@@ -4,7 +4,7 @@
 **Parent:** project root (`docs/00-project.md`)
 **Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — independent review applied; all 10 findings landed in audit table below)
+**Last Updated:** 2026-05-28 (APPROVED amendment — `claude --help` verification corrected D9 stderr correlation → MCP header-based binding; replaced fictional `--prompt-file` with stdin + `--print`; added `--bare` decision)
 
 **Dependencies:** `05-task-runner`
 
@@ -22,7 +22,7 @@ The end-state contract — what "this node done" looks like across all children:
 
 1. **An MCP server mounted at `POST /mcp` on the existing Hono app** (`04-api-server`). Streamable-HTTP transport (`@modelcontextprotocol/sdk`). The server is `127.0.0.1`-bound — same firewall posture as the rest of the API (D5). Tool registry exposes the runner-tool surface (item 2); resource and prompt registries are empty in v1 (D6).
 2. **Five MCP tools exposed to connected agents** (`runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`). Each tool's first argument is `task_id`; the dispatcher rejects calls whose `task_id` does not match the connection's bound task (D7). Tool handlers are thin adapters over `RunnerHandle` from `05-task-runner/02-scheduler`; they do not invent new transitions.
-3. **A `ClaudeCodeExecutor` registered for the eight real task types.** The executor spawns `claude` as a subprocess with a constructed prompt, an injected `--mcp-config` JSON pointing at the runner's MCP endpoint, a `LEDGER_TASK_ID` env var, and the project root as cwd. The subprocess streams its work; the agent's MCP tool calls flow back to the runner. On clean subprocess exit the executor verifies terminal task status (and fails the task with reason `subprocess_exit_without_terminal_status` if the agent forgot to call `complete_task` or `fail_task`); on non-zero exit the executor fails the task with the subprocess's stderr tail; on crash the runner's existing orphan-recovery handles it (D9).
+3. **A `ClaudeCodeExecutor` registered for the eight real task types.** The executor spawns `claude --print --bare --mcp-config <path>` as a subprocess, pipes the constructed prompt over **stdin**, and sets `LEDGER_TASK_ID` env var with the project root as cwd. The MCP config JSON carries an `X-Ledger-Task-Id` header on the `ledger-runner` entry; the runner's MCP server reads that header on `initialize` and binds the session to the task (D9 — replaces an earlier stderr-line correlation scheme that did not survive `claude --help` verification). The subprocess runs to completion; the agent's MCP tool calls flow back to the runner. On clean subprocess exit the executor verifies terminal task status (and fails the task with reason `subprocess_exit_without_terminal_status` if the agent forgot to call `complete_task` or `fail_task`); on non-zero exit the executor fails the task with the subprocess's stderr tail; on crash the runner's existing orphan-recovery handles it.
 4. **Per-task-type prompt templates.** A small library of templates under `server/src/dispatcher/prompts/`, one per task type. Each template composes: persona preamble (matches the persona-specific guidance from `docs/process/leaf-workflow.md`), task-doc context (the spec being implemented / reviewed / verified, plus its parent doc), required-reading manifest, success criteria, and the MCP-tool contract reminder. Templates are TypeScript functions taking `(task, projectCtx) => string`; no string-interp templating language (D10).
 5. **Three new HTTP endpoints** on the existing Hono server. `POST /api/dispatch/:nodeId` — operator-facing "dispatch this doc node" action that synthesises a task from the node's lifecycle state (an `APPROVED` node → `implement` task; a `VERIFY` node → `verify` task; a `DRAFT` node → `spec_review` task). `POST /api/tasks/:id/cancel` — kills the in-flight subprocess for a `RUNNING` dispatcher task and transitions the task `RUNNING → CANCELLED` with reason `cancelled_by_operator`. `POST /mcp` — the MCP server endpoint itself (item 1).
 6. **UI surfaces: dispatch action + cancel action.** `01-ui/02-dag`'s `NodeInspector` gains a "Dispatch" button on `APPROVED` / `VERIFY` / `DRAFT` doc nodes that POSTs to `/api/dispatch/:nodeId` and surfaces the created task ID in a toast. `01-ui/04-tasks`'s `TaskInspector` gains a "Cancel" button on `RUNNING` runner-emitted tasks (gated by the same `id.includes(":")` discriminant as the Approve/Reject buttons from `05-task-runner/05-ui-hook-migration`). No additive change to the log stream: events emitted by dispatcher executors arrive via the existing SSE channel from `04-api-endpoints`.
@@ -126,7 +126,7 @@ The dispatcher module is namespaced under `server/src/dispatcher/`, not promoted
 
 **Server-side state.** The MCP server is a singleton per project (one Hono app, one MCP server). Tool handlers are stateless — they take `task_id` as their first argument and route to the runner via the `RunnerHandle` captured at server-construction time.
 
-**Binding map.** A `Map<MCPSessionId, TaskId>` tracks which session is permitted to mutate which task. When the executor opens a session for task T, it registers `(sessionId, T)` in the binding map. Every tool call checks `binding.get(sessionId) === request.task_id` and rejects mismatches with an MCP error (D7). When the executor closes the session, the binding entry is removed.
+**Binding map.** A `Map<MCPSessionId, TaskId>` tracks which session is permitted to mutate which task. The server's `initialize` handler reads the `X-Ledger-Task-Id` HTTP header (set by the dispatcher in the per-subprocess MCP config JSON — see §MCP config JSON) and registers `(sessionId, X-Ledger-Task-Id-value)` in the binding map. Every tool call checks `binding.get(sessionId) === request.task_id` and rejects mismatches with an MCP error (D7). When the session closes (MCP `notifications/initialized` lifecycle terminates, or the underlying HTTP session expires), the binding entry is removed. This replaces an earlier scheme that parsed Claude Code's stderr for a `mcp: connected session=<uuid>` line; that line does not exist in `claude 2.1.148` as verified against `claude --help` (D9, amended).
 
 **Discovery handshake.** The MCP `initialize` exchange returns the server's `serverInfo` (`{ name: "ledger-runner", version: <PRD version> }`) and the tool list. No resources, no prompts (D6).
 
@@ -152,34 +152,40 @@ JSON Schema for tool arguments lives in `docs/_schemas/dispatcher-tools.schema.j
 // server/src/dispatcher/executor/claudeCode.ts
 export const claudeCodeExecutor: Executor = {
   async run(task, handle) {
-    const prompt = renderPrompt(task, projectCtx);                  // §Prompts
-    const mcpConfigPath = await writeMcpConfig(task, projectCtx);    // §MCP config JSON
+    const prompt = renderPrompt(task, projectCtx);                   // §Prompts
+    const mcpConfigPath = await writeMcpConfig(task, projectCtx);    // §MCP config JSON — header carries task.id
     const subprocess = spawnClaudeCode({
       cwd: projectCtx.projectRoot,
       env: { LEDGER_TASK_ID: task.id },
       mcpConfigPath,
-      promptFile: await writePromptFile(prompt),                     // pass via --prompt-file
+      stdin: prompt,                                                 // prompt piped via stdin (no --prompt-file flag exists)
     });
-    await waitForSessionId(subprocess);                              // Spec Review N3 — D9 stderr line
-    mcp.bindSession(subprocess.mcpSessionId, task.id);               // §Binding map
+    // No stderr correlation needed: the MCP config's X-Ledger-Task-Id header
+    // binds the session at the runner's MCP server on the `initialize` handshake.
     const exit = await subprocess.exited;
-    mcp.unbindSession(subprocess.mcpSessionId);
     const final = store.loadTask(task.id);
     if (exit.code === 0 && isTerminalStatus(final.status)) return;   // success path
     if (exit.code === 0 && !isTerminalStatus(final.status)) {
-      handle.fail(task.id, "subprocess_exit_without_terminal_status");
+      handle.fail(task.id, reasons.SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS);
       return;
     }
     if (exit.signal === "SIGTERM" || exit.signal === "SIGKILL") {
       // POST /api/tasks/:id/cancel already wrote CANCELLED — don't double-fail.
       if (final.status === "CANCELLED") return;
     }
-    handle.fail(task.id, `subprocess_failed: ${tail(exit.stderr, 200)}`);
+    handle.fail(task.id, reasons.subprocessFailed(tail(exit.stderr, 200)));
   },
 };
 ```
 
-Subprocess management uses `execa` (new direct dep on `server/package.json`; confirmed not currently present in deps or devDeps as of 2026-05-28 per Spec Review N2). The MCP-session-ID is read from the subprocess's first stderr line — Claude Code emits a `mcp: connected session=<uuid>` line on stderr when its MCP client initialises (pinned against `claude --version 2.1.148`; D9). The dispatcher waits for that line via an `await waitForSessionId(subprocess)` step before considering the subprocess "live" and calling `mcp.bindSession(subprocess.mcpSessionId, task.id)`. The async gap is explicit in the pseudocode below (Spec Review N3).
+The exact `claude` invocation is `claude --print --bare --mcp-config <path>` with the rendered prompt piped to stdin (D9, D16, D17):
+
+- **`--print`** — non-interactive mode; subprocess prints its final response and exits. Without this Claude Code drops into an interactive TUI and never exits.
+- **`--bare`** — minimal mode; skips hooks, plugin sync, attribution, auto-memory, background prefetches, and **CLAUDE.md auto-discovery**. The last one matters: the dispatcher's prompt templates inject the relevant context explicitly; auto-loading CLAUDE.md on top would double-load and add nondeterminism. Anthropic auth still uses the operator's `ANTHROPIC_API_KEY` or `apiKeyHelper` per `--bare`'s documented behaviour.
+- **`--mcp-config <path>`** — path to the per-dispatch JSON written to `os.tmpdir()` (§MCP config JSON).
+- **stdin** — the prompt itself. Stdin avoids ARG_MAX limits (~256KB on Linux, smaller elsewhere) that would cap the positional-`[prompt]`-argument path. `--prompt-file` is *not* a flag (confirmed against `claude --help`); piping to stdin is the canonical headless-input mechanism.
+
+Subprocess management uses `execa` (new direct dep on `server/package.json`; confirmed not currently present in deps or devDeps as of 2026-05-28 per Spec Review N2). No stderr-line correlation is performed — D9's prior stderr-parsing scheme was dropped on amendment when `claude --help` confirmed no such line exists. The runner's MCP server binds sessions to tasks via the `X-Ledger-Task-Id` HTTP header that the dispatcher sets in the per-subprocess MCP config JSON (see §MCP config JSON below).
 
 **Exit-code mapping** (`lifecycle.ts`):
 
@@ -208,7 +214,7 @@ Templates are TS functions, not a `.mustache`-style template format (D10). Templ
 
 ### MCP config JSON (per-dispatch)
 
-The dispatcher writes a temporary MCP config JSON for each dispatched subprocess and passes its path via `--mcp-config <path>`:
+The dispatcher writes a temporary MCP config JSON for each dispatched subprocess and passes its path via `--mcp-config <path>`. The `headers` map carries the task-id, which the runner's MCP server reads at `initialize` time and binds to the session (D9):
 
 ```jsonc
 // /tmp/ledger-dispatch-<task-id>.mcp.json
@@ -216,13 +222,16 @@ The dispatcher writes a temporary MCP config JSON for each dispatched subprocess
   "mcpServers": {
     "ledger-runner": {
       "type": "http",
-      "url": "http://127.0.0.1:4180/mcp"
+      "url": "http://127.0.0.1:4180/mcp",
+      "headers": {
+        "X-Ledger-Task-Id": "<task-id>"
+      }
     }
   }
 }
 ```
 
-The file is deleted when the subprocess exits (on either path). Temp dir is `os.tmpdir()`.
+The file is deleted when the subprocess exits (on either path). Temp dir is `os.tmpdir()`. The header-based binding scheme replaces an earlier stderr-line correlation (the spec drafted against an unverified assumption that `claude` emits `mcp: connected session=<uuid>` on stderr — verified false against `claude 2.1.148`'s `--help`; D9 amended on the same day as APPROVAL).
 
 ### Dispatch endpoint semantics
 
@@ -330,20 +339,22 @@ Distributed across sub-leaf verification gates; the parent's roll-up:
 | D6 | No MCP resources, no MCP prompts in v1 | MCP resources are exposed read-only data; the agent already reads the project tree via its native `Read` tool, so a `runner.read_doc` resource is duplicative. MCP prompts are agent-discoverable templated prompts; v1 *renders* prompts server-side and passes the rendered text via `--prompt-file`, which is simpler than a roundtrip through MCP prompt-discovery and gives the dispatcher full control over what the agent sees. If a future scenario emerges where the agent needs to discover available prompts at runtime (e.g., a long-running session that switches task types), MCP prompts get added then. |
 | D7 | Task-ID binding registry rejects cross-task tool calls | Without binding, a subprocess could call `runner.complete_task` on a *sibling's* task ID (e.g., if the agent hallucinated an ID, or pasted one from an unrelated context). The binding map enforces "the only task this session can mutate is its own." Implementation: `Map<MCPSessionId, TaskId>` populated at session start and torn down at session close; every tool handler checks it. This is integrity, not authentication (D5 covers the latter): any local process can open its own MCP session with its own bound task, so the binding does not prevent malicious cross-task mutation by a determined local attacker — it prevents *accidental* cross-task mutation, which is the realistic failure mode for v1. |
 | D8 | `runner.get_task` is a *read* tool; it does not mutate the binding or grant cross-task visibility | The agent can read its own task and any other task in the project's DB via `runner.get_task`. This is for "let me look at my parent task's reasoning before I implement" patterns; it's not a security hole because the agent could equivalently read the DB file directly (it has filesystem access to `.ledger/runner.db`). Mutations remain bound to the session's task; reads are open. |
-| D9 | Dispatcher reads Claude Code's MCP session-id from the subprocess's stderr first line | Claude Code emits `mcp: connected session=<uuid>` on stderr when its MCP client initialises against an HTTP server. This is the only reliable way to correlate the subprocess to its MCP session at session-creation time (the alternative — fishing through the MCP server's internal session-creation log — is order-dependent and racy when multiple subprocesses start nearly-simultaneously). Pinned to Claude Code `≥2.1.148`. If a future Claude Code version changes the stderr line format, the dispatcher's `spawn.ts` detects the absence (no matching line within 5 s) and fails the task with reason `mcp_session_id_not_observed`. |
+| D9 (amended 2026-05-28) | Task-to-session binding rides on an `X-Ledger-Task-Id` HTTP header in the per-subprocess MCP config JSON's `headers` map | The runner's MCP server reads the header on `initialize` and registers `(MCPSessionId, taskId)` in the binding map atomically at handshake time. No race window, no stderr parsing, no Claude Code version dependency on a specific log line format. **Prior approach (rejected on amendment):** an earlier draft of this spec read `mcp: connected session=<uuid>` from the subprocess's first stderr line; `claude --help` verification on the day of APPROVAL confirmed no such line exists in `claude 2.1.148`. The header-based scheme is also more robust to future Claude Code versions — `--mcp-config`'s `headers` map is part of the MCP HTTP transport spec, not a Claude Code-specific convention. |
 | D10 | Prompt templates are TS functions, not a template-language format | Mustache/Handlebars-style templates encourage logic-in-template (conditionals, loops). TS functions keep logic in the function body, where it can be unit-tested directly without a template-rendering harness. The cost is "less hot-reload-friendly" — but prompt iteration is an offline activity (write, restart server, dispatch a test task), not a hot-path. Sub-leaf `04-prompt-templates` ships eight TS files (one per task type) plus a `shared.ts` helper module. |
 | D11 | Prompt templates declare the task's resource claims (the operator can override via `POST /api/dispatch/:nodeId`'s body) | The default claim for a doc-node dispatch is `{ kind: "node", nodeId, mode: "write" }`. Tasks that read multiple docs (`verify` reads spec + parent + dependency docs) declare additional `read` claims. The conflict primitive from `05-task-runner/02-scheduler` then serialises overlapping writes correctly — two `implement` dispatches on the same node block each other; a `verify` on node N can run concurrently with an `implement` on a *different* node M because their write claims don't overlap. |
 | D12 | No watchdog timeout on dispatched subprocesses | A dispatched task can run for hours when Claude Code is doing real work. Watchdog timeouts force a value choice (5min? 30min? 4hr?) that is wrong for every other case. The operator can cancel via `POST /api/tasks/:id/cancel` when a task is observably wedged. Adding a watchdog later is purely additive (a per-task `timeout_seconds` column on `tasks` with default NULL); deferring it avoids picking the wrong default. |
 | D13 | The MCP config JSON is written to `os.tmpdir()`, not to `.ledger/` | The config contains no project-relevant state — it's the URL `http://127.0.0.1:4180/mcp` and that's it. Writing to `.ledger/` would pollute the project's working tree with N transient files per dispatch. `os.tmpdir()` is the natural place for ephemeral subprocess inputs; it's gitignored by virtue of being outside the repo entirely. Cleanup is best-effort: the dispatcher deletes its config on subprocess exit, and `os.tmpdir()` is cleared by the OS periodically anyway. |
 | D14 | Cancel is eager in the DB; the subprocess exits asynchronously | The alternative is "wait for subprocess to actually exit before transitioning CANCELLED," which makes the operator's click feel laggy (cancel-on-a-wedged-subprocess could take 30+s). Eager transition gives immediate feedback and unblocks downstream tasks immediately. The subprocess's continued attempts to call tools fail with `task_not_bound` and the subprocess exits cleanly soon after. Worst case: a misbehaving subprocess never exits and becomes a zombie — the next runner restart's orphan recovery does not catch this (the task is already CANCELLED, not RUNNING), so the operator must `ps` + `kill` manually. Logged as an Open Issue. |
 | D15 | Transcript ingestion (`01-ui/10-orchestration`) stays live alongside dispatcher-emitted events | Operator preference (this conversation, 2026-05-28). The transcript bootstrap observes Claude Code runs not driven by the dispatcher — ad-hoc CLI use, sub-agent dispatches from other terminals, the conversation that drafted this spec. Removing transcripts would leave those runs unobserved. The additive merger from `05-task-runner/05-ui-hook-migration` continues to deduplicate by id; runner tasks (bare UUIDv4) and transcript tasks (`session:<uuid>` / `agent:<id>`) cannot collide. Full retirement is a future-node concern. |
+| D16 (added 2026-05-28 amendment) | Prompt is piped to the subprocess via **stdin**, not via a `--prompt-file` flag (which does not exist) | `claude --help` verification confirmed no `--prompt-file`, `--input-file`, or equivalent flag. Two real options: (a) the positional `[prompt]` arg, capped by `ARG_MAX` (~256KB Linux, smaller on macOS, much smaller on Windows) and brittle for prompts containing shell metacharacters that `execa` would need to escape; (b) stdin pipe, uncapped and free of escaping concerns. Stdin wins. Combined with `--print` (D17), Claude Code reads the prompt from stdin, executes, prints final response, exits. |
+| D17 (added 2026-05-28 amendment) | Subprocess invocation is `claude --print --bare --mcp-config <path>` | **`--print`** is mandatory: without it Claude Code drops into an interactive TUI and never exits, defeating the executor's purpose. **`--bare`** is mandatory: it skips hooks, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and — critically — **CLAUDE.md auto-discovery**. The dispatcher's prompt templates inject the relevant project context explicitly (D10, D11); auto-loading CLAUDE.md on top would double-load context and add nondeterminism. `--bare` also documents that Anthropic auth uses `ANTHROPIC_API_KEY` or `apiKeyHelper` strictly (no OAuth, no keychain) — operator-configured at the env level, no per-dispatch auth handling in the executor. |
 
 ---
 
 ## Open Issues
 
 - **Zombie subprocesses after eager cancel.** D14 acknowledges: a subprocess that does not respond to `SIGTERM` (e.g., stuck in a `Bash` syscall that traps signals) keeps running indefinitely after the task is CANCELLED. The runner's orphan recovery does not catch it because the task is already terminal. Operator must `ps` + `kill -9` manually. Mitigation to consider in v2: the *executor* starts a SIGKILL escalation timer (5–10 s) after the cancel route delivers SIGTERM; on the timer firing, the executor sends SIGKILL and emits a `subprocess_killed` log event. Putting the timer in the executor (not the cancel route) keeps the cancel route's response synchronous and centralises subprocess-handle ownership where it belongs (Spec Review S2). *(Priority: MEDIUM — surfaces in practice when cancellation is heavily used.)*
-- **Claude Code version pinning.** D9 hard-pins `≥2.1.148` for the stderr session-id line. A Claude Code minor bump that changes the line format silently breaks the dispatcher (the executor fails every task with `mcp_session_id_not_observed`). Mitigations: a smoke test in CI that dispatches a `noop`-equivalent against the installed Claude Code version on every test run; or a more robust correlation mechanism (the server-side MCP session-creation hook records the `User-Agent` or a custom header sent by the subprocess). *(Priority: MEDIUM — surfaces on every Claude Code upgrade.)*
+- ~~**Claude Code version pinning.**~~ → Resolved by D9 amendment (2026-05-28). Header-based binding via `X-Ledger-Task-Id` in the MCP config JSON is part of the MCP HTTP transport spec, not a Claude Code-specific log convention; future Claude Code versions cannot break it without breaking MCP HTTP transport itself. The originally-noted CI smoke test against the installed `claude` version remains a worthwhile follow-up (validates `--print` + `--bare` + `--mcp-config` + stdin still work end-to-end on each upgrade) — re-filed as a LOW-priority sub-leaf concern for `03-claude-code-executor`. |
 - **Prompt-template iteration ergonomics.** D10 trades hot-reload for unit-testability. Iterating on a prompt today requires server restart + new dispatch — slow feedback loop when tuning a template. A `--reload-prompts` flag that hot-reloads the prompt module on file change would help; not v1. *(Priority: LOW — surfaces when prompt-tuning becomes a focused activity.)*
 - **No retry semantics on FAILED dispatcher tasks.** The runner has no automatic retry (inherits `05-task-runner` D11 — `FAILED` dependencies block dependents forever). An operator who wants to retry a failed dispatch must `POST /api/dispatch/:nodeId` again, which creates a *new* task with a new ID. The original `FAILED` task stays in the DB as provenance. This is correct behaviour but produces ID churn in the inspector. A `POST /api/tasks/:id/retry` that resets a FAILED task to PENDING is a v2 polish item. *(Priority: LOW.)*
 - **MCP tool-call rate limiting.** A misbehaving agent could call `runner.emit_event` thousands of times per second, flooding the events table. v1 has no caps. Mitigations: per-session rate limit at the MCP server, or per-task event count cap that fails the task with `runaway_emit`. *(Priority: LOW — single-user local-only; agent misbehavior is the operator's problem to debug.)*
@@ -372,9 +383,9 @@ Independent spec review was run against this DRAFT in a clean Sonnet context. Ve
 
 Reviewer's **Confidence notes** (recorded so the stage-4 implementer of `03-claude-code-executor` spot-checks them — these are the highest-risk unverifiable claims):
 
-- D9 stderr line format (`mcp: connected session=<uuid>`) — must be verified against a live `claude --version 2.1.148` invocation before wiring `spawn.ts`'s session-id regex. Absent or different format → every task fails with `mcp_session_id_not_observed` after a 5-s timeout. Mitigation: add a single-shot smoke test on first executor registration that spawns `claude --help` and looks for the flag inventory.
-- `--prompt-file` flag existence on `claude 2.1.148` — confirm with `claude --help`. If the flag name differs (`--input-file`, `--file`, stdin pipe), the whole executor spawn breaks.
-- `--mcp-config` flag JSON shape (`"type": "http"` vs `"type": "sse"` vs `"type": "streamable-http"`) — pin the exact format that Claude Code's bundled MCP SDK version recognises. The MCP `2025-06-18` spec renamed transports; the flag's accepted JSON may lag.
+- ~~D9 stderr line format~~ — **resolved on amendment (2026-05-28)**: `claude --help` verification confirmed no such line. D9 replaced with header-based binding via `X-Ledger-Task-Id` in the MCP config JSON; no stderr parsing remains in the design.
+- ~~`--prompt-file` flag existence~~ — **resolved on amendment**: confirmed absent. Replaced with stdin pipe + `--print` (D16, D17).
+- `--mcp-config` flag JSON shape (`"type": "http"` vs `"type": "sse"` vs `"type": "streamable-http"`) — pin the exact format that Claude Code's bundled MCP SDK version recognises. The MCP `2025-06-18` spec renamed transports; the flag's accepted JSON may lag. The `headers` map shape (`{ "X-...": "..." }`) likewise needs verification against an actual `claude --mcp-config <test.json>` invocation — assumed standard MCP HTTP transport but not yet exercised.
 - `@modelcontextprotocol/sdk` streamable-HTTP server API surface — `McpServer` + `StreamableHttpServerTransport` class names and the `Mcp-Session-Id` header semantics must be pinned at implementation time to the exact SDK version on npm.
 - `store.loadTask` + `store.getEvents` are non-throwing for foreign `taskId`s (the `runner.get_task` tool exposes cross-task reads per D8). The current store implementation in `05-task-runner/01-store-schema` returns `null` for unknown ids — confirm before the tool handler ships.
 
@@ -411,7 +422,7 @@ When this parent moves to `VERIFY` (all children COMPLETE), the verifier confirm
 |----|-------|------------|--------|
 | `01-mcp-server` | MCP server scaffolding mounted at `POST /mcp`: streamable-HTTP transport via `@modelcontextprotocol/sdk`, server factory + Hono route mount, `serverInfo` discovery, internal session lifecycle (open/close hooks for the binding registry from `02-runner-tools`) | `05-task-runner` | PLANNED |
 | `02-runner-tools` | The five MCP tools (`runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`), thin adapters over `RunnerHandle`; tool-argument JSON Schema in `docs/_schemas/dispatcher-tools.schema.json`; task-id binding registry + cross-task rejection (`task_not_bound` MCP error); ajv validation on tool inbound; **new `store.updateReviewPayload(taskId, reviewPayload)` one-liner method on the `Store` interface** (extends `05-task-runner/01-store-schema`'s API; used only by the `runner.await_human_review` handler — Spec Review S3) | `01-mcp-server` | PLANNED |
-| `03-claude-code-executor` | `ClaudeCodeExecutor` registered for the eight real task types; subprocess spawn via `execa` with `--mcp-config` + `--prompt-file` + `LEDGER_TASK_ID` env; stderr session-id correlation (D9); exit-code → task-status lifecycle table; new status reasons `subprocess_exit_without_terminal_status` / `subprocess_failed:*` registered in `runner/scheduler.ts` reasons const | `02-runner-tools` | PLANNED |
+| `03-claude-code-executor` | `ClaudeCodeExecutor` registered for the eight real task types; subprocess spawn via `execa` with `--print --bare --mcp-config <path>` (D17) and prompt piped via stdin (D16); `LEDGER_TASK_ID` env; exit-code → task-status lifecycle table; new status reasons `SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS` (bare const) + `subprocessFailed(tail)` (builder) + `CANCELLED_BY_OPERATOR` (bare const) registered in `runner/scheduler.ts` reasons const; CI smoke test against the installed `claude` version to catch invocation-flag regressions on upgrades | `02-runner-tools` | PLANNED |
 | `04-prompt-templates` | Eight per-task-type TS prompt templates (`implement`, `spec_review`, `verify`, `spec_draft`, `reverify`, `doc_refactor`, `issue_triage`, `project_status_review`) plus a `shared.ts` helper (persona preamble, MCP-tool contract reminder, required-reading composition); template registry in `prompts/index.ts`; default resource-claim declarations per type (D11) | `02-runner-tools` | PLANNED |
 | `05-dispatch-api` | **Dispatch + cancel endpoints + UI integration.** `POST /api/dispatch/:nodeId` with lifecycle-driven task-type inference (APPROVED → implement, VERIFY → verify, DRAFT → spec_review); `POST /api/tasks/:id/cancel` with eager-CANCELLED transition + SIGTERM (D14) + `cancelled_by_operator` reason; `useDispatch` / `useCancelTask` mutation hooks; `NodeInspector` Dispatch button (visibility on APPROVED/VERIFY/DRAFT); `TaskInspector` Cancel button (visibility on RUNNING ∧ runner-emitted) | `03-claude-code-executor`, `04-prompt-templates` | PLANNED |
 
