@@ -5,6 +5,7 @@ import { healthRoute } from "./routes/health.js";
 import { projectRoute } from "./routes/project.js";
 import { docsRoute } from "./routes/docs.js";
 import { tasksRoute } from "./routes/tasks.js";
+import { hitlRoute } from "./routes/hitl.js";
 
 export type ServerEnv = { Variables: { project: ProjectContext } };
 
@@ -19,5 +20,6 @@ export function createServer(project: ProjectContext): Hono<ServerEnv> {
   app.route("/api/project", projectRoute);
   app.route("/api/docs", docsRoute);
   app.route("/api/tasks", tasksRoute);
+  app.route("/api/tasks", hitlRoute);
   return app;
 }

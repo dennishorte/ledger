@@ -32,3 +32,15 @@ export type {
 export { validateTask } from "./runner/validateTask.js";
 export { validateLogEvent } from "./runner/validateLogEvent.js";
 export { validateTaskInput } from "./runner/validateTaskInput.js";
+
+// HITL validators (05-task-runner/03-hitl-gate)
+export { validateHitlApprove } from "./runner/validateHitlApprove.js";
+export { validateHitlReject } from "./runner/validateHitlReject.js";
+export type {
+  HitlApproveBody,
+  HitlApproveValidationResult,
+} from "./runner/validateHitlApprove.js";
+export type {
+  HitlRejectBody,
+  HitlRejectValidationResult,
+} from "./runner/validateHitlReject.js";

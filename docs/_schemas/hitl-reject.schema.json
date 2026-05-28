@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/hitl-reject.schema.json",
+  "$comment": "Request body for POST /api/tasks/:id/reject. Spec: docs/05-task-runner/03-hitl-gate.md §JSON Schemas. Version 1.",
+  "title": "HITL Reject Request Body",
+  "type": "object",
+  "required": ["dbRowVersion", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "dbRowVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optimistic-concurrency token (PRD §8.4)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "Rejection rationale. Required (rejection without a why is a misuse). Stored fully in a kind=error detail event written before the status_change; the status_change.reason field carries a truncated 80-char form."
+    },
+    "followUp": {
+      "$ref": "task-input.schema.json",
+      "description": "Optional follow-up task carrying the rationale forward. dependsOn is force-cleared to [] by the endpoint (D8 — the rejected task is terminal). resourceClaims defaults to the rejected task's claims if absent on the request (D9)."
+    }
+  }
+}

@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/03-hitl-gate`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (APPROVED → IN_PROGRESS — implementer started)
+**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — implementation complete; stage-4 worktree dispatch failed and recovered on main, see Implementation Notes)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner + RunnerHandle + tick + claim-set query), `05-task-runner/04-api-endpoints` (`tasks.ts` routes + EventBus already wired)
 
@@ -549,7 +549,70 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. `better-sqlite3`, ajv, ajv-formats, and Hono are all already present from `01-store-schema` / `04-api-endpoints`.
+
+### Deviations from spec
+
+**`rawFollowUpClaimsPresent` detection on raw body (not validated input).** Spec D9's pseudocode (`followUp.resourceClaims !== undefined`) was written assuming the validator preserved presence/absence on the parsed input. In practice, ajv's `useDefaults: true` propagates the `task-input.schema.json` default `[]` through the `$ref` from `hitl-reject.schema.json`, so by the time the route reads `result.input.followUp.resourceClaims` it's always defined (either operator's explicit value or the default `[]`). To honor D9 correctly, the route detects presence on the **raw** request body before validation runs. Encapsulated as an IIFE in `hitl.ts:108-115`. Tests for both branches (inherited from rejected task vs. explicit empty) confirm correct behavior.
+
+**`appendEvent` type assertion via `Parameters<typeof ...>[1]`.** The `LogEvent` discriminated-union narrowing under `Omit<LogEvent, "id" | "taskId" | "seq" | "at">` collapses the variants in TS's inference, so the inline `{ kind: "error", message: "...", stack: "..." }` object literal triggers a "may only specify known properties" error. Matches the existing workaround at `server/test/tasks.test.ts:401`. Acceptable until a `LogEventInput` helper type lands.
+
+**Follow-up task reload after `runner.createTask`.** Mirrors `04-api-endpoints`' POST handler reload pattern at `tasks.ts:171` — `runner.createTask` returns the PENDING snapshot, but the synchronous trampoline transitions it onward (`noop` → COMPLETE). The route reloads via `store.loadTask(created.id) ?? created` so the response body shows the correct post-tick status.
+
+### Bundle delta vs 2be7514 baseline
+
+App source unchanged (`git diff main -- app/` empty). App bundle hashes change with each rebuild but chunk sizes are identical. Server-only additions.
+
+### Files changed inventory
+
+**New files:**
+- `server/src/routes/hitl.ts` — POST /:id/approve + /:id/reject handlers (~170 LOC)
+- `docs/_schemas/hitl-approve.schema.json`, `docs/_schemas/hitl-reject.schema.json`
+- `packages/parser/src/runner/validateHitlApprove.ts`, `validateHitlReject.ts`
+- `server/test/runner/hitl.test.ts` — 8 unit tests (executor + handle + lifecycle + restart durability)
+- `server/test/hitl.test.ts` — 14 endpoint tests (approve / reject / OCC / followUp / B1 OCC-loser)
+- `packages/parser/test/runner/validateHitlApprove.test.ts` — 7 validator tests
+- `packages/parser/test/runner/validateHitlReject.test.ts` — 10 validator tests
+
+**Modified files:**
+- `server/src/runner/executors.ts` — RunnerHandle.awaitHumanReview added; humanReviewExecutor exported; createDefaultRegistry registers human_review alongside noop
+- `server/src/runner/scheduler.ts` — handle singleton gains awaitHumanReview (skips scheduleTick per D1); reasons object gains APPROVED + approvedWithNote (80-char truncation) + rejected (80-char truncation)
+- `server/src/server.ts` — `app.route("/api/tasks", hitlRoute)` mounted after tasksRoute
+- `packages/parser/src/index.ts` — re-exports validateHitlApprove / validateHitlReject + their types
+- `server/test/runner/executors.test.ts` — updated default-registry test to expect size=2 (noop + human_review) post-03
+
+### Gates verified headlessly
+
+| Gate | Exit |
+|---|---|
+| `pnpm -C server typecheck` | 0 |
+| `pnpm -C server lint` | 0 |
+| `pnpm -C server build` | 0 |
+| `pnpm -C server test` | 0 — 162 tests (was 140; +22) |
+| `pnpm -C app typecheck` | 0 |
+| `pnpm -C app lint` | 0 |
+| `pnpm -C app build` | 0 |
+| `pnpm -C packages/parser typecheck` | 0 |
+| `pnpm -C packages/parser lint` | 0 |
+| `pnpm -C packages/parser test` | 0 — 108 tests (was 91; +17) |
+
+### Stage-4 dispatch context
+
+The initial Sonnet implementer dispatched in an isolated worktree stalled mid-way after commit 4a (status bump). The 4a commit landed on main due to worktree misconfiguration. Recovery: removed the broken worktree, finished the implementation directly on main with the same discipline (commit boundaries, gate verification). Stage-6 implementation review still applies — to be dispatched against the implementation diff on main.
+
+### Acceptance-check items NOT verifiable headlessly
+
+Items 3–10 of §Acceptance check require a live server + curl:
+- Boot, inject `human_review` task → 201 AWAITING_HUMAN_REVIEW.
+- GET task + events log (3 events at seq 0/1/2; dbRowVersion=2).
+- POST /:id/approve with note → 200 COMPLETE, seq 3 status_change with `approved: <note>`.
+- POST /:id/reject with rationale + followUp → 200 FAILED + followUpTask=COMPLETE, detail event before status_change.
+- OCC 409 on stale dbRowVersion.
+- Restart durability: kill+reboot preserves AWAITING_HUMAN_REVIEW row.
+- SSE live delivery of approval transition.
+- Conflict-set: human_review with write claim BLOCKS a downstream task with same write claim.
 
 ---
 

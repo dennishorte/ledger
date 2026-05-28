@@ -36,11 +36,12 @@ function makeHandle() {
 }
 
 describe("createDefaultRegistry", () => {
-  // 1. Returns a registry with `noop` registered, no other types.
-  it("returns a registry with noop registered and no other types", () => {
+  // 1. Returns a registry with `noop` AND `human_review` registered after 03-hitl-gate.
+  it("returns a registry with noop + human_review registered (no other types)", () => {
     const reg = createDefaultRegistry();
     expect(reg.has("noop")).toBe(true);
-    expect(reg.size).toBe(1);
+    expect(reg.has("human_review")).toBe(true);
+    expect(reg.size).toBe(2);
   });
 
   // 4. The registry is a fresh Map per construction — two registries are independent.

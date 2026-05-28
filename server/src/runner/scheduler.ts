@@ -29,6 +29,13 @@ export const reasons = {
     `blocked_by_claim_conflict:${conflictingId}`,
   BLOCKED_NO_EXECUTOR: "blocked_no_executor",
   ORPHANED_ON_RESTART: "orphaned_on_restart",
+  // HITL gate (03-hitl-gate). approvedWithNote + rejected both truncate at 80
+  // chars for the status_change.reason field (which is for log-scanning, not
+  // full content); the full rationale lives in the request body (approve note)
+  // or in a kind=error detail event written before the status_change (reject).
+  APPROVED: "approved",
+  approvedWithNote: (note: string) => `approved: ${note.slice(0, 80)}`,
+  rejected: (rationale: string) => `rejected: ${rationale.slice(0, 80)}`,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -76,6 +83,14 @@ export function createRunner(
       const t = store.updateTaskStatus(taskId, { from: "RUNNING", to: "FAILED", reason });
       scheduleTick();
       return t;
+    },
+    awaitHumanReview(taskId: TaskId): Task {
+      // Deliberately NO scheduleTick — the task is now suspended in a
+      // claim-holding state; a tick would not re-dispatch it. (03-hitl-gate D1.)
+      return store.updateTaskStatus(taskId, {
+        from: "RUNNING",
+        to: "AWAITING_HUMAN_REVIEW",
+      });
     },
   };
 

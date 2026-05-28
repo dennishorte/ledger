@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ledger.dev/schemas/hitl-approve.schema.json",
+  "$comment": "Request body for POST /api/tasks/:id/approve. Spec: docs/05-task-runner/03-hitl-gate.md §JSON Schemas. Version 1.",
+  "title": "HITL Approve Request Body",
+  "type": "object",
+  "required": ["dbRowVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "dbRowVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optimistic-concurrency token captured from the task at the time the operator opened the review (PRD §8.4)."
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 4096,
+      "description": "Optional approval note. Truncated to 80 chars in the status_change.reason field by reasons.approvedWithNote; full text stays in this request body only."
+    }
+  }
+}
