@@ -16,6 +16,8 @@ import type { Store } from "./store.js";
 import type { Executor, ExecutorRegistry, RunnerHandle } from "./executors.js";
 import { createDefaultRegistry } from "./executors.js";
 import { conflicts } from "./conflict.js";
+import type { EventBus } from "./events.js";
+import { createEventBus } from "./events.js";
 
 // ---------------------------------------------------------------------------
 // Status-reason builders + constants (parent §Status reasons)
@@ -35,6 +37,8 @@ export const reasons = {
 
 export interface Runner {
   readonly store: Store;
+  /** In-process pub/sub bus — subscribers are notified after every Store write. */
+  readonly events: EventBus;
   /** Wraps store.createTask and triggers a scheduler tick. */
   createTask(input: TaskInput): Task;
   /** Registers an executor for a task type. Overwrites prior registration with a warning. */
@@ -52,6 +56,7 @@ export interface Runner {
 export function createRunner(
   store: Store,
   registry: ExecutorRegistry = createDefaultRegistry(),
+  bus: EventBus = createEventBus(),
 ): Runner {
   let ticking = false;
   let pending = false;
@@ -216,6 +221,7 @@ export function createRunner(
 
   return {
     store,
+    events: bus,
     createTask(input: TaskInput): Task {
       const task = store.createTask(input);
       scheduleTick();
