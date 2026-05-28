@@ -16,7 +16,7 @@ import { noopExecutor, createDefaultRegistry } from "../../src/runner/executors.
 import type { Store } from "../../src/runner/store.js";
 import type { Runner } from "../../src/runner/scheduler.js";
 import type { Executor, ExecutorRegistry, RunnerHandle } from "../../src/runner/executors.js";
-import type { Task } from "@ledger/parser";
+import type { Task, ResourceClaim } from "@ledger/parser";
 
 function makeMemoryStore(): Store {
   const db = new Database(":memory:");
@@ -478,6 +478,65 @@ it("test 14: async executor rejected promise → task FAILED with executor_error
   if (lastEvt.kind === "status_change") {
     expect(lastEvt.reason).toBe("executor_error: async boom");
   }
+
+  s.close();
+});
+
+// ---------------------------------------------------------------------------
+// Test 14b: Async failure RELEASES claims; a previously claim-blocked sibling
+// dispatches via the async .catch()'s scheduleTick (Spec Review B2 — async path).
+//
+// Rationale: the sync sibling test (test 13) is also B2-relevant but
+// structurally the surrounding `pending = true; return;` in tickOnce would
+// fire the trampoline regardless of the sync catch's scheduleTick — making
+// the sync B2 fix defense-in-depth. The async path is where B2 is actually
+// load-bearing: the .catch() fires in a microtask after the outer tick has
+// already exited (ticking = false), so without the explicit scheduleTick in
+// the catch handler, no one would re-evaluate eligible siblings.
+// (Implementation Review N1.)
+// ---------------------------------------------------------------------------
+it("test 14b: async failure releases claims; previously-blocked sibling dispatches (B2 async)", async () => {
+  const asyncThrowExec: Executor = {
+    run(_task, _handle) {
+      return Promise.reject(new Error("async release boom"));
+    },
+  };
+  const reg = createDefaultRegistry();
+  reg.set("implement", asyncThrowExec);
+  const { runner: r, store: s } = makeRunnerPair(reg);
+
+  const claim: ResourceClaim = { kind: "node", nodeId: "shared", mode: "write" };
+  // Stage both tasks via direct store.createTask to avoid auto-ticks racing the setup.
+  const a = s.createTask({
+    type: "implement",
+    title: "A async-throws while holding write claim",
+    resourceClaims: [claim],
+  });
+  const c = s.createTask({
+    type: "noop",
+    title: "C waiting on A's write claim",
+    resourceClaims: [claim],
+  });
+
+  // First tick: A dispatches (RUNNING); C blocks on claim conflict.
+  r.tick();
+  expect(s.loadTask(a.id)?.status).toBe("RUNNING");
+  expect(s.loadTask(c.id)?.status).toBe("BLOCKED");
+  const cBlockedEvt = getLastEvent(s.getEvents(c.id));
+  if (cBlockedEvt.kind === "status_change") {
+    expect(cBlockedEvt.reason).toBe(`blocked_by_claim_conflict:${a.id}`);
+  }
+
+  // Wait for the rejected Promise to fire its .catch() — which must call
+  // scheduleTick() for C to be re-evaluated and dispatched.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  expect(s.loadTask(a.id)?.status).toBe("FAILED");
+  // The load-bearing assertion: C completed because the async .catch()'s
+  // scheduleTick() fired the trampoline, which re-evaluated C now that A
+  // no longer holds the claim. Without that scheduleTick, C would still be
+  // BLOCKED here.
+  expect(s.loadTask(c.id)?.status).toBe("COMPLETE");
 
   s.close();
 });
