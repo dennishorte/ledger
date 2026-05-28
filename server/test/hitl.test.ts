@@ -14,6 +14,7 @@ import { createStore } from "../src/runner/store.js";
 import { createRunner, recoverOrphans } from "../src/runner/scheduler.js";
 import { createEventBus, withPublishing } from "../src/runner/events.js";
 import { createServer } from "../src/server.js";
+import { createMcpServer } from "../src/dispatcher/mcp/server.js";
 import type { ProjectContext } from "../src/context.js";
 import type { Task, LogEvent } from "@ledger/parser";
 
@@ -25,6 +26,10 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
   const store = withPublishing(createStore(db), bus);
   recoverOrphans(store);
   const runner = createRunner(store, undefined, bus);
+  // createMcpServer (sync, pre-connect) gives a valid McpServerHandle shape.
+  // These tests do not exercise MCP; the unconnected handle is sufficient.
+  const mcp = createMcpServer({ version: "0.1.0" });
+
   const ctx: ProjectContext = {
     projectRoot: "/test",
     docsRoot: "/test/docs",
@@ -33,6 +38,7 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
     startedAt: new Date().toISOString(),
     store: runner.store,
     runner,
+    mcp,
   };
   return { ...ctx, closeAll: () => { runner.close(); } };
 }

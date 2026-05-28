@@ -21,5 +21,6 @@ export function createServer(project: ProjectContext): Hono<ServerEnv> {
   app.route("/api/docs", docsRoute);
   app.route("/api/tasks", tasksRoute);
   app.route("/api/tasks", hitlRoute);
+  app.route("/mcp", project.mcp.mcpRoute); // MCP server — /mcp not /api/mcp (parent D4)
   return app;
 }

@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/01-mcp-server`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (APPROVED → IN_PROGRESS — stage-4 implementer entered worktree)
+**Last Updated:** 2026-05-28 (IN_PROGRESS → VERIFY — stage-4 implementation complete; all gates green)
 
 **Dependencies:** `05-task-runner` (workspace, server package, `ProjectContext`, Hono app)
 
@@ -413,7 +413,43 @@ Nothing punted; all 7 findings + 4 confidence notes landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+2026-05-28 (stage 4 — implementer in isolated worktree `worktree-agent-a0d9ba4671b58b490`).
+
+**Deps pinned.** `@modelcontextprotocol/sdk@1.29.0` (exact version installed, per `server/node_modules/@modelcontextprotocol/sdk/package.json`).
+
+**Bundle delta.** `server/dist/` pre-implementation: 272K (baseline build before dep add). Post-implementation: 320K. Delta: +48K (TypeScript output for new `dispatcher/mcp/` modules + `package.json` version import). `app/` bundle: zero change (no UI files modified).
+
+**Confidence-note verifications:**
+
+1. *Filename casing.* `node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.d.ts` — confirmed present with exactly this casing. Imports in `server.ts` and `types.ts` match.
+
+2. *`onsessioninitialized` synchrony.* In `webStandardStreamableHttp.js` line 438: `await Promise.resolve(this._onsessioninitialized(this.sessionId))`. The callback is called synchronously; `await Promise.resolve()` wraps the return value but does NOT defer the invocation into a new task — the callback body runs inline in the same microtask tick. AsyncLocalStorage context propagates correctly through `await Promise.resolve()` because it stays within the same async context chain. ALS pattern is **valid**.
+
+3. *`Mcp-Session-Id` exact string.* The SDK uses **`mcp-session-id`** (all lowercase) for both setting response headers (`headers['mcp-session-id'] = this.sessionId`) and reading request headers (`req.headers.get('mcp-session-id')`). The spec's `Mcp-Session-Id` casing was informal title-case. Extracted as `export const MCP_SESSION_ID_HEADER = "mcp-session-id" as const` in `server/src/dispatcher/mcp/server.ts` (re-exported from `dispatcher/index.ts` for test use). HTTP headers are case-insensitive per spec, so no protocol impact; the SDK's lowercase is consistent.
+
+4. *Close-ordering.* `McpServer.close()` in `mcp.js` line 53–54 calls `await this.server.close()`, which in `protocol.js` line 500–502 calls `await this._transport?.close()`. So `server.close()` already closes the transport transitively. `McpServerHandle.close()` wraps the second `transport.close()` call in a `try/catch` to silently swallow the double-close. Since v1 has no project teardown path, `close()` is never called in production; the defensive try/catch is a correctness guard for future teardown support.
+
+**Deviations from spec:**
+
+1. *`setToolRequestHandlers()` eager call.* The spec's pseudocode does not mention this, but the `McpServer` lazily registers the `tools/list` handler only when `registerTool()` is first called. With no tools registered, `tools/list` returns `-32601: Method not found`. Since the spec requires the initialize handshake to return an empty tools list (and since `02-runner-tools` will call `registerTool()` later, which re-entrantly calls `setToolRequestHandlers()` — idempotently), the factory now calls `(server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers()` immediately after construction. This forces the tools capability to be advertised from the start. Noted as a deviation: the type cast bypasses TypeScript's `private` modifier but is correct at runtime. If a future SDK version changes this internal method name, the cast will throw at runtime and the test suite will catch it.
+
+2. *`MCP_SESSION_ID_HEADER` exported from `dispatcher/index.ts`.* The spec's §Repository layout comment for `index.ts` listed re-exports as `createMcpServerAsync, McpServerHandle, MCPSessionId, SessionInitializedListener, SessionClosedListener`. Tests needed `MCP_SESSION_ID_HEADER` from `server.ts`; added it to the barrel export. Minor additive extension, not in scope conflict.
+
+**Gates run + results:**
+- `pnpm -C packages/parser build` — PASS
+- `pnpm -C server build` — PASS
+- `pnpm -C server typecheck` — PASS (0 errors)
+- `pnpm -C server lint` — PASS (0 warnings)
+- `pnpm -C app typecheck` — PASS (no regressions)
+- `pnpm -C app lint` — PASS (no regressions)
+- `pnpm test` — PASS (parser 108, app 105, server 176 — 11 new MCP tests added)
+
+**Acceptance-check items the headless worktree environment cannot verify (operator verifies in stage 8):**
+- Item 3: `pnpm -C server dev /Users/dennis/code/ledger` boots and existing `/api/*` endpoints continue to respond.
+- Item 5: A real `curl` or MCP client completes the `initialize` handshake against a running server at `http://127.0.0.1:4180/mcp` and receives `serverInfo: { name: "ledger-runner", version: "0.1.0" }` and an empty `tools` list.
+- Item 6: `Mcp-Session-Id` round-trip against a running server; bad/missing session ids return 400/404.
+- Item 7: `GET /api/_health` shows `activeSessions: 1` after an open session; `activeSessions: 0` after DELETE.
+- Item 9: No regressions on existing UI panels (DAG, Tasks, Logs).
 
 ---
 

@@ -5,6 +5,11 @@ import type { ProjectMetadata, ValidationError } from "@ledger/parser";
 import { assertContained } from "./pathSafety.js";
 import { createRunnerForProject } from "./runner/index.js";
 import type { Store, Runner } from "./runner/index.js";
+import { createMcpServerAsync } from "./dispatcher/index.js";
+import type { McpServerHandle } from "./dispatcher/index.js";
+import pkg from "../package.json" with { type: "json" };
+
+const SERVER_VERSION = pkg.version;
 
 export interface ProjectContext {
   projectRoot: string;
@@ -13,7 +18,8 @@ export interface ProjectContext {
   port: number;
   startedAt: string;
   store: Store;   // same reference as runner.store — kept for backwards compat (D12)
-  runner: Runner; // NEW — wired in this sub-leaf per Requirements item 9
+  runner: Runner; // wired in 05-task-runner/02-scheduler per Requirements item 9
+  mcp: McpServerHandle; // NEW — wired in 06-agent-dispatcher/01-mcp-server
 }
 
 export class ContextError extends Error {
@@ -56,6 +62,7 @@ export async function loadProjectContext(opts: {
   }
 
   const runner = createRunnerForProject({ projectRoot });
+  const mcp = await createMcpServerAsync({ version: SERVER_VERSION });
 
   return {
     projectRoot,
@@ -65,5 +72,6 @@ export async function loadProjectContext(opts: {
     startedAt: new Date().toISOString(),
     store: runner.store,
     runner,
+    mcp,
   };
 }
