@@ -625,7 +625,7 @@ Operator call: the spec packed five distinct work streams (workspace conversion 
 
 This is the framework's first data point for PRD §11's "decomposition termination criteria" Open Issue — what "too large for one pass" looks like in practice. The empirical heuristic from this case: a leaf whose Verification gate enumerates more than ~10 items, or whose Design touches more than 3 cross-cutting workspace boundaries, likely needs decomposition.
 
-Status was reverted `IN_PROGRESS → APPROVED` (decomposed) in the same commit that landed this decomposition. The failed worktree (`worktree-agent-a15c4310feed361b7`) is parked, not pruned — the partial extraction it produced is a useful reference for the `02-parser-extraction` child's implementer, who can either resume it or restart with the smaller scoped brief.
+Status was reverted `IN_PROGRESS → APPROVED` (decomposed) in the same commit that landed this decomposition. The failed worktree (`worktree-agent-a15c4310feed361b7`) was initially parked as a reference for the `02-parser-extraction` child's implementer; it was pruned on 2026-05-27 once that child landed COMPLETE and the current `packages/parser/src/` tree confirmed it as a strict superset of the parked scaffold (only carried commit was the `APPROVED → IN_PROGRESS` status flip, superseded by the `APPROVED (decomposed) → COMPLETE` flip on main).
 
 The Spec Review (2026-05-25) audit table stays in this parent as durable provenance; every finding it resolved still applies, and each child spec cites the parent for the architectural decisions it inherits (CORS-dropped contract, Hono route shape, `:nodeId{.+}` matcher, 422-vs-404 semantics, path-containment posture, `import.meta.glob` stays in `app/`, etc.).
 
