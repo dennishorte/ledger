@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/05-ui-hook-migration`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** ISSUE_OPEN
+**Status:** IN_PROGRESS
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (VERIFY → ISSUE_OPEN — Approve/Reject button flicker found in operator stage-8 walkthrough; see new HIGH Open Issue)
+**Last Updated:** 2026-05-28 (ISSUE_OPEN → IN_PROGRESS — applying Fix A for the Approve/Reject flicker)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (approve/reject endpoints + `dbRowVersion` OCC contract), `05-task-runner/04-api-endpoints` (GET /api/tasks, /:id, /:id/stream, POST /api/tasks)
 
