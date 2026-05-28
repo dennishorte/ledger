@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/04-api-endpoints`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (DRAFT → SPEC_REVIEW — dispatching reviewer)
+**Last Updated:** 2026-05-27 (SPEC_REVIEW → APPROVED — audit applied)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner instance, scheduler, store wired on `ProjectContext`)
 
@@ -45,9 +45,9 @@ In scope for v1:
 6. **SSE contract** (`GET /api/tasks/:id/stream`):
    - Open: server resolves the task (404 if missing) → opens SSE → emits all events with `seq > lastSeq` where `lastSeq` is parsed from the `Last-Event-ID` header (default `-1`, meaning emit everything starting at seq 0).
    - Subscribe: handler subscribes via `runner.events.subscribe(taskId, callback)`. Callback is invoked on every `bus.publish(taskId)`. Callback re-queries `store.getEvents(taskId, { afterSeq: emittedSeq })`, writes each event as `id: <seq>\ndata: <json>\n\n`, and updates `emittedSeq`.
-   - Heartbeat: every 15 s, write `: ping\n\n` (SSE comment line — clients ignore but the TCP write keeps the connection alive through proxies). Same constant as `01-ui/10-orchestration` D7's contract.
+   - Heartbeat: every 15 s, write `: ping\n\n` (SSE comment line — clients ignore but the TCP write keeps the connection alive through proxies). Implementation calls `stream.write(": ping\n\n")` directly (not `stream.writeSSE({event:"ping",...})` which would emit a named-event frame visible to listeners). Same constant as `01-ui/10-orchestration` D7's contract. Same wire format as the transcript bootstrap (`app/server/middleware.ts:142`).
    - Auto-close: 60 s after the task's status first enters `COMPLETE`, `FAILED`, or `CANCELLED`. Implementation: the subscribe-callback checks the task status after publishing; on first terminal-status observation, start a 60 s timer that closes the stream (`event: close\ndata: {"reason":"task_terminal"}\n\n` then `res.end()`). Matches the transcript bootstrap's `SSE_AUTO_CLOSE_QUIET_MS` constant.
-   - Unsubscribe: on client disconnect (Hono's `c.req.raw.signal.aborted` / `stream.aborted`), call the unsubscribe function and clear the heartbeat + auto-close timers. No leaked subscribers (D6).
+   - Unsubscribe: on client disconnect, Hono's `streamSSE` fires `stream.onAbort` callbacks. Wire the unsubscribe + heartbeat-clear + auto-close-clear into a single (or multiple-stacked) `stream.onAbort` handler. No `c.req.raw.signal` listener needed — the abort flows through `responseReadable.cancel` → `StreamingApi.abort` → `abortSubscribers` (verified `hono@4.12.23` `stream.js:29-33,65-67`). No leaked subscribers (D6). (Spec Review N4 clarifies the abort path: `stream.onAbort` is the only mechanism the route handler needs.)
    - Concurrency: multiple SSE clients can subscribe to the same task; each gets its own subscriber slot in the bus's `Set<callback>`. The bus does not deduplicate — every subscriber callback fires per publish.
 7. **Validation**:
    - `POST /api/tasks` body is validated by `validateTaskInput(raw)` (already shipped in `01-store-schema`). On `result.ok === false`, return 400 with `{ errors: result.errors }` matching the existing pattern used by `routes/docs.ts:33` (`return c.json({ errors: result.errors }, 422)` — TODO: pick 400 vs 422 consistently, see D7).
@@ -206,8 +206,12 @@ export function withPublishing(store: Store, bus: EventBus): Store {
     listPendingEligible: store.listPendingEligible,
     getEvents: store.getEvents,
     close() {
-      bus.close();
+      // Spec Review N2: close store first, bus second. Defensive ordering —
+      // if any future Store-close handler observed bus state, it would still
+      // be valid. better-sqlite3's db.close() has no callbacks today, but the
+      // reverse order is the safer default.
       store.close();
+      bus.close();
     },
   };
 }
@@ -244,6 +248,8 @@ export function createRunner(
 
 The defaulted `bus` parameter means existing call sites (`createRunner(store)` in tests) continue to work — they get a fresh bus they can ignore. Tests that need to assert publish behavior pass an explicit bus instance and subscribe to it.
 
+**Note on `Runner` interface's canonical home** (Spec Review S4): the authoritative `Runner` shape now lives in `server/src/runner/scheduler.ts`. The `02-scheduler.md` spec's §Design block shows the interface as of v1 of that node; **this child's diff is the source of truth going forward** for the `events: EventBus` addition. Future readers of `02-scheduler.md` who want the live interface should consult `scheduler.ts`. The leaf-workflow's "doc and code must agree" rule is honored by this child's diff updating `scheduler.ts`; back-amending `02-scheduler.md`'s §Design block would be ahistorical (it was correct at the time `02-scheduler` shipped).
+
 ```ts
 // server/src/runner/index.ts (excerpt of changes)
 import { createEventBus, withPublishing } from "./events.js";
@@ -277,9 +283,16 @@ export function createRunnerForProject({ projectRoot }: { projectRoot: string })
 }
 
 export function createStoreForProject(project: { projectRoot: string }): Store {
-  // Backwards-compat shim — still returns a publishing-wrapped Store, since
-  // we cannot easily un-wrap. Callers that subscribe via runner.events still work;
-  // callers that don't subscribe see no behavior change.
+  // Backwards-compat shim. After this child:
+  //   - constructs a fresh EventBus (immediately abandoned for non-Runner callers),
+  //   - applies migrations (already idempotent — no-op on second call),
+  //   - runs orphan-recovery (no-op when nothing is RUNNING),
+  //   - wraps the Store with withPublishing (publishes go nowhere — no subscribers).
+  // The semantic guarantee is preserved: callers receive a Store that supports
+  // every read/write method. Callers that want subscriptions must migrate to
+  // createRunnerForProject and use runner.events. (Spec Review S3.)
+  // Return type widened to Store from ReturnType<typeof createStore> (S2) —
+  // withPublishing returns the Store interface, identical in surface.
   return createRunnerForProject(project).store;
 }
 ```
@@ -341,6 +354,9 @@ export const tasksRoute = new Hono<ServerEnv>()
       async function flush(): Promise<void> {
         const fresh = project.runner.store.getEvents(id, { afterSeq: emittedSeq });
         for (const ev of fresh) {
+          // Hono's StreamingApi.write swallows post-close errors silently
+          // (verified hono@4.12.23 stream.js:42), so no try/catch needed.
+          // (Spec Review S5.)
           await stream.writeSSE({
             id: String(ev.seq),
             data: JSON.stringify(ev),
@@ -354,18 +370,26 @@ export const tasksRoute = new Hono<ServerEnv>()
         }
       }
 
-      // Initial backfill — emit anything with seq > lastSeq.
-      await flush();
-
+      // SUBSCRIBE FIRST, THEN BACKFILL (Spec Review B2): subscribing before
+      // the initial flush eliminates the window where a publish that arrives
+      // mid-flush could be dropped. flush() is idempotent — running it twice
+      // back-to-back is a no-op for the second call because emittedSeq advanced.
       const unsubscribe = project.runner.events.subscribe(id, () => {
         // Synchronous callback can't await; defer to the next microtask.
-        // We tolerate ordering: subscribers may see multiple publishes
-        // collapsed into one flush — getEvents() reads everything new.
+        // Subscribers may see multiple publishes collapsed into one flush —
+        // getEvents() reads everything new each time.
         void flush();
       });
 
+      // Initial backfill after subscribe — emit anything with seq > lastSeq.
+      await flush();
+
       const heartbeat = setInterval(() => {
-        void stream.writeSSE({ data: "", event: "ping" }).catch(() => undefined);
+        // SSE comment line (`: ping\n\n`) — invisible to EventSource clients
+        // but keeps TCP alive through proxies. Matches the transcript bootstrap
+        // (app/server/middleware.ts:142) and the parent's §SSE contract.
+        // (Spec Review S1 — pseudocode now consistent with Requirements.)
+        stream.write(": ping\n\n").catch(() => undefined);
       }, SSE_HEARTBEAT_MS);
 
       const autoCloseTicker = setInterval(() => {
@@ -405,7 +429,8 @@ export const tasksRoute = new Hono<ServerEnv>()
     if (!result.ok) {
       return c.json({ errors: result.errors }, 400);
     }
-    const task = project.runner.createTask(result.value);
+    // Spec Review B1: validateTaskInput's success branch is { ok: true; input: TaskInput }.
+    const task = project.runner.createTask(result.input);
     return c.json({ task }, 201);
   });
 ```
@@ -468,7 +493,7 @@ Operator note: items 1–4 + 9 + 10 + 11 are headless-verifiable (via `app.reque
 |---|----------|-----------|
 | D1 | Hono's `streamSSE` helper (`hono/streaming`) for the SSE handler, not a hand-rolled `Response` with a `ReadableStream` | `streamSSE` provides `writeSSE({id, data, event})`, `onAbort`, `stream.close()`, and the right HTTP headers (`text/event-stream`, `Cache-Control: no-store`, `Connection: keep-alive`) by default. Pinned at `hono@4.12.23` (current workspace). Hand-rolling would duplicate that surface for no gain. |
 | D2 | The pub/sub is a `withPublishing(store, bus)` Store decorator, not direct `bus.publish()` calls inside `scheduler.ts` | Two reasons: (a) **minimizes shared-file conflict surface with `03-hitl-gate`** which also extends `scheduler.ts` (per leaf-workflow known-limitation "parallel-worktree shared-file conflicts"); the only `scheduler.ts` change here is the bus param + `events` field — no per-write-site changes. (b) Every Store write goes through the decorator, including `recoverOrphans` and any direct `store.updateTaskStatus` calls that future sub-leaves might add — the publish couldn't be forgotten. The cost is one indirection per write; negligible. |
-| D3 | Malformed `status`/`type` query params are passed through as no-match filters (return empty list), NOT rejected with 400 | The Store's `listTasks` builds a dynamic `status IN (?, ?, ...)` query. An unknown status (e.g., `?status=FROOB`) generates `status IN ('FROOB')` which matches zero rows. Rejecting at the route level would require duplicating the `TaskStatus` / `TaskType` enum check from the schema; the empty-result behavior is already defensive and unambiguous (the operator sees zero results and corrects). Future hardening (a real 400) is mechanical when an OpenAPI spec lands. |
+| D3 | Malformed `status`/`type` query params are passed through as no-match filters (return empty list), NOT rejected with 400 | The Store's `listTasks` builds a dynamic `status IN (?, ?, ...)` query. An unknown status (e.g., `?status=FROOB`) generates `status IN ('FROOB')` which matches zero rows. Rejecting at the route level would require duplicating the `TaskStatus` / `TaskType` enum check from the schema; the empty-result behavior is already defensive and unambiguous (the operator sees zero results and corrects). Future hardening (a real 400) is mechanical when an OpenAPI spec lands. The route uses `as TaskStatus[]` / `as TaskType[]` casts at the filter-construction site — this is **deliberate unsoundness** (Spec Review N1): runtime always returns the empty-result behavior regardless of cast, so the only cost of malformed input is an empty list. Acknowledged here rather than left implicit. |
 | D4 | Scheduler `tick`/`dispatch` code is unchanged — no per-write-site `bus.publish` calls | Follows from D2. The bus is wired purely via the wrapped Store. The scheduler doesn't import `events.ts`; the file's diff in this child is constrained to: (a) `EventBus` import in `scheduler.ts`'s type imports, (b) `bus: EventBus = createEventBus()` constructor param, (c) `events: bus` in the returned object. Three lines, all in `createRunner`'s signature/return. |
 | D5 | `bus.publish` iterates over an `Array.from(set)` snapshot, not the live `Set` | Allows a subscriber callback to unsubscribe itself (or another subscriber) mid-publish without skipping siblings. The alternative — iterating the live `Set` — would skip the next element if the current callback removed itself. Tested explicitly. |
 | D6 | SSE subscriber cleanup is via `stream.onAbort` registering an unsubscribe + interval clears | Hono's `StreamingApi` exposes `onAbort` which fires on client disconnect (TCP close, browser navigation, fetch AbortController). Without this, every SSE connection leaks a subscriber. v1's connection count is small (one operator's browser tabs) but the leak compounds across reconnects during dev hot-reloads. |
@@ -484,7 +509,7 @@ Operator note: items 1–4 + 9 + 10 + 11 are headless-verifiable (via `app.reque
 ## Open Issues
 
 - **SSE backpressure absent.** A slow subscriber (slow client / paused tab) doesn't slow the publisher. The bus fires `void flush()` which kicks off async writes; if the client never drains the network buffer, the Node TCP write queue fills until the process is OOM. v1 single-operator-local: extremely unlikely. Logged for if multi-client / WAN access lands. *(Priority: LOW.)*
-- **`bus.publish` is fully synchronous; a callback that throws halts other callbacks for the same task.** v1 callbacks are only the SSE handler's `void flush()`, which can't throw (the catch on flush would log internally). But if `03-hitl-gate` or `06-agent-dispatcher` later add their own subscribers, an uncaught throw would block siblings. Add a try/catch wrapper around each callback invocation in `bus.publish` if a future use case introduces non-fire-and-forget callbacks. *(Priority: LOW.)*
+- **`bus.publish` is fully synchronous; a callback that throws halts other callbacks for the same task.** v1 callbacks are only the SSE handler's `void flush()`, which can't throw (the catch on flush would log internally). But if `03-hitl-gate` or `06-agent-dispatcher` later add their own subscribers, an uncaught throw would block siblings. Add a try/catch wrapper around each callback invocation in `bus.publish` if a future use case introduces non-fire-and-forget callbacks. **Cross-leaf note for `03-hitl-gate`'s reviewer** (Spec Review N3): if `awaitHumanReview` or the approve/reject endpoints add bus subscribers (e.g., to wake-the-scheduler patterns), this throw-isolation gap becomes load-bearing — promote to MEDIUM and add the try/catch. *(Priority: LOW.)*
 - **`withPublishing` pass-through methods break if Store methods relied on `this`.** Today they don't (the Store is a factory-closure pattern). If `01-store-schema` ever refactors to a class with `this`-bound methods, the wrapper's method references would lose binding. D12 logs the assumption. *(Priority: TRIVIAL — depends on future architectural drift.)*
 - **422 vs 400 inconsistency between `docs.ts` and `tasks.ts`.** D7 chose 400 for this route; `routes/docs.ts:33` uses 422. Coordinated cleanup deferred. *(Priority: LOW.)*
 - **No `createStoreForProject` un-wrap.** The backwards-compat shim still returns the publishing-wrapped Store. Tests that constructed a Store via this shim and called `store.updateTaskStatus` directly would still see publish side-effects; with no subscribers, this is a no-op. If some future test wants a "raw" Store explicitly without a bus, it should call `createStore(new Database(":memory:"))` directly (which is what `server/test/runner/store.test.ts` already does). *(Priority: TRIVIAL — observability concern, not a correctness one.)*
@@ -498,7 +523,42 @@ Operator note: items 1–4 + 9 + 10 + 11 are headless-verifiable (via `app.reque
 
 ## Spec Review (2026-05-27)
 
-*(none yet — pre-review)*
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: NEEDS_MINOR_REVISIONS — 2 blocking, 5 should-fix, 5 nits. PRD coverage matrix returned full Addressed across §5/§6.3/§7.1/§7.2/§8.4/§11. All findings landed:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | The `POST /api/tasks` pseudocode used `result.value`, but `validateTaskInput`'s success type is `{ ok: true; input: TaskInput }` (verified `packages/parser/src/runner/validateTaskInput.ts:17`). The Verification list (§Verification item 4) had the same bug. | Replaced both occurrences with `result.input` and added an inline comment citing B1. The implementer's type-checker would have caught it; better to land the spec correct. |
+| B2 | The SSE handler subscribed AFTER the initial backfill `flush()`. A `bus.publish` arriving between `await flush()` and `subscribe(...)` would drop those events — only the next publish triggers a re-fetch. | Reordered the pseudocode: `subscribe()` FIRST, then `await flush()`. `flush()` is idempotent (advances `emittedSeq` monotonically) so a publish racing the initial flush is harmless: both the publish's queued flush AND the explicit initial flush re-query `getEvents({afterSeq: emittedSeq})`; whichever drains first absorbs all backlog. Comment added citing B2. |
+| S1 | Requirements said heartbeat is `: ping\n\n` (parent-spec-compliant comment form); Design pseudocode used `stream.writeSSE({event: "ping", data: ""})` which emits a named-event frame visible to EventSource listeners. Two contradictory wire formats. | Picked the comment form (`stream.write(": ping\n\n")`) — matches the parent's §SSE contract + the transcript bootstrap (`app/server/middleware.ts:142`). Pseudocode updated; Requirements clarified. |
+| S2 | The `createStoreForProject` shim's return type widening from `ReturnType<typeof createStore>` to `Store` was unmentioned. | Added inline comment to the snippet noting the signature change and that `withPublishing` returns the `Store` interface (identical surface). |
+| S3 | The `createStoreForProject` shim now constructs a fresh EventBus, applies migrations, and runs orphan-recovery on every call — Open Issue acknowledged "no-op orphan-recovery" but understated the new cost. | Comment in the snippet expanded to enumerate all bootstrapping side-effects, and explicitly tells callers wanting subscriptions to migrate to `createRunnerForProject`. |
+| S4 | The spec changes the `Runner` interface (adds `events: EventBus`) but didn't note that `02-scheduler.md`'s §Design block (which is COMPLETE and authoritative for v1 of that node) becomes stale relative to the live `scheduler.ts` after this child. | Added a "canonical home" note clarifying that `scheduler.ts` is the source of truth going forward; `02-scheduler.md`'s §Design block remains correct as of that node's v1 ship date — not retroactively amended. |
+| S5 | `flush()`'s loop has no try/catch around `stream.writeSSE`. Without context, an implementer might add defensive try/catch unnecessarily. | Added inline comment in the pseudocode explaining that `StreamingApi.write` swallows post-close errors silently (verified `hono@4.12.23 stream.js:42`), so no caller try/catch is needed. |
+| N1 | `as TaskStatus[]` / `as TaskType[]` casts at the filter-construction site are unsound but the spec didn't flag this as deliberate. | D3 expanded with explicit "deliberate unsoundness" acknowledgment. |
+| N2 | `withPublishing.close()` closed bus before store; reverse order is more defensive. | Reversed: store first, bus second. Comment cites N2. |
+| N3 | Bus subscriber throw-isolation gap (Open Issue) is fine for v1 callbacks but becomes load-bearing if `03-hitl-gate` adds bus subscribers. | Open Issue augmented with explicit cross-leaf note for `03-hitl-gate`'s reviewer. |
+| N4 | Requirements mentioned `c.req.raw.signal.aborted / stream.aborted` for SSE cleanup, but only `stream.onAbort` is needed under Node (verified `hono@4.12.23 stream.js:29-33,65-67`). | Requirements paragraph rewritten to make `stream.onAbort` the sole abort mechanism with the verification citation. |
+| N5 | Verification item 11 didn't pin the exact pointer text for the strike-through of `02-scheduler`'s Open Issue. | Verification item 11 now pins `Closed by 05-task-runner/04-api-endpoints (v1, <YYYY-MM-DD>)` as the format applied at stage-10 merge. |
+
+Reviewer's **decomposition assessment**: **Stay bundled** — the four endpoints + EventBus + `withPublishing` decorator are tightly coupled; splitting `events.ts` would block the SSE handler. Total surface (~14 modified/new files, ~180 LOC of new application code + ~120 LOC of tests) is comparable to `02-scheduler`'s.
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer):
+
+- `validateTaskInput` returns `{ ok: true; input: TaskInput }` — verified `packages/parser/src/runner/validateTaskInput.ts:17`. **B1 unambiguous.**
+- `Store.listTasks` filter shape matches the spec's route construction — `store.ts:395-413`.
+- `Store.getStatus` returns `TaskStatus | undefined` — `store.ts:389-392`. SSE terminal check is safe.
+- `Store.getEvents(id, { afterSeq })` signature confirmed — `store.ts:431-452`.
+- `createRunner` current signature is `(store, registry?)` — `scheduler.ts:52-55`; adding a third defaulted `bus?` param is non-breaking.
+- `StreamingApi.onAbort` supports multiple registrations — `stream.js:6,65-67` confirms `abortSubscribers` is an array.
+- Hono `route()` multiple mounts on same prefix — `hono-base.js:111-124`; both children's routers will compose cleanly under `/api/tasks`.
+- `ajv useDefaults: true` is configured in `validateTaskInput.ts:20`; defaults are applied to a `structuredClone` of the input. D8's claim holds.
+- Store is a factory-closure pattern — pass-through method references in `withPublishing` are safe (no `this` binding).
+
+**Implementer spot-check at stage 4:**
+- `streamSSE` interplay with `app.request()` testing (D9 Open Issue). The reviewer flagged the auto-close-with-`vi.useFakeTimers()` test as discovery risk. Fallback: a real-time test with a 50ms heartbeat constant injected via a module-internal override variable.
+- `stream.close()` idempotency under double-close — verified safe (`stream.js:53-57`), but spot-check with a test that disconnects after auto-close has already fired.
+
+Nothing punted. All B/S/N findings landed.
 
 ---
 
@@ -522,7 +582,7 @@ When this child moves to `VERIFY`, the verifier confirms:
 8. `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test` exit zero at the workspace root.
 9. No regressions on `04-api-server`'s existing endpoints (`/api/_health`, `/api/project`, `/api/docs`, `/api/docs/:nodeId`).
 10. No regressions on `02-scheduler`'s tests (the `bus` parameter defaults preserve existing behavior).
-11. The `02-scheduler` Open Issue "No in-process pub/sub for events" is struck-through with a pointer to this child.
+11. The `02-scheduler` Open Issue "No in-process pub/sub for events" is struck-through with the exact pointer text `Closed by 05-task-runner/04-api-endpoints (v1, <YYYY-MM-DD>)` applied during this child's stage-10 merge commit. (Spec Review N5 pins the format.)
 
 ---
 
