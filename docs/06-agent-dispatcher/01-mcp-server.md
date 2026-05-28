@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/01-mcp-server`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
+**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 3 should-fix + 4 nits from independent review)
 
 **Dependencies:** `05-task-runner` (workspace, server package, `ProjectContext`, Hono app)
 
@@ -21,7 +21,7 @@ In scope for v1:
 1. **`@modelcontextprotocol/sdk@^1.29` added as a direct dependency** of `server/package.json`. Confirmed not currently present in `dependencies` or `devDependencies` as of 2026-05-28 (parent Spec Review N2 verified `execa` similarly). The version is pinned to a caret range against 1.29 — the SDK has held a stable v1 API surface for the streamable-HTTP transport since the `2025-06-18` MCP revision; 1.29 was the latest at draft time. v2 is in pre-alpha on the SDK's `main` branch and is explicitly out of scope.
 2. **`server/src/dispatcher/` module** created (the namespace the parent's §Repository layout reserved). v1 ships only the `mcp/` subdirectory: `server.ts`, `types.ts`, `requestContext.ts`. `executor/`, `prompts/`, and `routes/dispatch.ts` land in later sub-leaves.
 3. **The MCP server factory** at `server/src/dispatcher/mcp/server.ts`. Exported as `createMcpServer(opts: McpServerOptions): McpServerHandle`. Constructs the SDK's `McpServer` with `serverInfo: { name: "ledger-runner", version }`, constructs a `WebStandardStreamableHTTPServerTransport` in stateful mode (`sessionIdGenerator: () => crypto.randomUUID()`), connects them via `server.connect(transport)`, and returns the handle. The handle exposes the underlying `McpServer` (so `02-runner-tools` can call `server.registerTool(...)`), the request handler that the Hono mount delegates to, plus the session-lifecycle registration API (item 5).
-4. **The Hono mount** at `server/src/dispatcher/mcp/server.ts`'s exported `mcpRoute: Hono` factory. Mounted via `app.route("/mcp", mcpRoute)` in `server/src/server.ts` alongside the existing `/api/_health`, `/api/project`, `/api/docs`, `/api/tasks` routes. The mount uses `app.all("/", handler)` (not `.post(...)`) because the streamable-HTTP transport handles **GET, POST, and DELETE** on the same path — GET opens the SSE listener stream, POST carries JSON-RPC requests, DELETE terminates a session client-side (D3). The Hono handler reads the inbound `Request`, captures the `X-Ledger-Task-Id` header into an `AsyncLocalStorage` request context (item 5), and delegates to the transport's `handleRequest(req)` Web Standards method.
+4. **The Hono mount.** The MCP sub-app is stored as `handle.mcpRoute` on the `McpServerHandle` returned by `createMcpServer`; it is not a separately-exported symbol. Mounted via `app.route("/mcp", project.mcp.mcpRoute)` in `server/src/server.ts` alongside the existing `/api/_health`, `/api/project`, `/api/docs`, `/api/tasks` routes. The mount uses `app.all("/", handler)` (not `.post(...)`) because the streamable-HTTP transport handles **GET, POST, and DELETE** on the same path — GET opens the SSE listener stream, POST carries JSON-RPC requests, DELETE terminates a session client-side (D3). The Hono handler reads the inbound `Request`, captures the `X-Ledger-Task-Id` header into an `AsyncLocalStorage` request context (item 5), and delegates to the transport's `handleRequest(req)` Web Standards method.
 5. **Session-lifecycle registration API + `AsyncLocalStorage` request context.** The SDK's `onsessioninitialized(sessionId)` callback receives only the new session ID — not the inbound HTTP request. The binding registry that `02-runner-tools` will ship needs to correlate the *MCP session ID* with the *Ledger task ID* that the dispatcher set in the inbound request's `X-Ledger-Task-Id` header. The leaf provides this correlation via `requestContext.ts`: an `AsyncLocalStorage<{ request: Request }>` whose `run(ctx, fn)` wraps every `transport.handleRequest(req)` call. The `McpServerHandle` exposes typed registration:
    ```ts
    handle.onSessionInitialized((sessionId, request) => { /* binding registry plugs in here */ });
@@ -29,7 +29,7 @@ In scope for v1:
    ```
    The leaf's transport-options wiring resolves the inbound `request` via `requestContext.getStore()?.request` inside the SDK's `onsessioninitialized` callback and fans out to every registered listener. The registration functions return unsubscribe callbacks (matching Node EventEmitter idioms). Multiple listeners are supported (initially one, from `02-runner-tools`; future tracing or metrics could add more).
 6. **`ProjectContext.mcp: McpServerHandle`** wired during `loadProjectContext()` in `server/src/context.ts`. Same pattern as `ProjectContext.runner` from `05-task-runner/02-scheduler` (`Requirements item 9` in that sibling). Lifetime: created on context load, closed on context teardown (which today happens only at process exit — `05-task-runner` has no teardown either; revisit when the framework lands a long-running multi-project mode).
-7. **`/api/_health` extension.** The existing health route returns `{ ok, startedAt }`; add a `dispatcher` field reporting `"ready"` plus the count of currently bound sessions (`activeSessions: number`). The session count is read off the leaf's internal session-tracking set (`Set<MCPSessionId>` mutated by the same `onsessioninitialized` / `onsessionclosed` plumbing — item 5). The dispatcher's `activeSessions` is independent of the binding registry's task-id map (which `02-runner-tools` will own); this leaf tracks raw session presence for the health snapshot.
+7. **`/api/_health` extension.** The existing health route returns `{ ok, startedAt }`; add a `dispatcher` field reporting `"ready"` plus the count of currently open MCP sessions (`activeSessions: number` — raw session presence; binding to a task ID is `02-runner-tools`' concern, not this leaf's). The session count is read off the leaf's internal session-tracking set (`Set<MCPSessionId>` mutated by the same `onsessioninitialized` / `onsessionclosed` plumbing — item 5). The dispatcher's `activeSessions` is independent of the binding registry's task-id map (which `02-runner-tools` will own); this leaf tracks raw session presence for the health snapshot.
 8. **Tests** at `server/test/dispatcher/mcp/server.test.ts`:
    - **Handshake.** A standalone MCP client (using the SDK's in-process client transport against an in-memory pair, or against a real Hono test fetch handle) completes `initialize` and receives `serverInfo: { name: "ledger-runner", version: "0.1.0" }` and an empty `tools` list (no `02-runner-tools` registrations in this leaf).
    - **Stateful session.** The `initialize` response carries an `Mcp-Session-Id` header (set by the SDK in stateful mode); a subsequent POST with the same header succeeds; a POST without it returns 400; a POST with an unrecognised value returns 404.
@@ -69,7 +69,9 @@ ledger/
 │   │   ├── routes/
 │   │   │   └── health.ts                           # modified — dispatcher line + activeSessions
 │   │   └── dispatcher/                             # NEW
-│   │       ├── index.ts                            # public surface; re-exports createMcpServer
+│   │       ├── index.ts                            # re-exports createMcpServerAsync, McpServerHandle,
+│   │       │                                       # MCPSessionId, SessionInitializedListener,
+│   │       │                                       # SessionClosedListener — the surface 02-runner-tools imports
 │   │       └── mcp/
 │   │           ├── server.ts                       # NEW — createMcpServer + mcpRoute factory
 │   │           ├── requestContext.ts               # NEW — AsyncLocalStorage<{ request: Request }>
@@ -124,7 +126,10 @@ const transport = new WebStandardStreamableHTTPServerTransport({
 });
 ```
 
-Method used: `transport.handleRequest(req: Request, options?: HandleRequestOptions): Promise<Response>` — Web Standards in, Web Standards out, perfect Hono fit.
+Methods used:
+
+- `transport.handleRequest(req: Request, options?: HandleRequestOptions): Promise<Response>` — Web Standards in, Web Standards out, perfect Hono fit.
+- `transport.close(): Promise<void>` — teardown; verified on line 252 of `webStandardStreamableHttp.d.ts` at 1.29.0. Called from `McpServerHandle.close()` after `server.close()`. See Open Issues for the double-close-ordering question (the SDK may transitively close the transport when the server is closed).
 
 The SDK's `2025-06-18` MCP revision is what 1.29 ships against (parent D1). The protocol version flows through the JSON-RPC payload; no leaf-level pinning needed.
 
@@ -139,7 +144,7 @@ import { randomUUID } from "node:crypto";
 import { requestContext } from "./requestContext.js";
 import type { McpServerHandle, McpServerOptions } from "./types.js";
 
-export function createMcpServer(opts: McpServerOptions): McpServerHandle {
+export function createMcpServer(opts: McpServerOptions): McpServerHandleInternal {
   const activeSessions = new Set<string>();
   const initListeners = new Set<(sessionId: string, request: Request | undefined) => void>();
   const closeListeners = new Set<(sessionId: string) => void>();
@@ -182,14 +187,14 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
       await server.close();
       await transport.close();
     },
-    _connect: () => server.connect(transport),  // called by createMcpServerAsync; not on the public type
+    _connect: () => server.connect(transport),  // McpServerHandleInternal only; not on the public McpServerHandle
   };
 }
 
 export async function createMcpServerAsync(opts: McpServerOptions): Promise<McpServerHandle> {
   const handle = createMcpServer(opts);
   await handle._connect();
-  return handle;
+  return handle;  // returned as the narrower McpServerHandle type — _connect is intentionally not on the public surface
 }
 ```
 
@@ -234,7 +239,7 @@ export async function loadProjectContext(projectRoot: string): Promise<ProjectCo
 }
 ```
 
-`SERVER_VERSION` is the `@ledger/server` package version (`"0.1.0"` at draft time), read at build time from `server/package.json` via a small `version.ts` helper or via `import { version } from "../package.json" assert { type: "json" }`. The exact wiring is implementer's choice; the spec's invariant is `mcp.server`'s `serverInfo.version` equals the server package's published version.
+`SERVER_VERSION` is the `@ledger/server` package version (`"0.1.0"` at draft time), read at build time from `server/package.json` via a small `version.ts` helper or via `import { version } from "../package.json" with { type: "json" }`. **Use `with` not `assert`** — `assert` is the deprecated proposal syntax that TypeScript 5.3+ warns on; `with` is the ratified TC39 import-attributes syntax and is what `moduleResolution: "node16" | "nodenext" | "bundler"` requires. The exact wiring is implementer's choice; the spec's invariant is `mcp.server`'s `serverInfo.version` equals the server package's published version.
 
 ### Hono mount
 
@@ -276,7 +281,7 @@ export const healthRoute = new Hono<ServerEnv>().get("/", (c) => {
 });
 ```
 
-`dispatcher.status: "ready"` is a constant in v1 (the MCP server is either created or `loadProjectContext` itself failed and the server never booted). A richer status ladder (`"degraded"`, `"draining"`) lands when there is something to degrade to.
+`dispatcher.status: "ready"` is a constant in v1 (the MCP server is either created or `loadProjectContext` itself failed and the server never booted). `dispatcher.activeSessions` is the count of open MCP sessions (raw session presence); task-binding state lives in `02-runner-tools`' registry and is not exposed by this endpoint. A richer status ladder (`"degraded"`, `"draining"`) lands when there is something to degrade to.
 
 ### Type additions
 
@@ -301,9 +306,15 @@ export interface McpServerHandle {
   readonly server: McpServer;
   /** The SDK transport instance; exposed for advanced use (tests). */
   readonly transport: WebStandardStreamableHTTPServerTransport;
-  /** The Hono sub-app mounted at /mcp by createServer. */
-  readonly mcpRoute: Hono;
-  /** Current count of bound MCP sessions. Read by /api/_health. */
+  /**
+   * The Hono sub-app mounted at /mcp by createServer.
+   * Typed as `Hono<Record<string, unknown>>` (effectively `Hono<any>` env) because the
+   * sub-app does not consume ServerEnv variables — it only delegates to transport.handleRequest.
+   * Mounting onto a Hono<ServerEnv> parent via app.route works because Hono's .route() accepts
+   * a sub-app with a structurally-compatible (looser) env type.
+   */
+  readonly mcpRoute: Hono<Record<string, unknown>>;
+  /** Current count of open MCP sessions (raw session presence). Read by /api/_health. */
   activeSessions(): number;
   /** Subscribe to session-initialized events. Returns an unsubscribe callback. */
   onSessionInitialized(listener: SessionInitializedListener): () => void;
@@ -311,6 +322,15 @@ export interface McpServerHandle {
   onSessionClosed(listener: SessionClosedListener): () => void;
   /** Teardown — closes both server and transport. Not called in v1 (no project teardown path). */
   close(): Promise<void>;
+}
+
+/**
+ * Internal handle shape returned by createMcpServer (the synchronous factory).
+ * Adds the _connect lifecycle method that createMcpServerAsync consumes once at boot.
+ * Not exported from server/src/dispatcher/index.ts — only createMcpServerAsync is.
+ */
+export interface McpServerHandleInternal extends McpServerHandle {
+  _connect(): Promise<void>;
 }
 ```
 
@@ -359,7 +379,35 @@ The Acceptance check is intentionally narrower than the parent's roll-up (parent
 - **No teardown path for `ProjectContext.mcp`.** `loadProjectContext` returns a `ProjectContext` and the process exits when the server stops; there is no `unloadProjectContext`. The leaf adds `mcp.close(): Promise<void>` for symmetry but it is unused in v1. Same pattern as `05-task-runner`'s `runner.close()` situation. When a long-running multi-project mode lands, `ProjectContext` teardown gets revisited and `mcp.close()` gets called. *(Priority: LOW — inherited.)*
 - **In-memory session map vulnerable to process restart.** Sessions registered before a server restart are lost; the dispatched subprocesses' next tool call will fail with the SDK's 404 (unknown session) and the subprocess will exit. The runner's existing orphan-recovery (`05-task-runner/02-scheduler`) will transition the now-RUNNING-with-no-process tasks to FAILED with `orphaned_on_restart`. So the failure mode is benign — operator sees the task fail with a clear reason. Persistence of the session map (e.g., to `runner.db`) is out of scope and probably never desirable (sessions are ephemeral by design). *(Priority: TRIVIAL — documented to acknowledge the design choice.)*
 - **`MCPSessionId` is `string` not a branded type.** The leaf's types use `string`. Mixing with `TaskId` (also currently `string` in `@ledger/parser/runner/types.ts`) at the binding-registry call site loses some type safety. Branding both would help; defer until either type sees a real swap-bug. *(Priority: TRIVIAL.)*
+- **Double-close ordering on teardown.** `McpServerHandle.close()` calls `server.close()` then `transport.close()`. The SDK may close the transport transitively inside `server.close()`; if so, the second call may throw or be a no-op. The d.ts at 1.29.0 exposes both methods (`McpServer.close()` line in `mcp.d.ts`; `transport.close()` on line 252 of `webStandardStreamableHttp.d.ts`) but does not document whether the server cascades closure to its connected transport. The implementer either (a) wraps the second call in `try { await transport.close(); } catch { /* already closed */ }`, or (b) reads the SDK source post-install and picks the right ordering. Since v1 never calls `close()` (no project teardown path), the question is academic until the framework lands a multi-project hot-swap mode. *(Priority: LOW — surfaces only at teardown, which is not exercised in v1.)*
 - **Tests use the SDK client against an in-process Hono fetch handle, not a real network round-trip.** The acceptance check item 5 calls out a real `curl` invocation, but the automated test layer uses `app.fetch(request)` directly (Hono's testing convention) to avoid spinning a TCP listener. The two paths exercise the same `WebStandardStreamableHTTPServerTransport.handleRequest` code, so coverage is equivalent; the operator's manual `curl` step in §Acceptance check is the integration smoke. *(Priority: TRIVIAL — documented to prevent future "why no real fetch?" question.)*
+
+---
+
+## Spec Review (2026-05-28)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: **NEEDS_MINOR_REVISIONS** — no Blocking, 3 Should-fix (S1–S3), 4 Nits (N1–N4), 4 Confidence notes. PRD coverage matrix returned Addressed across §5/§6.1/§6.2/§7; §11 marked N/A (PRD-level open issues do not require leaf-level mitigations in this transport scaffolding). All findings applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `createMcpServer`'s return literal included `_connect`, but the declared return type `McpServerHandle` did not — TS strict + `noUncheckedIndexedAccess` rejects the excess property. | §Type additions now declares `McpServerHandleInternal extends McpServerHandle` with `_connect(): Promise<void>`. §Design pseudocode annotates `createMcpServer` as returning the internal shape; `createMcpServerAsync` narrows to `McpServerHandle` on the public surface. Inline comments updated. |
+| S2 | `mcpRoute: Hono` (no env type param) risked a Hono generic-mismatch when mounted onto a `Hono<ServerEnv>` parent. | §Type additions now types `mcpRoute: Hono<Record<string, unknown>>` with a doc-comment explaining that the sub-app does not consume `ServerEnv` variables and that `.route()`'s structural compatibility makes the mount safe. |
+| S3 | §Requirements item 7 + §Design §"Health endpoint extension" called the count "bound sessions", conflating raw MCP session presence (this leaf's scope) with task-bound sessions (`02-runner-tools`' scope). D8 was already correct. | §Requirements item 7 reworded to "currently open MCP sessions … raw session presence; binding to a task ID is `02-runner-tools`' concern". §Design §"Health endpoint extension" annotated with the same disambiguation. All three locations now align with D8. |
+| N1 | §Repository layout's `dispatcher/index.ts` comment was vague ("public surface; re-exports createMcpServer") — did not specify which types crossed the module boundary for `02-runner-tools` to import. | Comment expanded to explicit re-export list: `createMcpServerAsync, McpServerHandle, MCPSessionId, SessionInitializedListener, SessionClosedListener — the surface 02-runner-tools imports`. |
+| N2 | `import { version } from "../package.json" assert { type: "json" }` used the deprecated `assert` syntax. TypeScript 5.3+ warns; `nodenext`/`bundler` resolution requires `with`. | §Design §"ProjectContext wiring" now uses `with { type: "json" }` with an inline note explaining the syntax distinction. |
+| N3 | §Requirements item 4 called `mcpRoute` an "exported `mcpRoute: Hono` factory" — `mcpRoute` is a field on `McpServerHandle`, not a separately-exported symbol. | Reworded to "stored as `handle.mcpRoute` on the `McpServerHandle` returned by `createMcpServer`; it is not a separately-exported symbol. Mounted via `app.route("/mcp", project.mcp.mcpRoute)`". |
+| N4 | `await transport.close()` was called in pseudocode but the §Pinned SDK surface section did not list `transport.close()` as a verified SDK method. | Verified against the d.ts (line 252 of `webStandardStreamableHttp.d.ts` at 1.29.0 — `close(): Promise<void>` confirmed present); §Pinned SDK surface now lists `transport.close(): Promise<void>` under the transport's "Methods used" bullet list with the citation. |
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer to spot-check — highest-risk unverifiable claims):
+
+- **`webStandardStreamableHttp.js` filename casing.** The leaf imports from `@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js`. The spec author verified against the extracted 1.29.0 tarball; the implementer re-confirms post-install by checking `node_modules/@modelcontextprotocol/sdk/dist/esm/server/` (or `cjs/` for the CJS resolution path) for the actual filename casing.
+- **`onsessioninitialized` synchrony.** D5 (and the Open Issue) note that the SDK is assumed to invoke `onsessioninitialized` synchronously within the same async stack as `handleRequest`. The ALS pattern's correctness depends on this. The implementer re-confirms by reading `node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js` post-install (search for the call site). If a future SDK release moves the invocation into a `setImmediate` or timer, the ALS store becomes `undefined` and the binding hook silently fails.
+- **`Mcp-Session-Id` header name.** The Open Issues section flags this as a hardcoded string not exported by the SDK. The test suite hardcodes it; the implementer should grep the SDK source post-install for the exact casing and hyphenation, and consider extracting the constant into a `mcp/constants.ts` if it appears multiple times across siblings.
+- **`McpServer.close()` ↔ `transport.close()` ordering.** Open Issues now logs this — calling both in sequence may double-close if the server cascades to its transport. The implementer either reads the SDK source or wraps the second call in `try/catch`. Since `close()` is not exercised in v1 (no project teardown path), the risk is bounded.
+
+Reviewer's structural assessment: scope is appropriate for the parent's Children manifest row; no scope creep into `02-runner-tools` (which would own the binding registry, task-id correlation, and the five tools). Spec is internally consistent post-fixes. Ready for APPROVED.
+
+Nothing punted; all 7 findings + 4 confidence notes landed.
 
 ---
 
