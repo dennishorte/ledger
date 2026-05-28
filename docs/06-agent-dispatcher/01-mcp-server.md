@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/01-mcp-server`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28
+**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
 
 **Dependencies:** `05-task-runner` (workspace, server package, `ProjectContext`, Hono app)
 
