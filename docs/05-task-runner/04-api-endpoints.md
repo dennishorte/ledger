@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/04-api-endpoints`
 **Parent:** `05-task-runner` (`docs/05-task-runner/00-task-runner.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-27)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-27 (IN_PROGRESS → VERIFY — implementation complete)
+**Last Updated:** 2026-05-27 (VERIFY → COMPLETE — operator + automated curl verification green)
 
 **Dependencies:** `05-task-runner/02-scheduler` (Runner instance, scheduler, store wired on `ProjectContext`)
 
