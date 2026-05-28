@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/02-runner-tools`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28
+**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
 
 **Dependencies:** `06-agent-dispatcher/01-mcp-server` (MCP scaffolding, session-lifecycle hooks, `ProjectContext.mcp`), `05-task-runner` (transitively: `RunnerHandle`, `Store`, the `Task` / `LogEvent` types and their ajv validators)
 
