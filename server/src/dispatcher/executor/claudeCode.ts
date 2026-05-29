@@ -16,23 +16,13 @@
  * caught and transitioned with executorInternalError(msg) (D10).
  */
 
-import type { Task } from "@ledger/parser";
 import type { Executor } from "../../runner/executors.js";
 import type { ProjectContext } from "../../context.js";
 import { reasons } from "../../runner/scheduler.js";
 import { spawnClaudeCode } from "./spawn.js";
 import { writeMcpConfig } from "./mcpConfig.js";
 import { reconcileExit } from "./lifecycle.js";
-
-// ---------------------------------------------------------------------------
-// renderPrompt — imported from 04-prompt-templates when that leaf lands.
-// TEMPORARY STUB: 04-prompt-templates is shipping in parallel; this stub
-// unblocks 03's gates. The import is replaced by the real renderPrompt once
-// 04 merges to main and the stage-5 rebase runs. Documented in Implementation Notes.
-// ---------------------------------------------------------------------------
-function renderPrompt(_task: Task, _ctx: ProjectContext): string {
-  return `STUB PROMPT — replaced when 04-prompt-templates lands.\n\nTask ID: ${_task.id}\nTask type: ${_task.type}`;
-}
+import { renderPrompt } from "../prompts/index.js"; // replaces the stage-4 stub; 04 landed at the same merge bubble
 
 // ---------------------------------------------------------------------------
 // Optional test-only override: allow tests to pass a claudeBin path so

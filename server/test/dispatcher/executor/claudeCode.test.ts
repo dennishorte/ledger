@@ -101,6 +101,8 @@ async function buildHarness(): Promise<TestHarness> {
     mcp: mcpInternal,
     binding,
     dispatchCancellation,
+    docs: [],
+    resolveDocPath: () => undefined,
   };
 
   // Create a task in PENDING state
