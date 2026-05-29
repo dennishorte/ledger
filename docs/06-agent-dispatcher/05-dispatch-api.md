@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/05-dispatch-api`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-29
-**Last Updated:** 2026-05-29
+**Last Updated:** 2026-05-29 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (the `ClaudeCodeExecutor` registered for the eight types + `ProjectContext.dispatchCancellation: CancellationRegistry`), `06-agent-dispatcher/04-prompt-templates` (`defaultResourceClaims(task): ResourceClaim[]` used by the dispatch endpoint to synthesise claims when the operator's body doesn't override them)
 
