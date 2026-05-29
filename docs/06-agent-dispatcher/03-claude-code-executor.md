@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/03-claude-code-executor`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
+**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 3 blocking + 4 should-fix + 4 nits from independent review)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tools the spawned subprocess will call; `Runner.handle`; `BindingRegistry`), `06-agent-dispatcher/04-prompt-templates` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
@@ -29,20 +29,20 @@ In scope for v1:
 3. **Three new entries on `server/src/runner/scheduler.ts`'s `reasons` const** (parent §Type coordination table):
    - `SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS` — bare constant, value `"subprocess_exit_without_terminal_status"`. Emitted by `lifecycle.ts` row 2 (clean exit + RUNNING).
    - `subprocessFailed(tail: string)` — builder function, value `\`subprocess_failed:${tail.slice(0, 80)}\``. Mirrors the existing `approvedWithNote` / `rejected` truncation convention from `03-hitl-gate`. Emitted by `lifecycle.ts` rows 3 + 5 (non-zero exit / SIGKILL crash, both while task is RUNNING).
-   - `CANCELLED_BY_OPERATOR` — bare constant, value `"cancelled_by_operator"`. Emitted by `POST /api/tasks/:id/cancel` from `05-dispatch-api`'s upcoming route. The leaf adds the constant now because the executor's lifecycle table row 4 (signal === SIGTERM, final === CANCELLED) checks for it; landing the constant here keeps the executor and the future cancel route synchronized on the canonical reason string.
+   - `CANCELLED_BY_OPERATOR` — bare constant, value `"cancelled_by_operator"`. Emitted by `POST /api/tasks/:id/cancel` from `05-dispatch-api`'s upcoming route — NOT by the executor (corrected per Spec Review S1; the executor's row 4 checks `final === "CANCELLED"`, which is a status not a reason). Landing the constant here keeps the subprocess-lifecycle reason vocabulary co-located rather than splitting it across `03` and `05`; the cancel route imports `reasons.CANCELLED_BY_OPERATOR` from this leaf's additions.
 4. **`ClaudeCodeExecutor` registered for the eight real task types** in `loadProjectContext`. The eight types — `implement`, `spec_review`, `verify`, `spec_draft`, `reverify`, `doc_refactor`, `issue_triage`, `project_status_review` — are enumerated in `@ledger/parser/runner/types.ts`. The same executor instance handles all eight; the dispatch is type-blind (prompt rendering is `04-prompt-templates`' job; the executor receives the rendered string and treats every type identically from spawn-and-wait perspective). Registration happens in `loadProjectContext` after the existing `noop` and `human_review` defaults (which the runner's `createDefaultRegistry` already populates per `05-task-runner/02-scheduler`).
 5. **The exit-code → task-status lifecycle table** (parent §ClaudeCodeExecutor pseudocode, refined here). Implemented as the pure `lifecycle.ts` function so it's unit-testable without subprocess spawning. Five rows:
 
-   | Subprocess exit | Final task status (re-read post-exit) | Executor action | Reason |
-   |---|---|---|---|
-   | `code === 0` AND `final ∈ {COMPLETE, FAILED, AWAITING_HUMAN_REVIEW}` | terminal or suspended — agent reported correctly | no transition | n/a |
-   | `code === 0` AND `final === RUNNING` | agent forgot to call a terminal MCP tool | `handle.fail(id, reasons.SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS)` | bare const |
-   | `code !== 0` AND `final === RUNNING` | subprocess crashed mid-flight | `handle.fail(id, reasons.subprocessFailed(tail(stderr, 200)))` | builder; tail truncated to 80 chars at reason layer |
-   | `signal === SIGTERM` OR `signal === SIGKILL` AND `final === CANCELLED` | operator cancel propagated; cancel route already wrote CANCELLED | no transition (return cleanly) | n/a |
-   | `signal === SIGKILL` AND `final === RUNNING` | crash before cancel route ran | same as row 3 | builder |
+   | Row | Predicate | Final task status (re-read post-exit) | Executor action | Reason |
+   |---|---|---|---|---|
+   | 0 | `final === undefined` | task row gone (test cleanup) | no transition | n/a |
+   | 4 | `final === "CANCELLED"` | cancel route eagerly wrote CANCELLED | no transition | n/a |
+   | 1 | `result.exitCode === 0` AND `final ∈ {COMPLETE, FAILED, AWAITING_HUMAN_REVIEW}` | terminal or suspended — agent reported correctly | no transition | n/a |
+   | 2 | `result.exitCode === 0` AND `final === RUNNING` | agent forgot a terminal MCP tool call | `handle.fail(id, reasons.SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS)` | bare const |
+   | 3+5 | catch-all (any non-zero/undefined exit, signal-killed, etc., with `final === RUNNING`) | subprocess crashed or signal-killed without cancel route | `handle.fail(id, reasons.subprocessFailed(result.stderr ?? ""))` | builder; truncates to 80 chars at reason layer |
 
-   Row order matters — the executor evaluates them top-down. Row 4's check (`final === CANCELLED`) discriminates against row 5 (`final === RUNNING`); the cancel route's eager-write makes row 4 the hit case for normal cancel, row 5 the hit case for a kill outside the cancel route.
-6. **`stderr` tail capture.** `spawn.ts` configures `execa` with `all: false` (default — stderr captured separately) and a buffered stderr (no streaming). On exit, the buffered stderr is passed through `tail(text, 200)` (a small helper: split on newlines, take last 200 lines, rejoin — caps the failure reason at a known size before it lands as a status_change reason). The `lifecycle.ts` row-3/5 reason interpolation does the final 80-char truncation via `reasons.subprocessFailed`. Two-stage truncation: 200 lines for the *captured* tail (debugging visibility on the eventual error log if the agent emits a `runner.emit_event` of kind=error with the full tail in the body — out of scope here), 80 chars for the status_change reason (consistent with the rest of the `reasons` const's truncation convention).
+   Row 4 is now evaluated FIRST (Spec Review B2 fix) — once the task is CANCELLED, the executor honours it regardless of how the subprocess exited (clean, signal, code). The catch-all merges old rows 3 and 5: any exit with `final === "RUNNING"` that wasn't a clean termination or an agent-driven complete-call ends as `subprocessFailed`. Old row 5's "SIGKILL + RUNNING" case lands here naturally; old row 3's "code != 0 + RUNNING" also lands here.
+6. **`stderr` tail capture.** `spawn.ts` configures `execa` with `all: false` (default — stderr captured separately) and a buffered stderr (no streaming). On exit, the buffered stderr (or `""` if `result.stderr === undefined` per TS strict typing) is passed directly to `reasons.subprocessFailed(stderr)`, which truncates to 80 chars at the reason layer — consistent with the existing `reasons.rejected` / `approvedWithNote` convention. Single-stage truncation (revised per Spec Review N1; the original two-stage 200-line buffer was dead code given the 80-char floor on the reason string). A future `runner.emit_event`-style executor-driven `kind=error` event could carry the full untruncated stderr in its body for debugging — logged as Open Issue.
 7. **MCP config JSON** at `os.tmpdir()/ledger-dispatch-<task-id>.mcp.json`. Shape per parent §MCP config JSON (per-dispatch):
    ```jsonc
    {
@@ -56,21 +56,21 @@ In scope for v1:
    }
    ```
    The `port` is read off `ProjectContext.port` (set by `04-api-server/04-cli-launcher`'s CLI argument; defaults to 4180 if not overridden). `writeMcpConfig` returns a `cleanup()` callback that `fs.unlink`s the file on subprocess exit (best-effort; OS tmpdir cleanup is the fallback if the executor crashes before cleanup runs).
-8. **Subprocess cancellation registry** at `server/src/dispatcher/executor/cancellation.ts`. A `Map<TaskId, ExecaSubprocess>` that the `claudeCode.ts` executor populates on spawn and clears on exit; `05-dispatch-api`'s `POST /api/tasks/:id/cancel` route looks up the subprocess via `cancellation.lookup(taskId)?.kill("SIGTERM")` to deliver the cancel signal. The registry is exposed read-only via `ProjectContext.dispatchCancellation: CancellationRegistry` for the dispatch endpoint to consume. The registry handles the per-task lookup; the cancel route owns the eager-DB-write side of D14 of the parent. This leaf ships the registry; the cancel route in `05-dispatch-api` wires it. Two-leaf coupling is intentional: the cancel API surface is `05`'s concern; the subprocess handle is `03`'s; cancellation needs both.
+8. **Subprocess cancellation registry** at `server/src/dispatcher/executor/cancellation.ts`. A `Map<TaskId, Subprocess>` (where `Subprocess` is the execa@9 supertype of `ResultPromise` — the kill side without the awaitable side) that the `claudeCode.ts` executor populates on spawn and clears on exit; `05-dispatch-api`'s `POST /api/tasks/:id/cancel` route looks up the subprocess via `cancellation.lookup(taskId)?.kill("SIGTERM")` to deliver the cancel signal. The registry is exposed read-only via `ProjectContext.dispatchCancellation: CancellationRegistry` for the dispatch endpoint to consume. The registry handles the per-task lookup; the cancel route owns the eager-DB-write side of D14 of the parent. This leaf ships the registry; the cancel route in `05-dispatch-api` wires it. Two-leaf coupling is intentional: the cancel API surface is `05`'s concern; the subprocess handle is `03`'s; cancellation needs both.
 9. **`Executor`-level error handling** for unexpected exceptions in the executor's own code (vs the subprocess's). If `renderPrompt` throws (template bug), `writeMcpConfig` fails (tmpdir not writable), or `spawnClaudeCode` synchronously errors (claude binary not found), the executor catches and calls `handle.fail(task.id, "executor_internal_error:<message>")` with the error message capped at 80 chars. The new reason constant `EXECUTOR_INTERNAL_ERROR` builder is added in the same `reasons` block as the three primary additions — minor surface widening for defensive robustness; logged in §Decisions as D-?? rather than the parent's three primary additions. Test coverage exercises each pre-spawn failure path.
 10. **Tests** at `server/test/dispatcher/executor/`:
     - **`lifecycle.test.ts`** — pure function; covers all five rows of the lifecycle table with synthetic `(exit, finalStatus)` inputs and asserts the right `handle.fail` / `handle.complete` calls (via a recording mock handle). No subprocess.
     - **`mcpConfig.test.ts`** — `writeMcpConfig` writes a valid JSON file at the expected tmpdir path with the right shape; `cleanup()` removes it; double-cleanup is safe.
     - **`spawn.test.ts`** — `spawnClaudeCode` constructs the exact argv (`["claude", "--print", "--bare", "--mcp-config", "..."]`), pipes the prompt via stdin, sets `LEDGER_TASK_ID` env; the subprocess is started but immediately killed via `subprocess.kill("SIGTERM")` to avoid a real claude invocation in the test environment. Verifies the spawned-process configuration without exercising claude itself.
-    - **`claudeCode.test.ts`** — integration test using a **fake-claude subprocess** (a tiny `node` script under `server/test/fixtures/fake-claude.js` that reads stdin, opens an MCP session against the runner's MCP endpoint, calls `runner.emit_event` + `runner.complete_task`, exits 0). The executor spawns the fake under cwd-isolation and asserts the task transitions PENDING → RUNNING → COMPLETE, the events table includes the reasoning event, and the cancellation registry clears on exit. This is the highest-leverage test in the leaf; it exercises the round-trip without depending on a real `claude` binary.
+    - **`claudeCode.test.ts`** — integration test using a **fake-claude subprocess** (a tiny `node` script under `server/test/fixtures/fake-claude.mjs` that reads stdin, opens an MCP session against the runner's MCP endpoint, calls `runner.emit_event` + `runner.complete_task`, exits 0). The test constructs the executor wiring with `claudeBin: \`${process.execPath} \${path.join(__dirname, "../../fixtures/fake-claude.mjs")}\`` — `spawn.ts`'s `claudeBin?` parameter (D5+B3) does the substitution without mutating PATH or mocking the spawn module. The executor spawns the fake and asserts the task transitions PENDING → RUNNING → COMPLETE, the events table includes the reasoning event, and the cancellation registry clears on exit. This is the highest-leverage test in the leaf.
     - **`cancellation.test.ts`** — `bind/lookup/unbind` round-trip; concurrent task ids; `kill` delegation. No subprocess.
-    - **CI smoke test** — `server/test/dispatcher/executor/smoke.test.ts` skipped by default (`describe.skip`) but runnable via `pnpm -C server test smoke` or in a future CI matrix. The smoke test spawns the **real `claude` binary**, asserting the argv it accepts and that an `initialize`/`tools/list` round-trip succeeds. Skipped because the test depends on the operator's `claude` install and on `ANTHROPIC_API_KEY` / `apiKeyHelper` being configured — not portable to a vanilla CI runner. The parent §Open Issues note "CI smoke test ... validates `--print` + `--bare` + `--mcp-config` + stdin still work end-to-end on each upgrade" lands here, gated behind the `describe.skip` so it's discoverable but not blocking.
+    - **CI smoke test** — `server/test/dispatcher/executor/smoke.test.ts` env-gated via `process.env.LEDGER_SMOKE_TESTS`: `(LEDGER_SMOKE_TESTS ? describe : describe.skip)(...)`. Runnable via `LEDGER_SMOKE_TESTS=1 pnpm -C server test smoke.test.ts` without file edits (Spec Review N2 fix; the original "edit `describe.skip` to `describe`" approach defeats the file's discoverability). The smoke test spawns the **real `claude` binary**, asserting the argv it accepts and that an `initialize`/`tools/list` round-trip succeeds. Skipped by default because the test depends on the operator's `claude` install and on `ANTHROPIC_API_KEY` / `apiKeyHelper` being configured — not portable to a vanilla CI runner. The parent §Open Issues note "CI smoke test ... validates `--print` + `--bare` + `--mcp-config` + stdin still work end-to-end on each upgrade" lands here.
 11. **Build / typecheck / lint / test green** across the workspace. App bundle delta zero. Server `dist/` delta reported in Implementation Notes against the post-`02-runner-tools` baseline (360K).
 
 **Out of scope for this child:**
 
 - **Prompt rendering content.** `04-prompt-templates`. This leaf imports `renderPrompt` from `@/dispatcher/prompts` and calls it; it does not author any template content.
-- **Resource-claim declarations.** `04-prompt-templates` D11 ships per-task-type claim defaults; this leaf reads them via `renderPrompt`'s return type (or a sibling export — see §Type coordination) but does not author the table.
+- **Resource-claim declarations.** `04-prompt-templates` D11 ships per-task-type claim defaults via the separate `defaultResourceClaims(task)` export. This leaf does NOT consume claims at all — the executor receives the rendered prompt string only via `renderPrompt(task, ctx)`; `05-dispatch-api`'s `POST /api/dispatch/:nodeId` is the consumer of `defaultResourceClaims` when synthesising the dispatched task's `resourceClaims` field (Spec Review N4).
 - **`POST /api/dispatch/:nodeId` endpoint.** `05-dispatch-api`. This leaf executes whatever the runner tasks dispatch into — operator-injected via `POST /api/tasks`, daemon-enqueued (a future leaf), or dispatched via the upcoming endpoint.
 - **`POST /api/tasks/:id/cancel` endpoint.** `05-dispatch-api`. This leaf ships the cancellation registry's subprocess-handle Map; the cancel route owns the HTTP surface + eager-DB-write side.
 - **Watchdog timeout** (parent D12). The dispatched task runs for as long as `claude` needs. No `--max-tokens`, no per-task timeout. Operator cancels via `05`'s cancel route when wedged.
@@ -153,8 +153,8 @@ export function createClaudeCodeExecutor(ctx: ProjectContext): Executor {
           stdin: prompt,
         });
         ctx.dispatchCancellation.bind(task.id, subprocess);
-        const result = await subprocess.exited;            // execa's exit-state promise
-        const final = ctx.runner.store.getStatus(task.id);
+        const result = await subprocess;                   // execa@9: ResultPromise IS the awaitable; resolves to Result
+        const final = ctx.runner.store.getStatus(task.id); // Store API returns TaskStatus | undefined (non-throwing for missing id)
         reconcileExit(task, result, final, handle);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -174,23 +174,34 @@ The executor is a factory function `(ctx) => Executor` rather than a singleton c
 
 ```ts
 // server/src/dispatcher/executor/spawn.ts
-import { execa, type Subprocess } from "execa";
+import { execa, type ResultPromise } from "execa";
 
 export interface SpawnOpts {
   cwd: string;
   env: Record<string, string>;
   mcpConfigPath: string;
   stdin: string;
+  /**
+   * Test-only override for the binary name (default "claude"). Production code
+   * never passes this; tests pass `${process.execPath} test/fixtures/fake-claude.mjs`
+   * to substitute a node-driven fake without mutating PATH (D5; Spec Review B3).
+   */
+  claudeBin?: string;
 }
 
-export function spawnClaudeCode(opts: SpawnOpts): Subprocess {
+export function spawnClaudeCode(opts: SpawnOpts): ResultPromise {
+  const bin = opts.claudeBin ?? "claude";
+  // If bin is a multi-token string (`node test/fixtures/fake-claude.mjs`), split into [cmd, ...prefixArgs].
+  const parts = bin.split(" ");
+  const cmd = parts[0]!;
+  const prefixArgs = parts.slice(1);
   return execa(
-    "claude",
-    ["--print", "--bare", "--mcp-config", opts.mcpConfigPath],
+    cmd,
+    [...prefixArgs, "--print", "--bare", "--mcp-config", opts.mcpConfigPath],
     {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
-      input: opts.stdin,           // execa pipes string → stdin automatically
+      input: opts.stdin,           // execa@9 pipes string → stdin automatically
       all: false,                  // stderr captured separately
       reject: false,               // don't throw on non-zero exit; we read result.exitCode
     },
@@ -198,7 +209,7 @@ export function spawnClaudeCode(opts: SpawnOpts): Subprocess {
 }
 ```
 
-`execa@9`'s `input` option accepts a string and pipes it to the child's stdin without manual stream management. `reject: false` makes non-zero exit codes return-not-throw, which is what the lifecycle reconciler needs. The returned `Subprocess` has `.exited: Promise<ExecaResult>` (carries `exitCode`, `signal`, `stderr`, etc.) and `.kill(signal)` for the cancellation registry. The `pid` is also accessible if a future watchdog needs it.
+`execa@9`'s `input` option accepts a string and pipes it to the child's stdin without manual stream management. `reject: false` makes non-zero exit codes return-not-throw, which is what the lifecycle reconciler needs. The returned `ResultPromise` is both a `Subprocess` (has `.kill(signal)` for the cancellation registry) AND a `Promise<Result>` (awaitable). `Result` carries `exitCode?: number`, `signal?: string`, `stderr: string` (default-captured). The `pid` is on the Subprocess side if a future watchdog needs it.
 
 The hardcoded `"claude"` resolves through `PATH`. The operator's `claude` install is what runs — this is a deliberate choice (per parent D17, `--bare` does not auto-discover CLAUDE.md or read keychain; the operator's `~/.claude` is the auth source). Documented in §Decisions.
 
@@ -247,37 +258,26 @@ Double-cleanup is safe (the `cleaned` flag short-circuits). The `try/catch` arou
 // server/src/dispatcher/executor/lifecycle.ts
 import type { Task, TaskStatus } from "@ledger/parser";
 import type { RunnerHandle } from "../../runner/executors.js";
-import type { ExecaResult } from "execa";
+import type { Result } from "execa";   // execa@9: `Result`, NOT `ExecaResult` (does not exist)
 import { reasons } from "../../runner/scheduler.js";
 
 const TERMINAL: ReadonlySet<TaskStatus> = new Set(["COMPLETE", "FAILED", "AWAITING_HUMAN_REVIEW"]);
 
-function tail(text: string | undefined, lines: number): string {
-  if (!text) return "";
-  const parts = text.split("\n");
-  return parts.slice(-lines).join("\n");
-}
-
 export function reconcileExit(
   task: Task,
-  result: ExecaResult,
+  result: Result,
   final: TaskStatus | undefined,
   handle: RunnerHandle,
 ): void {
   if (final === undefined) return;                            // task gone (test cleanup); no transition
+  if (final === "CANCELLED") return;                          // row 4: cancel route eagerly wrote CANCELLED; honour it regardless of signal/exitCode (Spec Review B2)
   if (result.exitCode === 0 && TERMINAL.has(final)) return;   // row 1: success path
   if (result.exitCode === 0 && final === "RUNNING") {         // row 2: agent forgot terminal call
     handle.fail(task.id, reasons.SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS);
     return;
   }
-  if (
-    (result.signal === "SIGTERM" || result.signal === "SIGKILL") &&
-    final === "CANCELLED"
-  ) {
-    return;                                                   // row 4: cancel route handled it
-  }
-  // rows 3 + 5: code !== 0 OR (SIGKILL && final === RUNNING) — both treated as failure
-  handle.fail(task.id, reasons.subprocessFailed(tail(result.stderr, 200)));
+  // rows 3 + 5: non-zero exit code OR signal-killed, final is RUNNING (cancel route never wrote CANCELLED)
+  handle.fail(task.id, reasons.subprocessFailed(result.stderr ?? ""));
 }
 ```
 
@@ -287,7 +287,7 @@ Pure function: takes the exit `result` and `final` status as inputs, returns not
 
 ```ts
 // server/src/dispatcher/executor/cancellation.ts
-import type { Subprocess } from "execa";
+import type { Subprocess } from "execa";   // execa@9: `Subprocess` is the kill-side type; `ResultPromise` extends it
 import type { TaskId } from "@ledger/parser";
 
 export interface CancellationRegistry {
@@ -383,7 +383,7 @@ Per parent §Type coordination Spec Review S1: dispatched tasks have `agent: { m
 | D2 | Hardcoded `"claude"` argv[0]; no path override | The operator's `claude` install (resolved via PATH) is the auth source: `--bare` reads `ANTHROPIC_API_KEY` / `apiKeyHelper` from the operator's env, not from any per-dispatch config. Providing a per-dispatch path override would only matter if we wanted to dispatch against a non-default `claude` install; v1 has no such use case. If a future scenario emerges (testing a beta `claude`), add a `LEDGER_CLAUDE_BIN` env override; out of scope here. |
 | D3 | Same `ClaudeCodeExecutor` instance registered for all eight task types | The type dispatch is `04-prompt-templates`' concern (`renderPrompt` switches on `task.type` to pick the template); the spawn-and-wait logic is type-blind. Registering the same instance avoids accidental per-type customization in the executor that would couple to template details. The eight-type list is a `const satisfies readonly TaskType[]` in `context.ts` — TypeScript's exhaustiveness check catches if a new `TaskType` lands in the parser without being added here. |
 | D4 | `lifecycle.ts` is a pure function, not a method on the executor object | Pure functions are unit-testable without spawning subprocesses or stubbing `Executor`'s closure-captured deps. The lifecycle table is the leaf's highest-leverage logic; isolating it from subprocess management lets us cover every row with synthetic inputs in milliseconds. |
-| D5 | Fake-claude fixture (`test/fixtures/fake-claude.mjs`) is the primary integration test, NOT the real `claude` binary | Real `claude` requires (a) the binary present on PATH, (b) `ANTHROPIC_API_KEY` configured, (c) network access. None of these are guaranteed in a vanilla CI. The fake-claude fixture is a ~50-line Node script that: reads stdin (the prompt), opens an MCP HTTP client to `http://127.0.0.1:<port>/mcp` using `LEDGER_TASK_ID` as the binding header, emits one `runner.emit_event` of kind `reasoning`, calls `runner.complete_task`, exits 0. It exercises the same code path real claude would. The real-claude path is the `describe.skip` smoke test. |
+| D5 | Fake-claude fixture (`test/fixtures/fake-claude.mjs`) is the primary integration test, NOT the real `claude` binary; substitution rides on `spawnClaudeCode`'s optional `claudeBin?` parameter (per Spec Review B3) | Real `claude` requires (a) the binary present on PATH, (b) `ANTHROPIC_API_KEY` configured, (c) network access. None of these are guaranteed in a vanilla CI. The fake-claude fixture is a ~50-line Node script that: reads stdin (the prompt), opens an MCP HTTP client to `http://127.0.0.1:<port>/mcp` using `LEDGER_TASK_ID` as the binding header, emits one `runner.emit_event` of kind `reasoning`, calls `runner.complete_task`, exits 0. It exercises the same code path real claude would. The test-only `claudeBin?` parameter on `SpawnOpts` (defaults to `"claude"`) accepts a space-separated `${node} ${script}` form; the production executor never passes it. NOT the same as the deferred `LEDGER_CLAUDE_BIN` env override (D2) — that would be an operator-facing surface; `claudeBin?` is purely a function-argument injection point. The real-claude path is the env-gated smoke test. |
 | D6 | `--bare` is mandatory (parent D17 inheritance, restated for in-leaf clarity) | Without `--bare`, claude auto-loads CLAUDE.md, runs hooks, syncs plugins, and reads the keychain — none of which are appropriate for a dispatched subprocess (the runner provides the context explicitly via prompt). `--bare`'s documented behaviour also pins auth to `ANTHROPIC_API_KEY` / `apiKeyHelper`, avoiding OAuth dialogue requirements. |
 | D7 | `--print` is mandatory | Without `--print`, claude drops into the interactive TUI and never exits. The executor's `subprocess.exited` promise would never resolve. |
 | D8 | Prompt piped via stdin (`execa input: prompt`), not via positional argument | The positional `[prompt]` argv slot is capped by `ARG_MAX` (~256KB on Linux, smaller on macOS), and `execa` would need to escape shell metacharacters. Stdin is uncapped and string-clean. Parent D16 verified `--prompt-file` does not exist; stdin is the only option. |
@@ -405,6 +405,38 @@ Per parent §Type coordination Spec Review S1: dispatched tasks have `agent: { m
 - **`Subprocess` type loose-typed at the cancellation registry boundary.** D9 acknowledges: the registry holds `Subprocess` values (execa's union) without narrowing. Tightening to a `KillableProcess` interface that exposes only `kill(signal): boolean` would constrain `05-dispatch-api`'s consumption to the cancel-only surface. Defer; current surface is fine for v1. *(Priority: TRIVIAL.)*
 - **`renderPrompt(task, ctx)` signature is the only coupling to `04-prompt-templates`.** If `04` ships with a different signature (e.g., returns `{ prompt: string; claims: ResourceClaim[] }` rather than a bare string), this leaf's `claudeCode.ts` adapts. The signature is documented in `04`'s spec; cross-leaf coordination at stage 5 (rebase) is the resolution. *(Priority: TRIVIAL — already accounted for in the parallel-leaf protocol.)*
 - **No structured stderr capture beyond the reason tail.** The executor reads stderr for the failure reason but does not preserve the full content. Debugging a subprocess crash requires re-running with `claude --debug` or scraping the system log. A future `runner.emit_event`-style executor-driven kind=error event with full stderr in the body would help; v1 lands the truncated reason on `status_change` and stops. *(Priority: LOW.)*
+
+---
+
+## Spec Review (2026-05-28)
+
+Independent spec review was run against this DRAFT in a clean Sonnet context. Verdict: **NEEDS_MAJOR_REVISIONS** — 3 Blocking (B1, B2, B3), 4 Should-fix (S1–S4), 4 Nits (N1–N4), 5 Confidence notes. PRD coverage matrix returned Addressed across §5/§6.1/§6.2/§7/§11. All findings applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `execa@9` API was wrong in three places: `Subprocess.exited` does not exist, `ExecaResult` does not exist as an exported type, `ExecaSubprocess` (Requirements §8) does not exist. Real compile errors. | `spawn.ts` return type changed to `ResultPromise` (the awaitable + killable union); `claudeCode.ts` calls `await subprocess` (not `subprocess.exited`); `lifecycle.ts` imports `Result` (not `ExecaResult`); §8 prose uses `Subprocess` consistently. Inline comments cite `execa@9` specifics. |
+| B2 | Lifecycle row 4 had a real logic bug: signal check (`SIGTERM \|\| SIGKILL`) was redundant with `final === "CANCELLED"`, but also caused a race-condition gap where a clean exit with `final` already CANCELLED would fall through to rows 3+5 and double-fail. Plus row order was top-down so the post-cancel race path was reachable. | `reconcileExit` now checks `final === "CANCELLED"` FIRST (immediately after the `final === undefined` early-return); the signal check is dropped entirely; the catch-all (former rows 3+5) merges into one. Requirements §5 table reorganised with row numbers and explanatory note. The behaviour: once the cancel route has written CANCELLED, the executor honours it regardless of exitCode/signal. |
+| B3 | Fake-claude fixture (D5) was the primary test path but no mechanism was specified for swapping `claude` argv[0] with the fake. PATH manipulation is fragile; mocking `spawnClaudeCode` defeats the integration shape. | Added `claudeBin?: string` parameter to `SpawnOpts` (test-only override; default `"claude"`). The space-separated form (`"${node} ${script}"`) lets the test pass a node-driven script without process module mocking. Updated D5 to call out the substitution mechanism explicitly; updated §10 (tests) to show the exact `claudeBin` argument shape. Distinct from the deferred `LEDGER_CLAUDE_BIN` env override (D2) — `claudeBin?` is purely a function argument, not an operator surface. |
+| S1 | `CANCELLED_BY_OPERATOR`'s justification "the executor's lifecycle table row 4 checks for it" was backward — row 4 checks `final === "CANCELLED"` (a status), not the reason string. The reason is what `05-dispatch-api` writes. | Justification rewritten to: the cancel route in `05-dispatch-api` emits the constant; the leaf adds it now to keep the subprocess-lifecycle reason vocabulary co-located. |
+| S2 | `store.getStatus` return contract was unstated — the `final === undefined` guard in `reconcileExit` is only correct if the store returns `undefined` (not throws) for missing IDs. | `claudeCode.ts` pseudocode now has an inline comment confirming the contract: "Store API returns TaskStatus | undefined (non-throwing for missing id)". The contract matches the existing `05-task-runner/01-store-schema` Store API; the guard is real defense, not dead code. |
+| S3 | `result.stderr` could be typed as `string \| undefined` under TS strict; the `tail(result.stderr, 200)` call would emit a TS error. | The two-stage truncation collapsed (per N1) and the remaining call is `reasons.subprocessFailed(result.stderr ?? "")`. The `?? ""` makes the undefined case explicit. |
+| S4 | Requirements §8 said `Map<TaskId, ExecaSubprocess>` but `ExecaSubprocess` is not exported by `execa@9`. | Renamed to `Map<TaskId, Subprocess>` (the real export) with an inline note that `Subprocess` is the kill-side supertype of `ResultPromise`. |
+| N1 | Two-stage stderr truncation (200 lines → 80 chars) was dead code: the 200-line `tail()` was always followed by `reasons.subprocessFailed`'s 80-char `.slice(0, 80)`, so the 200-line stage was wasted work. | Collapsed to single-stage: `reasons.subprocessFailed(result.stderr ?? "")`. The `tail()` helper deleted from `lifecycle.ts` pseudocode. The "future runner.emit_event for full stderr" path is logged as Open Issue (was already there; reworded). |
+| N2 | `describe.skip` doesn't allow env-gated activation without file edits; D14's "vitest's name filter" claim is wrong (filter doesn't override skip). | Smoke test now uses `(process.env.LEDGER_SMOKE_TESTS ? describe : describe.skip)(...)` — env-gated run via `LEDGER_SMOKE_TESTS=1 pnpm -C server test smoke.test.ts`. Updated Requirements §10 and §Decisions D14. |
+| N3 | Reviewer flagged `task.parent_task_id` snake_case usage as a potential issue; investigation showed the spec does NOT use that field (no direct field access). | Resolved on inspection; no change required. Recorded so future readers don't repeat the search. |
+| N4 | Out-of-scope bullet for resource-claim declarations was muddled — said this leaf "reads claims via `renderPrompt`'s return type", but `renderPrompt` returns a bare string; claims are on the separate `defaultResourceClaims` export and consumed by `05-dispatch-api`, not by the executor. | Bullet rewritten: "this leaf does NOT consume claims at all — the executor receives the rendered prompt string only; `05-dispatch-api` is the consumer of `defaultResourceClaims`." |
+
+Reviewer's **Confidence notes** (recorded for the stage-4 implementer to spot-check):
+
+1. **`execa@9` API verified.** Reviewer confirmed against the installed tarball's d.ts: `.exited` doesn't exist; `ExecaResult` doesn't exist; `Result` IS exported; `Subprocess` IS exported; `input: string`, `cwd`, `env`, `reject: false` all valid options; `result.exitCode?: number` (optional); `result.signal?: keyof SignalConstants`; `result.stderr: string` (default-captured, but TS may widen to `string | undefined` under generic inference — `?? ""` guard is the safety net). The B1 fix lands the right shapes.
+2. **`--mcp-config` JSON `"type": "http"` value UNVERIFIED.** Inherited from parent's confidence notes — needs `claude --mcp-config <test.json>` round-trip at implementation time to confirm. Possible alternatives: `"streamable-http"`, `"sse"`. The implementer runs a one-line smoke at install time and adjusts.
+3. **`store.getStatus` returns `undefined` (not throws) for missing IDs.** Reviewer cross-checked against `scheduler.ts` line 183's dep-check usage which compares to `"COMPLETE"` without a null guard. The contract is established; the guard in `reconcileExit` is correct defense.
+4. **`BindingRegistry` wiring in `context.ts` is established pattern.** Reviewer confirmed the two-step `ctxPartial as ProjectContext` cast in `02-runner-tools`'s wiring; this leaf follows the same pattern for `dispatchCancellation`.
+5. **`registerExecutor` overwrite warning won't fire.** Reviewer confirmed the eight dispatcher task types are disjoint from the default registry's `noop`/`human_review`.
+
+Reviewer's structural assessment: scope matches parent's Children manifest row; tone matches `01-mcp-server.md` and `02-runner-tools.md`. D1 (execa over child_process) and D4 (pure `lifecycle.ts`) are sound; B2's lifecycle simplification makes the table cleaner. Ready for APPROVED.
+
+Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 5 confidence notes landed.
 
 ---
 
