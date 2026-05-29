@@ -27,3 +27,7 @@ export type { RunnerToolDeps } from "./mcp/tools.js";
 export { createCancellationRegistry } from "./executor/cancellation.js";
 export type { CancellationRegistry } from "./executor/cancellation.js";
 export { createClaudeCodeExecutor } from "./executor/claudeCode.js";
+
+// 04-prompt-templates exports
+export { renderPrompt, defaultResourceClaims, isPersona } from "./prompts/index.js";
+export type { Persona } from "./prompts/shared.js";

@@ -46,6 +46,8 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
     mcp,
     binding,
     dispatchCancellation,
+    docs: [],
+    resolveDocPath: () => undefined,
   };
   return { ...ctx, closeAll: () => { runner.close(); } };
 }

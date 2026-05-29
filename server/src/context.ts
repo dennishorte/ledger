@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
-import { validateProjectMetadata } from "@ledger/parser";
-import type { ProjectMetadata, ValidationError, TaskType } from "@ledger/parser";
+import { validateProjectMetadata, buildDocGraph, pathForNodeId } from "@ledger/parser";
+import type { ProjectMetadata, ValidationError, TaskType, DocNode } from "@ledger/parser";
 import { assertContained } from "./pathSafety.js";
+import { readDocsTree } from "./readDocs.js";
 import { createRunnerForProject } from "./runner/index.js";
 import type { Store, Runner } from "./runner/index.js";
 import { createMcpServer, createBindingRegistry, registerRunnerTools } from "./dispatcher/index.js";
@@ -40,6 +41,10 @@ export interface ProjectContext {
   mcp: McpServerHandle; // wired in 06-agent-dispatcher/01-mcp-server
   binding: BindingRegistry; // wired in 06-agent-dispatcher/02-runner-tools; exposed for tests + 05-dispatch-api
   dispatchCancellation: CancellationRegistry; // wired in 06-agent-dispatcher/03-claude-code-executor; for 05-dispatch-api cancel route
+  /** Parsed doc-node array loaded at context boot — used by renderPrompt / pathForNodeId (04-prompt-templates). */
+  docs: readonly DocNode[];
+  /** Resolve a NodeId to its source docs/ path. Wraps pathForNodeId over ctx.docs. */
+  resolveDocPath: (nodeId: string) => string | undefined;
 }
 
 export class ContextError extends Error {
@@ -80,6 +85,12 @@ export async function loadProjectContext(opts: {
   } catch {
     throw new ContextError(`docs path escapes project root: docs=${result.metadata.docs}`);
   }
+
+  // Load the docs tree and build the graph once at context boot.
+  // renderPrompt / pathForNodeId use this array to resolve NodeId → source path.
+  const rawDocs = await readDocsTree(docsRoot);
+  const { nodes: docs } = buildDocGraph(rawDocs);
+  const resolveDocPath = (nodeId: string) => pathForNodeId(docs, nodeId);
 
   const runner = createRunnerForProject({ projectRoot });
 
@@ -123,6 +134,8 @@ export async function loadProjectContext(opts: {
     mcp,
     binding,
     dispatchCancellation,
+    docs,
+    resolveDocPath,
   };
 
   // Register ClaudeCodeExecutor for all eight dispatcher task types (D3).

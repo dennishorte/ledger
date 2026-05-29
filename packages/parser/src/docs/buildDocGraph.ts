@@ -174,6 +174,18 @@ function resolveChildId(parentAbsId: NodeId, relId: string): NodeId {
 }
 
 /**
+ * Resolves a NodeId back to its source `docs/` path by walking the DocNode array.
+ * O(n) on first call; consumers cache the resulting map if they call frequently.
+ * Returns undefined for synthetic-only nodes (no `authored` source file, i.e. no `source`
+ * property) and for nodeIds not present in the array.
+ * Counterpart to the existing idForPath() helper.
+ */
+export function pathForNodeId(nodes: readonly DocNode[], nodeId: NodeId): string | undefined {
+  for (const n of nodes) if (n.id === nodeId && n.source) return n.source;
+  return undefined;
+}
+
+/**
  * Map a relative author-written doc path (e.g. `docs/01-ui/02-dag.md`) to a NodeId.
  *
  * Accepts either `docs/foo.md` or `./docs/foo.md`. Returns null for unrecognised inputs.

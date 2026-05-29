@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/04-prompt-templates`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 3 blocking + 4 should-fix + 4 nits from independent review)
+**Last Updated:** 2026-05-29 (IN_PROGRESS → VERIFY — stage-4 implementation complete)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tool surface the templates reference in their tool-contract reminder), `06-agent-dispatcher/03-claude-code-executor` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
@@ -394,7 +394,65 @@ Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 6 confidence notes land
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**v1 — 2026-05-29**
+
+### No new deps
+
+No new `package.json` dependencies. All imports are from `@ledger/parser` (already in workspace), `../../context.js` (existing server module), and `./shared.js` (this leaf). Server `dist/` size: 484K (up from ~360K at post-`02-runner-tools` baseline; the delta includes `03-claude-code-executor`'s additions too, since those landed on the same branch). App bundle delta: zero.
+
+### `pathForNodeId` — additive parser export
+
+Added `export function pathForNodeId(nodes: readonly DocNode[], nodeId: NodeId): string | undefined` to `packages/parser/src/docs/buildDocGraph.ts` (O(n) linear scan; consumers cache if they call frequently). Re-exported from `packages/parser/src/index.ts`. Wired in `server/src/context.ts` as `resolveDocPath: (nodeId) => pathForNodeId(docs, nodeId)` where `docs` is the `DocNode[]` loaded at context boot. The `ProjectContext` type gains `docs: DocNode[]` and `resolveDocPath: (nodeId: string) => string | undefined` fields.
+
+### Resolution-time decision (option a)
+
+Templates call `ctx.resolveDocPath(task.id)` at render time (option a — call at registration time vs. curry at registration-time were the two choices per spec). Option (a) was chosen because the `ProjectContext` is passed through to the render call anyway; currying at registration would require a separate factory step with no benefit. All eight templates take `(task: Task, ctx: ProjectContext): string` and call `ctx.resolveDocPath(task.id)` inline.
+
+### Persona type
+
+`Persona = Exclude<Task["type"], "noop" | "human_review" | "operator_session" | "agent_task">` — the eight dispatcher types exactly. `Record<Persona, (task, ctx) => string>` in the `renderers` registry gives compile-time exhaustiveness. `isPersona(type): type is Persona` narrows the runtime path; the throw in `renderPrompt` handles the four excluded types defensively.
+
+### 6 confidence-note re-verifications
+
+1. **`Task.parentTaskId` camelCase** — confirmed at `packages/parser/src/runner/types.ts`; all eight templates and `defaultResourceClaims` use `task.parentTaskId` correctly.
+2. **`TaskType` has 12 members including `operator_session` + `agent_task`** — `Persona = Exclude<..., "noop" | "human_review" | "operator_session" | "agent_task">` resolves to 8 members; `Record<Persona, ...>` is exhaustive.
+3. **`nodeIdToSourcePath` does not exist** — confirmed; `pathForNodeId` added as a new export. Tests in `packages/parser/test/docs/pathForNodeId.test.ts`.
+4. **`artifactKind` required in log-event schema** — `mcpToolContractReminder()` now lists `{ artifactKind, path }` as required for `kind: "artifact"` events. `shared.test.ts` snapshot test covers this via `mcpToolContractReminder().toContain("artifactKind")`.
+5. **Snapshot instability closed** — all 8 snapshot tests pin `task.id = "00000000-0000-0000-0000-000000000001"` and `projectRoot = "/project"`; no `crypto.randomUUID()` or `os.cwd()` in fixtures.
+6. **`pathForNodeId` cross-package gap** — resolved; the function exists and is tested. The `ProjectContext.resolveDocPath` wrapper is the single choke point; a parser API change fails typecheck in `context.ts` before any template notices.
+
+### Persona quality
+
+All eight preambles are distinct (tested in `shared.test.ts`). Key distinguishers verified:
+- `implement`: "ship exactly," "do not redesign," "Spec Review audit table is highest-leverage" — correctly frames an executor persona
+- `spec_review`: "cold, critical judgment," "PRD coverage matrix," "cite file paths" — correctly frames an independent reviewer
+- `verify`: "run cold against their diff," "spot-check claims," verdict ladder — correctly frames a verifier
+- `spec_draft`: "DRAFT is the first commit," "tables in Decisions," "out-of-scope bullets" — correctly frames an author
+- `reverify`: "prior audit table for context," "same verdict shape" — correctly frames a re-checker
+- `doc_refactor`: "bring spec into agreement," "tighten Open Issues," "no lifecycle status change"
+- `issue_triage`: "walk Open Issues," "is each still valid?" — correctly frames a triage agent
+- `project_status_review`: "under 500 words," "operator reads it cold" — correctly frames a status summariser
+
+### Deviations from spec
+
+None. All 3 blocking + 4 should-fix fixes from the Spec Review were pre-applied before implementation began. The implementation matches the approved spec exactly.
+
+### Gates
+
+- `pnpm -C packages/parser build` — clean
+- `pnpm -C packages/parser test` — 113/113 (10 test files)
+- `pnpm -C server build` — clean
+- `pnpm -C server typecheck` — clean
+- `pnpm -C server lint` — clean (0 errors; 1 pre-existing lint issue in `index.test.ts` `isPersona` arrow functions fixed as part of this leaf)
+- `pnpm -C server test` — 268/268 (29 test files; 8 snapshot tests added)
+- `pnpm -C app typecheck` — clean
+- `pnpm -C app lint` — clean
+
+### Acceptance-check items requiring operator verification
+
+1. **Prompt content quality** — snapshot tests lock the rendered strings but do not evaluate whether the persona framing will produce good agent behaviour in practice. Operator should do a live dispatch (`POST /api/dispatch/:nodeId` on an APPROVED node) after `05-dispatch-api` lands and read the agent's first `reasoning` event to confirm the persona took hold.
+2. **`resolveDocPath` returns sensible paths in production** — snapshot tests stub `resolveDocPath: () => undefined`, so the "doc path not found" fallback strings appear in the snapshots (e.g., `"(spec doc for node 00000000-... — resolve via resolveDocPath)"`). In production, `ctx.resolveDocPath(task.id)` will return the actual doc path when the task id matches a doc node id. Operator verifies that dispatched tasks show the real path in the prompt.
+3. **`implement` required-reading list transitive deps** — v1 lists only `CLAUDE.md`, the task's spec doc, the parent spec doc, and two type files. If an `implement` agent repeatedly misses a transitive dependency spec, extend the list in `implement.ts` (no template snapshot migration required — just update the snapshot with `-u`).
 
 ---
 
