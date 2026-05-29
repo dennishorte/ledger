@@ -356,6 +356,7 @@ Each persona maps to an operator-recognisable activity from `docs/process/leaf-w
 - **Snapshot updates are an operator-discipline item, not automated.** Drift between code and snapshot fails the test; the operator runs `pnpm test -- -u` to update + reviews the diff. A future CI workflow could automate the snapshot update under a PR-comment gate. *(Priority: TRIVIAL.)*
 - **MCP tool contract reminder is fixed-string; future tool additions in `02-runner-tools` require manual reminder update.** A future `runner.delegate_subtask` or `runner.pause` tool would need a new paragraph in the reminder. v1 documents this as a follow-up: when a sibling adds tools, update `mcpToolContractReminder()` in the same commit. *(Priority: TRIVIAL.)*
 - **`project_status_review` template's "MEMORY.md (if present)" path resolution is unspecified.** MEMORY.md may not exist in every project; the template lists it conditionally. Implementer reads `~/.claude/projects/<project-id>/memory/MEMORY.md` via the operator's claude install. If the file doesn't exist, the agent's Read tool returns an error; the prompt prepares the agent for that case. Verbiage in the template, not a code path. *(Priority: TRIVIAL.)*
+- **`ProjectContext.docs: readonly DocNode[]` is publicly exposed but only read via `ctx.resolveDocPath(...)` (Implementation Review N2).** No external consumer reads the raw array yet. Defensible as future-proofing for `05-dispatch-api` which may enumerate nodes; if `05-dispatch-api` lands without using it, the field should be removed at that leaf's COMPLETE boundary. *(Priority: TRIVIAL.)*
 
 ---
 
@@ -398,7 +399,7 @@ Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 6 confidence notes land
 
 ### No new deps
 
-No new `package.json` dependencies. All imports are from `@ledger/parser` (already in workspace), `../../context.js` (existing server module), and `./shared.js` (this leaf). Server `dist/` size: 484K (up from ~360K at post-`02-runner-tools` baseline; the delta includes `03-claude-code-executor`'s additions too, since those landed on the same branch). App bundle delta: zero.
+No new `package.json` dependencies. All imports are from `@ledger/parser` (already in workspace), `../../context.js` (existing server module), and `./shared.js` (this leaf). Server `dist/` size: 484K total (cumulative dist size after build; the original 484K figure was misattributed to "03's additions too" but 03 is on a separate branch — the implementation review (2026-05-29) caught this). The pure-prompts-leaf delta is ~10 new compiled TS files at well under 50K. App bundle delta: zero.
 
 ### `pathForNodeId` — additive parser export
 
@@ -453,6 +454,31 @@ None. All 3 blocking + 4 should-fix fixes from the Spec Review were pre-applied 
 1. **Prompt content quality** — snapshot tests lock the rendered strings but do not evaluate whether the persona framing will produce good agent behaviour in practice. Operator should do a live dispatch (`POST /api/dispatch/:nodeId` on an APPROVED node) after `05-dispatch-api` lands and read the agent's first `reasoning` event to confirm the persona took hold.
 2. **`resolveDocPath` returns sensible paths in production** — snapshot tests stub `resolveDocPath: () => undefined`, so the "doc path not found" fallback strings appear in the snapshots (e.g., `"(spec doc for node 00000000-... — resolve via resolveDocPath)"`). In production, `ctx.resolveDocPath(task.id)` will return the actual doc path when the task id matches a doc node id. Operator verifies that dispatched tasks show the real path in the prompt.
 3. **`implement` required-reading list transitive deps** — v1 lists only `CLAUDE.md`, the task's spec doc, the parent spec doc, and two type files. If an `implement` agent repeatedly misses a transitive dependency spec, extend the list in `implement.ts` (no template snapshot migration required — just update the snapshot with `-u`).
+
+### Implementation Review (2026-05-29)
+
+Independent implementation review against the rebased worktree branch (`worktree-agent-a4c75927042ea815a`) in clean Sonnet context. Verdict: **READY_WITH_FOLLOWUPS** — all 8 gates PASS (parser build + tests 113/113, server build + typecheck + lint + tests 268/268, app typecheck + lint), every Spec Review (B1–B3 + S1–S4 + N1–N4) closure HONOURED (S4 partial — fixed below), all 6 confidence notes CONFIRMED, all 3 implementer decisions assessed as correct. One real should-fix + two nits applied as documentation cleanup. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | `mcpToolContractReminder()` listed `arguments: object` for `kind: "tool_call"` events, but the canonical `log-event.schema.json` requires `arguments: string` (serialized JSON). An agent following the prompt would emit `arguments` as a JSON object, hit `invalid_event_shape` with ajv's type-mismatch error, and need to reconstruct the event before its first tool_call ever lands. | `shared.ts:66` updated to `arguments: string (serialized JSON of the tool arguments)`. The Spec Review S4 closure now fully aligns the reminder text with the schema. Inline snapshots in all 8 template tests + `shared.test.ts` regenerated via `vitest run -u` — 9 snapshots updated, 268/268 tests pass. |
+| N1 | Implementation Notes bundle-delta entry attributed the 484K `server/dist/` size to "the delta includes `03-claude-code-executor`'s additions too, since those landed on the same branch" — but `03-claude-code-executor` is on a separate branch (`worktree-agent-a95b7fdcec9a0e42a`), not this one. | Note corrected to: "484K total (cumulative dist size after build; original figure misattributed to 03's additions but 03 is on a separate branch — the implementation review caught this); pure-prompts-leaf delta is ~10 new compiled TS files at well under 50K". |
+| N2 | `ProjectContext.docs: readonly DocNode[]` is exposed publicly but never read outside `context.ts` (every consumer goes through `ctx.resolveDocPath(...)`). Surface widening with no current consumer. | Defensible as future-proofing for `05-dispatch-api` which may enumerate nodes; logged as Open Issue rather than removed. If `05-dispatch-api` lands without using `ctx.docs`, the field should be removed at that leaf's COMPLETE boundary. |
+
+Reviewer's structural observations:
+
+- **`renderers` typed `Record<Persona, ...>`** with `isPersona(type): type is Persona` narrowing function — TypeScript's exhaustiveness check is real. `noUncheckedIndexedAccess` honoured since the lookup happens after type narrowing.
+- **No surprising files** — diff matches the spec's §Repository layout exactly.
+- **Persona content quality**: all 8 personas distinct (programmatically verified), and each accurately mirrors its operator-playbook stage from `docs/process/leaf-workflow.md`. The `reverify` persona's explicit "read the prior audit table" directive is well-grounded.
+- **Persona content vs runtime behaviour**: snapshot tests lock the rendered strings but cannot evaluate whether persona framing produces good agent behaviour live. Operator acceptance check #1 covers this; only fully testable after `05-dispatch-api` lands and a real dispatch happens.
+
+Implementer's decision assessments:
+
+1. **`ProjectContext.docs` + `resolveDocPath` both exposed**: defensible future-proofing; logged as Open Issue N2 for natural cleanup at `05-dispatch-api` COMPLETE if unused.
+2. **Option (a) — resolve at render time**: correct. `ctx.resolveDocPath` is an O(n) closure but n is small (tens of doc nodes) and `renderPrompt` is called once per dispatch — not in a hot loop. Currying would add a factory step with no observable benefit.
+3. **Snapshot stub `resolveDocPath: () => undefined`**: correct. The stub is deterministic; the templates handle `undefined` via fallback placeholder strings that appear verbatim in inline snapshots. Production wiring returns real paths via `pathForNodeId(docs, ...)`.
+
+Nothing punted on correctness; S1 applied (with snapshot regeneration); N1 + N2 applied as documentation cleanup.
 
 ---
 

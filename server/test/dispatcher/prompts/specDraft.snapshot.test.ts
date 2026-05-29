@@ -75,7 +75,7 @@ describe("specDraft template snapshot", () => {
 
       Emit \`runner.emit_event\` for each meaningful step. The event's required shape varies by kind (full schema in docs/_schemas/log-event.schema.json):
         - kind: \`"reasoning"\` — { text: string, subkind: \`"thinking"\` | \`"message"\` }
-        - kind: \`"tool_call"\` — { callId: string, toolName: string, arguments: object } (a summary of a non-MCP tool call: Read, Edit, Bash, etc.)
+        - kind: \`"tool_call"\` — { callId: string, toolName: string, arguments: string (serialized JSON of the tool arguments) } (a summary of a non-MCP tool call: Read, Edit, Bash, etc.)
         - kind: \`"artifact"\` — { artifactKind: \`"doc_created"\` | \`"doc_updated"\` | \`"file_written"\` | \`"version_committed"\`, path: string } (a file or doc you wrote or modified)
       Do NOT emit kind: \`"status_change"\` events — the runner manages those transactionally; the validator rejects them with \`status_change_not_emittable\`.
       Malformed events (missing required fields) are rejected with \`invalid_event_shape\` and an AJV error list — fix the shape and retry.
