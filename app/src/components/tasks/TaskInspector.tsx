@@ -8,8 +8,10 @@ import { formatDuration, formatRelativeTime } from "@/lib/formatDuration";
 import { useTask } from "@/lib/useTask";
 import { useApproveTask } from "@/lib/useApproveTask";
 import { useRejectTask } from "@/lib/useRejectTask";
+import { useCancelTask } from "@/lib/useCancelTask";
 import { cn } from "@/lib/cn";
 import type { Task, ResourceClaim } from "@/lib/types";
+import type { MutationErrorBody } from "@/lib/useApproveTask";
 
 interface TaskInspectorProps {
   task: Task;
@@ -73,6 +75,14 @@ export function TaskInspector({
   const isRunnerEmitted = task.transcriptPath === undefined;
   const showHitlButtons =
     isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW";
+
+  // Cancel button gating: runner-emitted ∧ live status === RUNNING.
+  // `transcriptPath === undefined` is the same runner-vs-transcript discriminant
+  // used for HitlActions above (05-dispatch-api S4 note: functionally equivalent
+  // to `!task.id.includes(":")` under current ID schemes; the transcriptPath form
+  // is more semantically precise and matches the existing pattern).
+  const showCancelButton =
+    isRunnerEmitted && live?.task.status === "RUNNING";
 
   // "task no longer found" branch (404 from the right endpoint — D2).
   if (taskQuery.status === "success" && live === null) {
@@ -221,11 +231,16 @@ export function TaskInspector({
         </div>
       </Field>
 
-      {/* HITL buttons (NEW) — above the Open log stream link.
+      {/* HITL buttons — above the Open log stream link.
           Only rendered when runner-emitted ∧ live status === AWAITING_HUMAN_REVIEW.
           When showHitlButtons is true, `task` is guaranteed to be the live task
           (not the prop fallback) because gating requires live?.task.status. */}
       {showHitlButtons && <HitlActions task={task} />}
+
+      {/* Cancel button — only rendered when runner-emitted ∧ live status === RUNNING.
+          D9: visibility does not filter by task type — 409 no_subprocess is the
+          documented edge case for noop tasks. */}
+      {showCancelButton && <CancelAction taskId={task.id} />}
 
       {/* Open log stream */}
       <Link
@@ -237,6 +252,49 @@ export function TaskInspector({
       </Link>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// CancelAction — Cancel button for RUNNING runner-emitted tasks.
+// D9: visibility does not distinguish noop — the 409 no_subprocess path is the
+// documented edge case. The inline banner surfaces it clearly.
+// ---------------------------------------------------------------------------
+
+function CancelAction({ taskId }: { taskId: string }): JSX.Element {
+  const cancel = useCancelTask();
+
+  const banner = cancelErrorBanner(cancel.error);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {banner !== null && (
+        <div className="rounded border border-[color:var(--color-warning)] bg-[color:var(--color-warning-soft)] px-2 py-1 text-xs">
+          {banner}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={cancel.isPending}
+        onClick={() => { cancel.mutate({ taskId }); }}
+        className="inline-flex items-center self-start rounded-md border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)] disabled:opacity-50"
+      >
+        {cancel.isPending ? "Cancelling…" : "Cancel task"}
+      </button>
+    </div>
+  );
+}
+
+function cancelErrorBanner(err: unknown): string | null {
+  if (err === null || err === undefined) return null;
+  const e = err as MutationErrorBody;
+  const body = e.body as { error?: string; taskType?: string } | undefined;
+  if (e.status === 409 && body?.error === "no_subprocess") {
+    return `Task is RUNNING but no subprocess to cancel (type: ${body.taskType ?? "unknown"}). Was it noop?`;
+  }
+  if (e.status === 409 && body?.error === "wrong_status") {
+    return "Task is no longer RUNNING — it may have already completed or been cancelled.";
+  }
+  return `Cancel failed (HTTP ${String(e.status)}).`;
 }
 
 // ---------------------------------------------------------------------------

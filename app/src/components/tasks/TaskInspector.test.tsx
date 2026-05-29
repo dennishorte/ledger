@@ -318,4 +318,122 @@ describe("TaskInspector", () => {
 
     expect(screen.queryByText(/status reason/i)).toBeNull();
   });
+
+  // -------------------------------------------------------------------------
+  // Cancel button visibility (05-dispatch-api)
+  // -------------------------------------------------------------------------
+
+  it("runner-emitted ∧ RUNNING → Cancel task button visible", async () => {
+    const task = makeRunnerTask({ status: "RUNNING" });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /cancel task/i })).not.toBeNull();
+    });
+  });
+
+  it("runner-emitted ∧ COMPLETE → no Cancel task button", async () => {
+    const task = makeRunnerTask({ status: "COMPLETE" });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(task.title)).not.toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: /cancel task/i })).toBeNull();
+  });
+
+  it("runner-emitted ∧ AWAITING_HUMAN_REVIEW → no Cancel task button", async () => {
+    const task = makeRunnerTask({ status: "AWAITING_HUMAN_REVIEW" });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /approve/i })).not.toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: /cancel task/i })).toBeNull();
+  });
+
+  it("transcript-derived ∧ RUNNING → no Cancel task button (discriminant: transcriptPath)", async () => {
+    const task = makeTranscriptTask({ status: "RUNNING" });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(task.title)).not.toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: /cancel task/i })).toBeNull();
+  });
+
+  it("Cancel task click → POST /api/tasks/:id/cancel called", async () => {
+    const task = makeRunnerTask({ status: "RUNNING" });
+    const cancelledTask = { ...task, status: "CANCELLED" as const, dbRowVersion: 3 };
+
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(jsonResponse({ task, events: [] }))
+      .mockResolvedValueOnce(jsonResponse({ task: cancelledTask }))
+      .mockResolvedValue(jsonResponse({ task: cancelledTask, events: [] }));
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /cancel task/i })).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel task/i }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(globalThis.fetch).mock.calls;
+      const cancelCall = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/cancel"),
+      );
+      expect(cancelCall).toBeDefined();
+    });
+  });
+
+  it("409 no_subprocess → inline banner shows no_subprocess message", async () => {
+    const task = makeRunnerTask({ status: "RUNNING" });
+    const errBody = { error: "no_subprocess", id: task.id, taskType: "implement" };
+
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(jsonResponse({ task, events: [] }))
+      .mockResolvedValueOnce(jsonResponse(errBody, 409));
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /cancel task/i })).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel task/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/no subprocess to cancel/i)).not.toBeNull();
+    });
+  });
 });

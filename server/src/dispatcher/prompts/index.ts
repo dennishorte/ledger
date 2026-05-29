@@ -6,9 +6,16 @@
  * The typed Record<Persona, ...> registry gives compile-time exhaustiveness over the eight
  * dispatcher task types. A new TaskType added to Persona without an entry here fails at
  * compile time (S1 fix). The runtime isPersona guard handles the non-dispatcher types.
+ *
+ * defaultResourceClaims was promoted to @ledger/parser in 06-agent-dispatcher/05-dispatch-api
+ * Spec Review S2 so both the server dispatch endpoint and the UI can import it directly.
+ * Re-exported here to preserve the existing import paths from server/src/dispatcher/index.ts.
  */
 
-import type { Task, ResourceClaim } from "@ledger/parser";
+// Re-export from @ledger/parser so existing import sites in this module keep compiling.
+export { defaultResourceClaims } from "@ledger/parser";
+
+import type { Task } from "@ledger/parser";
 import type { ProjectContext } from "../../context.js";
 import type { Persona } from "./shared.js";
 
@@ -60,39 +67,3 @@ export function renderPrompt(task: Task, ctx: ProjectContext): string {
   return renderers[task.type](task, ctx);
 }
 
-/**
- * Default resource claims per task type, per parent D11.
- * These are used by 05-dispatch-api's POST /api/dispatch/:nodeId endpoint when the operator
- * does not override resourceClaims in the request body.
- *
- * All claim objects include the discriminant kind: "node" (B2 fix).
- * verify/reverify include a conditional second entry for parentTaskId (B1 fix).
- */
-export function defaultResourceClaims(task: Task): ResourceClaim[] {
-  switch (task.type) {
-    case "implement":
-    case "spec_draft":
-    case "doc_refactor":
-    case "issue_triage":
-      return [{ kind: "node", nodeId: task.id, mode: "write" }];
-
-    case "spec_review":
-      return [{ kind: "node", nodeId: task.id, mode: "read" }];
-
-    case "verify":
-    case "reverify":
-      return [
-        { kind: "node", nodeId: task.id, mode: "read" },
-        ...(task.parentTaskId
-          ? [{ kind: "node" as const, nodeId: task.parentTaskId, mode: "read" as const }]
-          : []),
-      ];
-
-    case "project_status_review":
-      return [{ kind: "node", nodeId: "00-project", mode: "read" }];
-
-    default:
-      // noop, human_review, operator_session, agent_task — not dispatcher-managed
-      return [];
-  }
-}
