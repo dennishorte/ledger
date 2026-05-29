@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/03-claude-code-executor`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 3 blocking + 4 should-fix + 4 nits from independent review)
+**Last Updated:** 2026-05-29 (IN_PROGRESS → VERIFY — stage-4 implementation complete)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tools the spawned subprocess will call; `Runner.handle`; `BindingRegistry`), `06-agent-dispatcher/04-prompt-templates` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
@@ -442,7 +442,42 @@ Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 5 confidence notes land
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-05-29. Stage-4 resumed from prior-agent mid-work; all code was on disk, gates were failing due to a single typing issue.
+
+**Deps pinned:** `execa@^9.6` (resolved `9.6.1`). No other new deps. `@modelcontextprotocol/sdk@^1.29` already present from `01-mcp-server`.
+
+**Bundle delta:** server `dist/` grew from 360K → 424K (+64K; 5 new source files under `src/dispatcher/executor/` transpiled). App bundle delta: zero.
+
+**`Result` typing wrinkle (execa@9).** `lifecycle.ts` originally referenced `Result` (from execa) but didn't import it. The generic `Result<OptionsType>` has `stderr: ResultStdioNotAll<'2', OptionsType>` — a union that widens to include `unknown[] | string[] | Uint8Array | undefined` under the default `Options` instantiation. Using `Result` directly as the parameter type would require importing the generic and either instantiating it concretely or narrowing at the call site. Resolution: `lifecycle.ts` declares a local structural `ExitResult` type (`{ exitCode?: number | undefined; signal?: string | undefined; stderr?: string | undefined }`) that decouples from execa's generic; `claudeCode.ts` extracts and narrows the three fields with `typeof result.stderr === "string" ? result.stderr : undefined` before passing to `reconcileExit`. The Spec Review's S3 `?? ""` guard is preserved via the `ExitResult` definition.
+
+**renderPrompt stub active.** `04-prompt-templates` was not merged at gate time. The stub function in `claudeCode.ts` returns a placeholder string (`"STUB PROMPT — replaced when 04-prompt-templates lands.\n\nTask ID: ${task.id}\nTask type: ${task.type}"`). It is NOT used by any test (tests drive the executor directly with fake-claude, which drains stdin but ignores the content). The stub is replaced at stage-5 rebase when `04` merges.
+
+**fake-claude fixture bug fix.** The `runner.emit_event` call in `fake-claude.mjs` originally sent `{ kind: "reasoning", summary: "..." }` — wrong fields. The `reasoning` LogEvent schema requires `{ kind: "reasoning", subkind: "thinking" | "message", text: string }`. Fixed to `{ kind: "reasoning", subkind: "thinking", text: "fake-claude: stub reasoning event emitted by integration test fixture" }`. Without this fix the MCP server returned `isError: true` (validation failure), the client silently swallowed it (MCP SDK's `callTool` does not throw on `isError`), and the reasoning event was never stored — causing the integration test failure.
+
+**Confidence note re-verifications:**
+1. `execa@9` API: `ResultPromise` return type in `spawn.ts`, `await subprocess` in `claudeCode.ts`, local `ExitResult` type in `lifecycle.ts`, `Subprocess` in `cancellation.ts` — all compile clean. `result.exitCode?: number`, `result.signal?: string` confirmed from execa d.ts at `execa@9.6.1/types/return/result.d.ts`.
+2. `--mcp-config` JSON `"type": "http"` — not directly verified against a real `claude` binary at implementation time (no `claude` available in the worktree env). Left as operator acceptance-check item (§Acceptance check §4). The MCP config shape is consistent with the `@modelcontextprotocol/sdk` `StreamableHTTPClientTransport` which the fake-claude fixture uses successfully — confirming the client side; the server side (real claude) is the remaining unknown.
+3. `store.getStatus` returns `undefined` for missing IDs — confirmed by cross-checking `store.ts` `getStatus` implementation (line ~183: `return row?.status`).
+4. `ctxPartial as ProjectContext` cast removed (ESLint `no-unnecessary-type-assertion` — the literal type of `ctxPartial` already satisfies `ProjectContext`). The cast was in the prior agent's `context.ts`; removed during lint pass.
+5. `registerExecutor` overwrite: no overlap with `noop`/`human_review` — confirmed by checking `createDefaultRegistry` in `executors.ts`; eight dispatcher types are all distinct.
+
+**Spec deviations:**
+- `renderPrompt` is a local stub, not the real import from `04-prompt-templates`. This is the documented parallel-leaf coupling resolution per leaf-workflow. See "renderPrompt stub" note above.
+- `lifecycle.ts` uses a local `ExitResult` structural type rather than importing `Result` from execa. Functionally equivalent; avoids the generic-inference union issue.
+- D11 (`tail(stderr, 200 lines)` two-stage truncation) was already revised out by Spec Review N1 — single-stage `?? ""` is what shipped.
+
+**Operator acceptance-check items requiring manual verification:**
+- §Acceptance check §4: boot the server, `POST /api/tasks` with type `implement`; verify the subprocess spawns and transitions as described. The `"type": "http"` MCP config value needs real-claude round-trip to confirm. If it fails, adjust the `type` field in `mcpConfig.ts` (likely candidate: `"streamable-http"`).
+- §Acceptance check §6 (SIGTERM) and §7 (SIGKILL): requires a live task + `ps` + `kill`. Deferred to `05-dispatch-api`'s acceptance pass (the cancel route writes CANCELLED, then delivers SIGTERM — the full cancel flow needs both leaves).
+
+**Gate results (2026-05-29):**
+- `pnpm -C packages/parser build`: ✓
+- `pnpm -C server build`: ✓
+- `pnpm -C server typecheck`: ✓
+- `pnpm -C server lint`: ✓
+- `pnpm -C app typecheck`: ✓
+- `pnpm -C app lint`: ✓
+- `pnpm -C server test`: 256 passed, 2 skipped (smoke tests), 0 failed
 
 ---
 

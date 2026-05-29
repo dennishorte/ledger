@@ -1,15 +1,33 @@
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { validateProjectMetadata } from "@ledger/parser";
-import type { ProjectMetadata, ValidationError } from "@ledger/parser";
+import type { ProjectMetadata, ValidationError, TaskType } from "@ledger/parser";
 import { assertContained } from "./pathSafety.js";
 import { createRunnerForProject } from "./runner/index.js";
 import type { Store, Runner } from "./runner/index.js";
 import { createMcpServer, createBindingRegistry, registerRunnerTools } from "./dispatcher/index.js";
 import type { McpServerHandle, McpServerHandleInternal, BindingRegistry } from "./dispatcher/index.js";
+import { createCancellationRegistry } from "./dispatcher/executor/cancellation.js";
+import { createClaudeCodeExecutor } from "./dispatcher/executor/claudeCode.js";
+import type { CancellationRegistry } from "./dispatcher/executor/cancellation.js";
 import pkg from "../package.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
+
+// The eight dispatcher task types handled by ClaudeCodeExecutor (D3).
+// `satisfies readonly TaskType[]` gives exhaustiveness checking at compile time —
+// a new TaskType in @ledger/parser will not cause a TS error here, but a deliberate
+// check can be added if needed.
+const DISPATCHER_TASK_TYPES = [
+  "implement",
+  "spec_review",
+  "verify",
+  "spec_draft",
+  "reverify",
+  "doc_refactor",
+  "issue_triage",
+  "project_status_review",
+] as const satisfies readonly TaskType[];
 
 export interface ProjectContext {
   projectRoot: string;
@@ -20,7 +38,8 @@ export interface ProjectContext {
   store: Store;   // same reference as runner.store — kept for backwards compat (D12)
   runner: Runner; // wired in 05-task-runner/02-scheduler per Requirements item 9
   mcp: McpServerHandle; // wired in 06-agent-dispatcher/01-mcp-server
-  binding: BindingRegistry; // NEW — wired in 06-agent-dispatcher/02-runner-tools; exposed for tests + 05-dispatch-api
+  binding: BindingRegistry; // wired in 06-agent-dispatcher/02-runner-tools; exposed for tests + 05-dispatch-api
+  dispatchCancellation: CancellationRegistry; // wired in 06-agent-dispatcher/03-claude-code-executor; for 05-dispatch-api cancel route
 }
 
 export class ContextError extends Error {
@@ -87,7 +106,13 @@ export async function loadProjectContext(opts: {
   // Narrow to the public handle type for ProjectContext
   const mcp: McpServerHandle = mcpInternal;
 
-  return {
+  // Wire cancellation registry BEFORE creating the executor (factory reads it).
+  const dispatchCancellation = createCancellationRegistry();
+
+  // Build the partial context — must include dispatchCancellation before the
+  // executor factory is called because the factory closes over it.
+  // Two-step cast matches the pattern established in 02-runner-tools wiring.
+  const ctxPartial = {
     projectRoot,
     docsRoot,
     project: result.metadata,
@@ -97,5 +122,16 @@ export async function loadProjectContext(opts: {
     runner,
     mcp,
     binding,
+    dispatchCancellation,
   };
+
+  // Register ClaudeCodeExecutor for all eight dispatcher task types (D3).
+  // Same instance registered for all types — prompt dispatch is 04-prompt-templates'
+  // concern; the executor is type-blind at the spawn-and-wait level.
+  const claudeCodeExecutor = createClaudeCodeExecutor(ctxPartial);
+  for (const type of DISPATCHER_TASK_TYPES) {
+    runner.registerExecutor(type, claudeCodeExecutor);
+  }
+
+  return ctxPartial;
 }

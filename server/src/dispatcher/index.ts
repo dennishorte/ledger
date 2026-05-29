@@ -22,3 +22,8 @@ export { createBindingRegistry } from "./mcp/binding.js";
 export type { BindingRegistry } from "./mcp/binding.js";
 export { registerRunnerTools } from "./mcp/tools.js";
 export type { RunnerToolDeps } from "./mcp/tools.js";
+
+// 03-claude-code-executor exports
+export { createCancellationRegistry } from "./executor/cancellation.js";
+export type { CancellationRegistry } from "./executor/cancellation.js";
+export { createClaudeCodeExecutor } from "./executor/claudeCode.js";
