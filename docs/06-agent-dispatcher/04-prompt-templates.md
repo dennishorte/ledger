@@ -2,7 +2,7 @@
 
 **Node ID:** `06-agent-dispatcher/04-prompt-templates`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-28
 **Last Updated:** 2026-05-28 (SPEC_REVIEW → APPROVED — applied 3 blocking + 4 should-fix + 4 nits from independent review)
 
