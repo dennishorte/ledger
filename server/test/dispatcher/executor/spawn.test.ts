@@ -53,7 +53,7 @@ describe("spawnClaudeCode", () => {
 
     const result = await subprocess;
     expect(result.exitCode).toBe(0);
-    const argv = JSON.parse(result.stdout) as string[];
+    const argv = JSON.parse(String(result.stdout)) as string[];
     expect(argv).toContain("--print");
     expect(argv).toContain("--bare");
     expect(argv).toContain("--mcp-config");
@@ -79,7 +79,7 @@ describe("spawnClaudeCode", () => {
 
     const result = await subprocess;
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toBe("task-env-test");
+    expect(JSON.parse(String(result.stdout))).toBe("task-env-test");
   });
 
   it("inherits parent process env and merges opts.env", async () => {
@@ -100,7 +100,7 @@ describe("spawnClaudeCode", () => {
 
     const result = await subprocess;
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toBe(true);
+    expect(JSON.parse(String(result.stdout))).toBe(true);
   });
 
   it("pipes stdin to the subprocess", async () => {
@@ -124,7 +124,7 @@ describe("spawnClaudeCode", () => {
 
     const result = await subprocess;
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toBe("hello from stdin");
+    expect(JSON.parse(String(result.stdout))).toBe("hello from stdin");
   });
 
   it("reject:false — non-zero exit code resolves (not throws)", async () => {
@@ -178,7 +178,7 @@ describe("spawnClaudeCode", () => {
     expect(result.exitCode).toBe(0);
     // On macOS, /var/folders is a symlink under /private — resolve both sides
     // so the comparison is canonical-path to canonical-path.
-    const actual = await realpath(JSON.parse(result.stdout) as string);
+    const actual = await realpath(JSON.parse(String(result.stdout)) as string);
     const expected = await realpath(expectedCwd);
     expect(actual).toBe(expected);
   });
@@ -200,7 +200,7 @@ describe("spawnClaudeCode", () => {
     });
 
     const result = await subprocess;
-    const argv = JSON.parse(result.stdout) as string[];
+    const argv = JSON.parse(String(result.stdout)) as string[];
     // First two args (after the node binary are the script path injected as prefix)
     // Then --print, --bare, --mcp-config, /tmp/p.json
     expect(argv[0]).toBe("--print");

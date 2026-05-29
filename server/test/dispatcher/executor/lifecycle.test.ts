@@ -13,7 +13,7 @@ import { reconcileExit } from "../../../src/dispatcher/executor/lifecycle.js";
 import { reasons } from "../../../src/runner/scheduler.js";
 import type { Task, TaskStatus } from "@ledger/parser";
 import type { RunnerHandle } from "../../../src/runner/executors.js";
-import type { Result } from "execa";
+import type { ExitResult } from "../../../src/dispatcher/executor/lifecycle.js";
 
 // ---------------------------------------------------------------------------
 // Synthetic test helpers
@@ -34,15 +34,12 @@ function makeTask(id: string = "task-1"): Task {
   };
 }
 
-function makeResult(overrides: Partial<Result> = {}): Result {
+function makeResult(overrides: Partial<ExitResult> = {}): ExitResult {
   return {
     exitCode: 0,
-    stdout: "",
     stderr: "",
-    command: "claude --print --bare --mcp-config /tmp/test.json",
-    escapedCommand: "claude --print --bare --mcp-config /tmp/test.json",
     ...overrides,
-  } as Result;
+  };
 }
 
 function makeHandle(): { handle: RunnerHandle; calls: { method: string; args: unknown[] }[] } {

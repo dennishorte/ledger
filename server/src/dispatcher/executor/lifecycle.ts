@@ -28,7 +28,7 @@ const TERMINAL: ReadonlySet<TaskStatus> = new Set([
  * Result<OptionsType> avoids inference-union issues with stderr under
  * noUncheckedIndexedAccess + strict (Spec Review S3, Briefing §9).
  */
-type ExitResult = {
+export type ExitResult = {
   exitCode?: number | undefined;
   signal?: string | undefined;
   stderr?: string | undefined;

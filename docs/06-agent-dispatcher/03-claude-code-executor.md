@@ -389,7 +389,7 @@ Per parent §Type coordination Spec Review S1: dispatched tasks have `agent: { m
 | D8 | Prompt piped via stdin (`execa input: prompt`), not via positional argument | The positional `[prompt]` argv slot is capped by `ARG_MAX` (~256KB on Linux, smaller on macOS), and `execa` would need to escape shell metacharacters. Stdin is uncapped and string-clean. Parent D16 verified `--prompt-file` does not exist; stdin is the only option. |
 | D9 | Cancellation registry is a Map, not a per-task signal handler chain | A signal handler chain (subscribe-on-spawn, fire-on-cancel-event) would couple the cancellation event surface to a Node EventEmitter, adding a layer between the cancel route and the kill call. The Map's `.lookup(taskId)?.kill(signal)` is one statement; the surface is honest about what it does. |
 | D10 | `reasons.executorInternalError` builder added alongside the parent's three prescribed entries | Pre-spawn failures (renderPrompt throw, writeMcpConfig fail, claude-binary-not-found) need a distinct reason — they're not subprocess failures in the lifecycle-table sense. Reusing `subprocessFailed` would mislabel the failure as "the subprocess ran and failed" when actually no subprocess was created. A new builder maintains the existing convention without scope creep. |
-| D11 | `tail(stderr, 200 lines)` before `reasons.subprocessFailed`'s 80-char truncation — two-stage cap | The 200-line tail bounds the in-memory string the executor handles; the 80-char truncation matches the existing `reasons.rejected` / `approvedWithNote` convention. A future `runner.emit_event`-style executor-emitted error event could carry the full 200-line tail in its body for richer debugging; v1 just lands the truncated reason on `status_change` and drops the rest. |
+| D11 | Single-stage 80-char stderr truncation via `reasons.subprocessFailed(stderr ?? "")` (revised per Spec Review N1) | Original draft prescribed a two-stage cap (200-line tail then 80-char truncation), but the 200-line stage was dead code given `subprocessFailed`'s 80-char floor — Spec Review N1 caught this and collapsed to single-stage. The 80-char truncation matches the existing `reasons.rejected` / `approvedWithNote` convention. A future `runner.emit_event`-style executor-emitted error event with the full untruncated stderr in its body would help debugging; logged as Open Issue. |
 | D12 | MCP config JSON written to `os.tmpdir()`, not `.ledger/` (parent D13 inheritance) | The config contains no project state — just a URL + a task-id header. Writing to `.ledger/` would pollute the working tree with N transient files per dispatch. Tmpdir is the natural ephemeral location; OS cleanup is the fallback if the executor crashes before `cleanup()` runs. |
 | D13 | `port` read off `ProjectContext.port`, not hardcoded `4180` | The CLI accepts `--port` overrides (`04-api-server/04-cli-launcher`); hardcoding `4180` would make a port-overridden server's dispatched subprocesses connect to the wrong endpoint. `ProjectContext.port` is the canonical source. |
 | D14 | CI smoke test is `describe.skip` by default, runnable explicitly via vitest's name filter or `it.only` retrofit | The real-claude test depends on operator-specific state that vanilla CI cannot provide. Skipping makes it discoverable (visible in test reports as "skipped") without requiring CI gating against an undeployable test. Future CI matrix that pre-installs `claude` + secrets can flip the skip. |
@@ -478,6 +478,34 @@ Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 5 confidence notes land
 - `pnpm -C app typecheck`: ✓
 - `pnpm -C app lint`: ✓
 - `pnpm -C server test`: 256 passed, 2 skipped (smoke tests), 0 failed
+
+### Implementation Review (2026-05-29)
+
+Independent implementation review against the rebased worktree branch (`worktree-agent-a95b7fdcec9a0e42a`) in clean Sonnet context. Verdict: **READY_WITH_FOLLOWUPS** — all 7 gates PASS (parser build, server build/typecheck/lint, app typecheck/lint, server test 256+2 skipped), every Spec Review (B1–B3 + S1–S4 + N1–N4) closure HONOURED, all 5 confidence notes CONFIRMED (CN-2 `--mcp-config "type": "http"` remains operator acceptance item), all 4 implementer-flagged deviations assessed as correct. No blockers. Three should-fix items + one nit applied as test-typing + doc cleanup:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S-1 | `lifecycle.test.ts`'s `makeResult()` returned `Result` (execa@9 generic) but `reconcileExit` accepts the local `ExitResult` structural type — 13 type errors under `tsconfig.test.json` (production code unaffected; standard gate excludes test files). | `ExitResult` promoted to `export type` in `lifecycle.ts`; `makeResult` return type changed to `ExitResult`; unused `command`/`escapedCommand` fields dropped; `import type { Result }` removed. All 13 errors clear. |
+| S-2 | `spawn.test.ts` passed `result.stdout` (typed `string \| string[] \| unknown[] \| Uint8Array \| undefined` under execa@9's generic) directly to `JSON.parse`/`realpath` — 6 type errors. | All six call sites updated to `JSON.parse(String(result.stdout))` (and `realpath(JSON.parse(String(result.stdout)) as string)` at line 181). Errors clear. |
+| S-3 | `tasks.test.ts` + `hitl.test.ts`'s `makeInMemoryContext()` stubs missed the new required `dispatchCancellation: CancellationRegistry` field on `ProjectContext` — 2 TS2741 errors. | Both helpers updated: import `createCancellationRegistry`, construct one, add `dispatchCancellation` to the `ProjectContext` literal. Mirrors the `binding` field already on the stub. |
+| N-1 | D11 in Decisions still described the original two-stage `tail(stderr, 200 lines) → 80-char` truncation that Spec Review N1 collapsed to single-stage. The implementation correctly uses single-stage `reasons.subprocessFailed(result.stderr ?? "")`; the spec entry was orphaned. | D11 rewritten: "Single-stage 80-char stderr truncation via `reasons.subprocessFailed(stderr ?? "")` (revised per Spec Review N1)". The rationale now correctly describes the single-stage implementation and the future `runner.emit_event` enhancement path. |
+
+Test suite still 256 passed + 2 skipped after fixes. `tsconfig.test.json` still has pre-existing errors in `store.test.ts` and `mcp/*.test.ts` from prior leaves (`02-runner-tools`, `05-task-runner/01-store-schema`) — outside this leaf's scope and not introduced by this leaf.
+
+Reviewer's structural observations:
+
+- **`tsconfig.test.json` is not wired into any npm script** — the standard gate (`tsc --noEmit` with `tsconfig.json`) excludes test files. This is the codebase's established pattern; the should-fix test-typing errors don't block COMPLETE under it, but the leaf cleaned them up anyway for hygiene.
+- **`claudeCode.test.ts` "registry populated during execution" test** measures registry size only after `await executor.run(...)` completes — always reads 0 (correct value at that point, but the test description suggests it captures peak). Low-priority nit; no action.
+- **No surprising files** in the diff; matches §Repository layout exactly.
+
+Implementer's deviations (all four):
+
+1. **`renderPrompt` local stub** — CORRECT disposition. Stub is clearly delimited, `_task`/`_ctx` underscore-prefix suppresses unused-vars lint, will be replaced at stage-10 merge after `04-prompt-templates` lands.
+2. **Local `ExitResult` instead of execa's `Result`** — CORRECT technically; the execa generic widens `stderr` to `string | string[] | unknown[] | Uint8Array | undefined` which makes the `?? ""` guard insufficient under strict mode without further narrowing. Local structural type isolates the three fields read.
+3. **Fake-claude reasoning-event shape fix** — CORRECT and necessary. Prior agent had `{ kind: "reasoning", summary: ... }`; canonical schema requires `{ kind: "reasoning", subkind: "thinking" | "message", text: string }`. MCP SDK's `callTool` silently swallows `isError: true` responses, masking the prior bug. Fix matches the schema.
+4. **`ctxPartial as ProjectContext` cast removed** — CORRECT. ESLint flagged it as unnecessary; structural compatibility holds without the cast. The APPROVED spec's confidence note #4 was wrong about this being an "established pattern" — siblings don't use the cast either.
+
+Nothing punted on correctness; all 3 should-fix + 1 nit applied.
 
 ---
 

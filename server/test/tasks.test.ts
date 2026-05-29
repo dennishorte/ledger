@@ -17,6 +17,7 @@ import { createEventBus, withPublishing } from "../src/runner/events.js";
 import { createServer } from "../src/server.js";
 import { createMcpServer } from "../src/dispatcher/mcp/server.js";
 import { createBindingRegistry } from "../src/dispatcher/mcp/binding.js";
+import { createCancellationRegistry } from "../src/dispatcher/executor/cancellation.js";
 import type { ProjectContext } from "../src/context.js";
 import type { Task, LogEvent } from "@ledger/parser";
 
@@ -44,6 +45,7 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
   const mcp = createMcpServer({ version: "0.1.0" });
 
   const binding = createBindingRegistry();
+  const dispatchCancellation = createCancellationRegistry();
 
   const ctx: ProjectContext = {
     projectRoot: "/test",
@@ -55,6 +57,7 @@ function makeInMemoryContext(): ProjectContext & { closeAll: () => void } {
     runner,
     mcp,
     binding,
+    dispatchCancellation,
   };
 
   return { ...ctx, closeAll: () => { runner.close(); } };
