@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/04-prompt-templates`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-29)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-29 (IN_PROGRESS → VERIFY — stage-4 implementation complete)
+**Last Updated:** 2026-05-29 (VERIFY → COMPLETE — implementation review applied; live prompt content quality deferred to operator post-`05-dispatch-api`; snapshots locked rendering correctness mechanically)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tool surface the templates reference in their tool-contract reminder), `06-agent-dispatcher/03-claude-code-executor` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
