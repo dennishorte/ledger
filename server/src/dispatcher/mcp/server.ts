@@ -49,13 +49,11 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandleInternal
   });
 
   const server = new McpServer({ name: "ledger-runner", version: opts.version });
-
-  // Pre-register the tools capability so the server advertises it during initialize
-  // and responds to tools/list with an empty list before any tool is registered.
-  // The McpServer.setToolRequestHandlers() method is private in the TypeScript type
-  // but exists at runtime; calling it eagerly is the correct approach since
-  // 02-runner-tools will register tools on this server later.
-  (server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers();
+  // No setToolRequestHandlers() cast needed: the first server.registerTool(...)
+  // call in registerRunnerTools (02-runner-tools) re-enters the SDK's internal
+  // handler-registration path idempotently via the public surface.
+  // Cast retired by 02-runner-tools as a side effect of its real work.
+  // Resolves 01-mcp-server Open Issue for setToolRequestHandlers cast.
 
   const mcpRoute = new Hono<Record<string, unknown>>().all("/", (c) => {
     const request = c.req.raw;

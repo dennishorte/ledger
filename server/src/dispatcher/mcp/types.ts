@@ -40,8 +40,12 @@ export interface McpServerHandle {
 
 /**
  * Internal handle shape returned by createMcpServer (the synchronous factory).
- * Adds the _connect lifecycle method that createMcpServerAsync consumes once at boot.
- * Not exported from server/src/dispatcher/index.ts — only createMcpServerAsync is.
+ * Adds the _connect lifecycle method that loadProjectContext calls AFTER
+ * registering tools (02-runner-tools D1 — SDK requires tool registration
+ * before transport.connect; see 02-runner-tools §Implementation Notes
+ * deviation #1). Exported from server/src/dispatcher/index.ts so context.ts
+ * can drive the pre-connect tool-registration sequence; the _connect() method
+ * is intentionally absent from the public McpServerHandle type.
  */
 export interface McpServerHandleInternal extends McpServerHandle {
   _connect(): Promise<void>;

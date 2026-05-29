@@ -79,17 +79,17 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe("MCP handshake", () => {
-  it("initialize returns serverInfo { name: 'ledger-runner', version: '0.1.0' } and empty tools list", async () => {
+  it("initialize returns serverInfo { name: 'ledger-runner', version: '0.1.0' }", async () => {
     const handle = await makeHandle();
     const { client, cleanup } = await makeConnectedClient(handle);
     teardowns.push(cleanup);
 
-    // getServerVersion() returns the server's serverInfo reported during initialize
+    // getServerVersion() returns the server's serverInfo reported during initialize.
+    // tools/list is NOT called here — the SDK does not register the tools handler until
+    // the first registerTool call, so listTools() would return -32601 on a bare server.
+    // The five-tool assertion lives in server/test/dispatcher/mcp/tools.test.ts.
     const info = client.getServerVersion();
     expect(info).toMatchObject({ name: "ledger-runner", version: "0.1.0" });
-
-    const { tools } = await client.listTools();
-    expect(tools).toHaveLength(0);
   });
 });
 

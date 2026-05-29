@@ -391,6 +391,7 @@ The Acceptance check is intentionally narrower than the parent's roll-up (parent
   });
   ```
   `02-runner-tools`' `registerTool(...)` calls re-enter `setToolRequestHandlers()` idempotently (confirmed at `mcp.js` line 650), so the natural clean-up point is when that sub-leaf wires its first tool — replace the cast in `dispatcher/mcp/server.ts` with the public path above and the leaf's behaviour is unchanged. *(Priority: LOW — surfaces only on an SDK internal rename, and `02-runner-tools` retires the cast as a side effect of its real work.)*
+  **RESOLVED 2026-05-28 by `02-runner-tools` registerTool() side effect.** The cast has been removed from `server/src/dispatcher/mcp/server.ts`; the first `server.registerTool(...)` call in `registerRunnerTools` re-enters the SDK's internal `setToolRequestHandlers` path through a public surface. Test suite passes; `tools/list` now returns five tools instead of empty.
 
 ---
 

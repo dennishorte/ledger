@@ -22,6 +22,7 @@ export type {
   TaskStatus,
   TaskSource,
   ResourceClaim,
+  ReviewPayload,
   Task,
   TaskInput,
   LogEventId,

@@ -17,6 +17,12 @@ import type { NodeId } from "../coreTypes.js";
 
 export type TaskId = string;
 
+/**
+ * Review payload written by the `runner.await_human_review` MCP tool
+ * (06-agent-dispatcher/02-runner-tools B1 closure).
+ */
+export type ReviewPayload = { summary: string; diffRef?: string };
+
 export type TaskType =
   | "spec_draft"
   | "spec_review"
@@ -66,7 +72,7 @@ export interface Task {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
-  reviewPayload?: { summary: string; diffRef?: string };
+  reviewPayload?: ReviewPayload;
   /**
    * Required for optimistic concurrency on HITL approve/reject endpoints (PRD §8.4).
    * Defaults to 0 on insert; bumped on every UPDATE.
@@ -96,7 +102,7 @@ export interface TaskInput {
   dependsOn?: TaskId[]; // default []
   resourceClaims?: ResourceClaim[]; // default []
   agent?: { model: string; persona?: string };
-  reviewPayload?: { summary: string; diffRef?: string };
+  reviewPayload?: ReviewPayload;
   priority?: number; // default 0
 }
 
