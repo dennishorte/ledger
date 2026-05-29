@@ -36,6 +36,14 @@ export const reasons = {
   APPROVED: "approved",
   approvedWithNote: (note: string) => `approved: ${note.slice(0, 80)}`,
   rejected: (rationale: string) => `rejected: ${rationale.slice(0, 80)}`,
+  // 03-claude-code-executor: dispatcher subprocess lifecycle reasons
+  SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS: "subprocess_exit_without_terminal_status",
+  subprocessFailed: (tail: string) => `subprocess_failed:${tail.slice(0, 80)}`,
+  CANCELLED_BY_OPERATOR: "cancelled_by_operator",
+  // Defensive: pre-spawn failures (renderPrompt throw, writeMcpConfig fail,
+  // claude binary not found). Distinct from subprocessFailed because no
+  // subprocess was created (D10).
+  executorInternalError: (msg: string) => `executor_internal_error:${msg.slice(0, 80)}`,
 } as const;
 
 // ---------------------------------------------------------------------------
