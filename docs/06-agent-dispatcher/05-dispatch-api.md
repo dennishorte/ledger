@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/05-dispatch-api`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-05-29
-**Last Updated:** 2026-05-29 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
+**Last Updated:** 2026-05-29 (SPEC_REVIEW → APPROVED — applied 2 blocking + 4 should-fix + 5 nits from independent review; S2 promoted defaultResourceClaims to @ledger/parser)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (the `ClaudeCodeExecutor` registered for the eight types + `ProjectContext.dispatchCancellation: CancellationRegistry`), `06-agent-dispatcher/04-prompt-templates` (`defaultResourceClaims(task): ResourceClaim[]` used by the dispatch endpoint to synthesise claims when the operator's body doesn't override them)
 
@@ -39,8 +39,10 @@ In scope for v1:
    - Returns `200 { task: Task }` synchronously. The subprocess's eventual exit lands `reconcileExit`'s row 4 (final === "CANCELLED", short-circuit, no transition).
 3. **`useDispatch` mutation hook** at `app/src/lib/useDispatch.ts`. `POST /api/dispatch/:nodeId` with optional body `{ type?, priority?, resourceClaims? }`. On success: invalidate `["tasks"]` (the new task appears in lists); return `{ task }` from the response so the UI can toast the new task id + link to it. Errors: typed `MutationErrorBody` (the same shape `useApproveTask` uses — reused via re-export rather than duplicated; or its own copy if cross-hook import is awkward, see Decisions). Distinguishes `409 no_inferred_type` from `404 node_not_found` so the UI can show a relevant message.
 4. **`useCancelTask` mutation hook** at `app/src/lib/useCancelTask.ts`. `POST /api/tasks/:id/cancel`. On success: response-based `setQueryData(["task", id], { ...old, task: data.task })` (mirrors `useApproveTask`'s D12-amended pattern — flips the Cancel button visibility false atomically on the same render, no flicker). Background invalidate `["tasks"]` for the list. Errors: typed; distinguishes `409 no_subprocess` from generic 409.
-5. **Dispatch button in `app/src/components/dag/NodeInspector.tsx`.** Visibility rule: `node.authored && node.status ∈ {"APPROVED", "VERIFY", "DRAFT"}`. Click opens a small confirmation dialog (modal) showing the inferred task type + the synthesised title + the default `resourceClaims` (read from `defaultResourceClaims` on the client side OR returned by a `GET /api/dispatch/:nodeId/preview` endpoint — D below picks the simpler path: client-side preview via the same `defaultResourceClaims` import, since `04-prompt-templates`' exports are accessible from the server runtime but not from the browser; we mirror the small `defaultResourceClaims` switch in `app/src/lib/dispatch.ts` as a client-side mirror so the preview doesn't need a network round-trip). Confirm → POST. Success toast: `"Dispatched as task <short-id>"` with a link to the Tasks panel filtered on the new id.
-6. **Cancel button in `app/src/components/tasks/TaskInspector.tsx`.** Visibility rule: `live?.task.status === "RUNNING" && task.transcriptPath === undefined` (the runner-emitted discriminant the file already uses for HitlActions). Click → `useCancelTask.mutate({ taskId })`. On success: the button disappears (visibility flips false because `live.task.status` is now `CANCELLED`). On `409 no_subprocess`: toast `"Task is RUNNING but no subprocess to cancel (was it noop?). Marking CANCELLED requires the runner's executor to register one."` — not actionable from the UI; the operator escalates to investigation.
+5. **Dispatch button in `app/src/components/dag/NodeInspector.tsx`.** Visibility rule: `node.authored && node.status ∈ {"APPROVED", "VERIFY", "DRAFT"}`. The `node.authored` clause is an explicit extension beyond parent §Design "Dispatch button" (which doesn't mention `authored`) — manifest-only nodes have no actionable spec to dispatch against, so the button is hidden for them (Spec Review N3). Click opens a small confirmation dialog (modal) showing the inferred task type + the synthesised title + the default `resourceClaims` (computed via `defaultResourceClaims` imported directly from `@ledger/parser` — Spec Review S2 promoted the function to the parser package; no client/server mirror, no drift). Confirm → POST. Success: inline banner in the inspector reads `"Dispatched as task <short-id>"` with a link to the Tasks panel filtered on the new id (Spec Review N4 — picked the inline-banner pattern over `console.log` since no toast library is established yet).
+6. **Cancel button in `app/src/components/tasks/TaskInspector.tsx`.** Visibility rule: `live?.task.status === "RUNNING" && task.transcriptPath === undefined` (the runner-emitted discriminant the file already uses for HitlActions at line 73). Click → `useCancelTask.mutate({ taskId })`. On success: the button disappears (visibility flips false because `live.task.status` is now `CANCELLED`). On `409 no_subprocess`: inline banner in the inspector reads "Task is RUNNING but no subprocess to cancel (was it noop?). Marking CANCELLED requires the runner's executor to register one." Not actionable from the UI; operator escalates to investigation.
+
+   **Note on the discriminant (Spec Review S4):** Parent §Design "Cancel button" uses `!task.id.includes(":")` as the runner-vs-transcript gate; this leaf uses `task.transcriptPath === undefined` to align with the existing `TaskInspector.tsx` pattern at line 73. The two forms are functionally equivalent under current ID schemes (runner-emitted tasks have no `transcriptPath` AND no `:` in their UUID; transcript tasks always have `:` in their session/agent-prefixed ID AND a `transcriptPath`). The `transcriptPath` form is more semantically precise — the property name says what it tests.
 7. **Mounting** — `dispatchRoute` mounted at `/api/dispatch` in `server/src/server.ts` alongside the existing routes. The cancel route mounts inside the existing `app.route("/api/tasks", tasksRoute)` block, OR as a new `app.route("/api/tasks", cancelRoute)` (Hono allows multiple sub-apps on the same path prefix; the existing `hitlRoute` already does this for `/api/tasks`). D-?? below picks; the simpler path is to extend `tasksRoute` directly with the new endpoint to keep "all `POST /api/tasks/*` handlers in one file" for grep-ability.
 8. **Tests** at three layers:
    - **`server/test/dispatch.test.ts`** — dispatch endpoint round-trip. Cover: 404 on unknown nodeId; 409 on non-dispatchable status (IN_PROGRESS, COMPLETE, etc.); successful inference for APPROVED→implement, VERIFY→verify, DRAFT→spec_review; explicit `type` override in body; explicit `resourceClaims` override in body; the synthesised task is created with the right `agent`, `title`, and `resourceClaims`.
@@ -82,6 +84,13 @@ ledger/
 │       ├── dispatch.test.ts                   # NEW
 │       └── cancel.test.ts                     # NEW (in server/test/, not tasks.test.ts;
 │                                              #   keeps cancel-specific tests grep-able)
+├── packages/parser/
+│   └── src/
+│       ├── index.ts                           # modified — re-export defaultResourceClaims
+│       └── runner/
+│           └── defaultResourceClaims.ts       # NEW (Spec Review S2 — promoted from server)
+├── packages/parser/test/runner/
+│   └── defaultResourceClaims.test.ts          # NEW
 ├── app/
 │   └── src/
 │       ├── components/
@@ -90,7 +99,7 @@ ledger/
 │       │   └── tasks/
 │       │       └── TaskInspector.tsx          # modified — Cancel button
 │       └── lib/
-│           ├── dispatch.ts                    # NEW — client-side defaultResourceClaims mirror
+│           ├── types.ts                       # modified — re-export defaultResourceClaims
 │           ├── useDispatch.ts                 # NEW
 │           ├── useCancelTask.ts               # NEW
 │           ├── useDispatch.test.ts            # NEW
@@ -106,10 +115,10 @@ ledger/
 ```ts
 // server/src/routes/dispatch.ts
 import { Hono } from "hono";
-import { defaultResourceClaims } from "../dispatcher/index.js";
+import { defaultResourceClaims } from "@ledger/parser";  // promoted to parser per Spec Review S2
 import { reasons } from "../runner/scheduler.js";
 import type { ServerEnv } from "../server.js";
-import type { TaskType, NodeStatus, ResourceClaim } from "@ledger/parser";
+import type { Task, TaskType, NodeStatus, ResourceClaim } from "@ledger/parser";  // Task added per Spec Review N1
 
 // Lifecycle status → inferred task type. Status values not in this map
 // produce 409 no_inferred_type unless the body overrides `type`.
@@ -134,7 +143,22 @@ export const dispatchRoute = new Hono<ServerEnv>().post("/:nodeId", async (c) =>
   const inferredType = body.type ?? TYPE_INFERENCE[node.status];
   if (!inferredType) {
     return c.json(
-      { error: "no_inferred_type", nodeStatus: node.status, hint: "Provide `type` in body or pick a node in APPROVED/VERIFY/DRAFT." },
+      {
+        error: "no_inferred_type",
+        nodeStatus: node.status,
+        // Spec Review S1: differentiated hint so the operator can tell why
+        // their click failed. Each branch maps to actionable operator guidance.
+        hint:
+          node.status === "PLANNED"
+            ? `Node is PLANNED — not yet ready for dispatch. Draft the spec first (set Status: DRAFT) or pick a different node.`
+            : node.status === "SPEC_REVIEW"
+            ? `Node is SPEC_REVIEW — currently under review. Wait for the review to land (SPEC_REVIEW → APPROVED) or pick a different node.`
+            : node.status === "IN_PROGRESS"
+            ? `Node is IN_PROGRESS — already running. Check the Tasks panel for the in-flight dispatch.`
+            : node.status === "COMPLETE"
+            ? `Node is COMPLETE — no work to dispatch. Pick a different node or override the type via body.`
+            : `Node is in ${node.status}; dispatch is only valid for APPROVED, VERIFY, or DRAFT nodes.`,
+      },
       409,
     );
   }
@@ -160,7 +184,15 @@ export const dispatchRoute = new Hono<ServerEnv>().post("/:nodeId", async (c) =>
 });
 ```
 
-The `defaultResourceClaims` call takes a partial Task shape (just `id` + `type` + `parentTaskId` for the cases that read it). Cast to `Task` is a localised assertion — the helper does not read any other field. Alternative: extend `defaultResourceClaims`'s signature to accept the narrower input shape; defer to Spec Review if the reviewer flags this.
+The `defaultResourceClaims` call takes a partial Task shape — the helper reads `task.id`, `task.type`, and (for verify/reverify) `task.parentTaskId`; nothing else. Cast to `Task` is a localised assertion safe under this surface.
+
+**Note on parent spec drift (Spec Review B2):** Parent §Design "Dispatch endpoint semantics" reads "*If claims are omitted, the endpoint declares a single write claim on the target node*". That description is a simplification that pre-dated `04-prompt-templates`' actual implementation. The real `defaultResourceClaims` returns **type-specific** claim sets:
+- `implement` / `spec_draft` / `doc_refactor` / `issue_triage` → `{ kind: "node", nodeId, mode: "write" }` (single write — matches parent's description)
+- `spec_review` → `{ kind: "node", nodeId, mode: "read" }` (read-only; does NOT match parent's "write")
+- `verify` / `reverify` → read on `nodeId` + read on `parentTaskId` (two claims, both read)
+- `project_status_review` → read on `00-project` (a different node entirely from the dispatched one)
+
+This leaf delivers on the actual implementation; the parent's simplification is superseded by `04`'s shipped `defaultResourceClaims`. Implementer reads the leaf's behavior here, not the parent's earlier prose.
 
 ### `POST /api/tasks/:id/cancel` — handler shape
 
@@ -182,16 +214,26 @@ tasksRoute.post("/:id/cancel", async (c) => {
   }
 
   const reason = body.reason ?? reasons.CANCELLED_BY_OPERATOR;
-  const updated = project.runner.store.updateTaskStatus(
-    id,
-    { from: "RUNNING", to: "CANCELLED", reason },
-  );
+  let updated;
+  try {
+    updated = project.runner.store.updateTaskStatus(
+      id,
+      { from: "RUNNING", to: "CANCELLED", reason },
+    );
+  } catch (err) {
+    // Spec Review B1: `store.updateTaskStatus` throws if the `from` guard
+    // fails (race window: scheduler ticks RUNNING → COMPLETE between our
+    // loadTask check and the UPDATE). Map to 409 wrong_status — same shape
+    // as the loadTask-time check above, so the client sees one consistent
+    // 409 path regardless of which side of the race fired first.
+    return c.json({ error: "wrong_status", expected: "RUNNING", actual: "raced" }, 409);
+  }
   subprocess.kill("SIGTERM");
   return c.json({ task: updated }, 200);
 });
 ```
 
-The cancel route reuses the existing `tasksRoute` (D-?? below); no new sub-app. The eager DB write happens BEFORE the SIGTERM — operator gets the synchronous 200 reflecting the new CANCELLED status, and the subprocess's eventual exit is handled by `03`'s `reconcileExit` row 4 (final === "CANCELLED" → short-circuit, no transition; parent D14).
+The cancel route reuses the existing `tasksRoute` (D1); no new sub-app. The eager DB write happens BEFORE the SIGTERM — operator gets the synchronous 200 reflecting the new CANCELLED status, and the subprocess's eventual exit is handled by `03`'s `reconcileExit` row 4 (final === "CANCELLED" → short-circuit, no transition; parent D14).
 
 ### `useDispatch` mutation hook
 
@@ -227,8 +269,15 @@ export function useDispatch() {
   return useMutation({
     mutationFn: postDispatch,
     onSuccess: () => {
-      // The new task is PENDING — no [task, id] cache to update yet.
-      // Invalidate the list so the new task appears.
+      // No setQueryData for the new task (Spec Review S3 rationale):
+      //   - The new task is PENDING on creation; by the time the operator
+      //     clicks the toast link to navigate to it, the scheduler has
+      //     likely already transitioned it to RUNNING (the scheduler ticks
+      //     immediately after createTask).
+      //   - Seeding the cache with the PENDING snapshot would cause the
+      //     inspector to flash "PENDING" before refetching the live status.
+      //   - The ["tasks"] list invalidation below covers the case where the
+      //     operator stays in the Tasks panel and watches the new row appear.
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -269,12 +318,17 @@ export function useCancelTask() {
   return useMutation({
     mutationFn: postCancel,
     onSuccess: (data, { taskId }) => {
-      // Mirror useApproveTask's D12-amended pattern: response-based
-      // setQueryData flips the Cancel button visibility false atomically.
+      // Response-based cache update: write the post-transition task into the
+      // inspector's cache so the Cancel button visibility (gated on
+      // live?.task.status === "RUNNING") flips false on the same render.
+      // Mirrors useApproveTask's D12-amended pattern (05-task-runner/
+      // 05-ui-hook-migration stage-8b loop-back).
       queryClient.setQueryData<TaskDetail | null>(
         ["task", taskId],
         (old) => (old ? { ...old, task: data.task } : old),
       );
+      // Background refresh: list rows + inspector events. The events list
+      // is not in the response — left stale and refreshed by the invalidate.
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
     },
@@ -282,40 +336,34 @@ export function useCancelTask() {
 }
 ```
 
-### Client-side `defaultResourceClaims` mirror
+### Promote `defaultResourceClaims` to `@ledger/parser` (Spec Review S2)
+
+The original draft prescribed a client-side `clientDefaultResourceClaims` mirror in `app/src/lib/dispatch.ts` with a drift-detection test against the server's `defaultResourceClaims`. Spec Review S2 caught this as architecturally infeasible: a test comparing both functions can't cleanly import across the workspace boundary (`app/package.json` has no `exports` field that makes its modules importable from `server/` test code, and the reverse is also messy).
+
+The cleaner v1 fix — also recommended by the reviewer — is to **promote `defaultResourceClaims` from `server/src/dispatcher/prompts/index.ts` into `@ledger/parser/src/runner/`** so both the dispatch endpoint and the UI's confirmation dialog import it directly. The function is a pure switch over `Task["type"]` returning `ResourceClaim[]` — its only dependencies (`Task`, `ResourceClaim`, `TaskType`) are already canonical in `@ledger/parser`.
+
+The migration:
 
 ```ts
-// app/src/lib/dispatch.ts
-import type { ResourceClaim, NodeId, TaskType } from "./types.js";
+// packages/parser/src/runner/defaultResourceClaims.ts (NEW; ~25 LOC)
+import type { Task, ResourceClaim } from "./types.js";
 
-/**
- * Client-side mirror of server/src/dispatcher/prompts/index.ts's
- * defaultResourceClaims. The two MUST stay in sync; a test in
- * dispatch.test.ts (server) and dispatch.test.ts (app) snapshot both
- * outputs against a fixture input and diffs them.
- *
- * Rationale (Spec D): we mirror rather than fetching from the server because
- * the preview dialog is opened immediately on button click; a network round-trip
- * would block the dialog render.
- */
-export function clientDefaultResourceClaims(
-  nodeId: NodeId,
-  type: TaskType,
-  parentTaskId?: NodeId,
-): ResourceClaim[] {
-  switch (type) {
+export function defaultResourceClaims(task: Task): ResourceClaim[] {
+  switch (task.type) {
     case "implement":
     case "spec_draft":
     case "doc_refactor":
     case "issue_triage":
-      return [{ kind: "node", nodeId, mode: "write" }];
+      return [{ kind: "node", nodeId: task.id, mode: "write" }];
     case "spec_review":
-      return [{ kind: "node", nodeId, mode: "read" }];
+      return [{ kind: "node", nodeId: task.id, mode: "read" }];
     case "verify":
     case "reverify":
       return [
-        { kind: "node", nodeId, mode: "read" },
-        ...(parentTaskId ? [{ kind: "node" as const, nodeId: parentTaskId, mode: "read" as const }] : []),
+        { kind: "node", nodeId: task.id, mode: "read" },
+        ...(task.parentTaskId
+          ? [{ kind: "node" as const, nodeId: task.parentTaskId, mode: "read" as const }]
+          : []),
       ];
     case "project_status_review":
       return [{ kind: "node", nodeId: "00-project", mode: "read" }];
@@ -325,7 +373,19 @@ export function clientDefaultResourceClaims(
 }
 ```
 
-Mirrors the server's `defaultResourceClaims` byte-for-byte (same cases, same returns). The drift-detection test compares fixture outputs of both functions and fails the build on mismatch. The reviewer should flag if there's a cleaner solution (e.g., extracting the helper to `@ledger/parser` so both consumers import it directly) — D-?? below picks the mirror approach for v1.
+Re-export from `packages/parser/src/index.ts`. `server/src/dispatcher/prompts/index.ts` deletes its local copy and re-exports from `@ledger/parser`; the existing `import { defaultResourceClaims } from "../prompts/index.js"` sites in `server/src/dispatcher/index.ts`'s barrel keep working without change.
+
+The UI's `NodeInspector.tsx` then imports directly: `import { defaultResourceClaims } from "@/lib/types";` (the existing parser re-export pattern from `app/src/lib/types.ts`). No mirror, no drift, no client/server divergence test. The Open Issue from the original draft is closed at the spec-review stage.
+
+The implementer's checklist for this migration:
+1. Create `packages/parser/src/runner/defaultResourceClaims.ts` with the code above.
+2. Re-export from `packages/parser/src/index.ts`.
+3. Re-export from `app/src/lib/types.ts` (mirror the existing `Task`, `LogEvent`, etc. re-export pattern).
+4. Delete the local `defaultResourceClaims` from `server/src/dispatcher/prompts/index.ts` and re-export from `@ledger/parser`.
+5. The existing test in `server/test/dispatcher/prompts/index.test.ts` keeps working (it imports from `@ledger/server`'s barrel which transitively resolves the parser re-export).
+6. Add `defaultResourceClaims` tests to `packages/parser/test/runner/defaultResourceClaims.test.ts` — one case per task type plus the `noop` / `human_review` fallthrough.
+
+The `app/src/lib/dispatch.ts` file is NOT created. The original §Repository layout entry for it is removed.
 
 ### Confirmation dialog (NodeInspector)
 
@@ -374,7 +434,7 @@ Mirrors the server's `defaultResourceClaims` byte-for-byte (same cases, same ret
 |---|----------|-----------|
 | D1 | Cancel endpoint extends the existing `tasksRoute` (not a new sub-app) | The endpoint shape is `POST /api/tasks/:id/cancel` — already under `/api/tasks`. Adding a third sub-app on the same prefix is feasible (Hono allows it; `hitlRoute` does this for approve/reject) but extending `tasksRoute` keeps all `POST /api/tasks/*` handlers grep-able from a single file. Trade-off: tasksRoute grows by ~15 lines; acceptable. |
 | D2 | Dispatch route IS a new sub-app at `/api/dispatch` | The endpoint shape is `POST /api/dispatch/:nodeId` — distinct prefix, distinct file. No reason to bury it inside `tasksRoute`. |
-| D3 | Client-side `clientDefaultResourceClaims` mirrors the server's `defaultResourceClaims` (no fetch on dialog open) | Network round-trip to fetch claims would block the dialog render; an immediate render with the wrong claims would mislead the operator. Mirroring is the cleanest v1: a single drift-detection test (fixture-input compared across both functions) prevents silent divergence. The alternative — extracting the helper to `@ledger/parser` for cross-consumption — is the right v2 cleanup; the mirror works for v1 because the function is small (~15 LOC) and the dispatcher's task types are stable. Logged as Open Issue. |
+| D3 | `defaultResourceClaims` promoted to `@ledger/parser/src/runner/`; both server and UI import directly (Spec Review S2) | Original draft proposed a client-side mirror with a drift-detection test, but the test was architecturally infeasible across the `app/` ↔ `server/` workspace boundary (`app/package.json` has no `exports` field that would let `server/` test code import from it). The cleaner v1 fix: promote the function to `@ledger/parser` where both consumers can import it. The function is a pure switch over `Task["type"]` returning `ResourceClaim[]`; all type dependencies (`Task`, `ResourceClaim`, `TaskType`) already live in the parser package. The migration is ~25 LOC + a re-export. Server's `dispatcher/prompts/index.ts` becomes a re-exporter to preserve the existing import paths from `02-runner-tools`. No mirror, no drift. |
 | D4 | Type inference uses a `Partial<Record<NodeStatus, TaskType>>` constant rather than a switch | Three entries today, possibly more in the future (e.g., `ISSUE_OPEN → reverify`). A Record is straightforward and TypeScript catches a missing entry if the value type is narrowed (here we use `Partial`, so missing entries are explicit — they fall into the 409 `no_inferred_type` branch). |
 | D5 | The dispatch endpoint accepts overrides for `type`, `priority`, and `resourceClaims` only — NOT for `dependsOn`, `parent_task_id`, etc. | Dispatched tasks are standalone (no parent task); `dependsOn` would let the operator manufacture arbitrary DAGs which is `POST /api/tasks`'s job (parent §Out-of-scope item). Keeping the dispatch surface narrow keeps the UI's confirmation dialog simple. |
 | D6 | Cancel response is synchronous (200 after SIGTERM delivered; subprocess exit is async) — inherits parent D14 | Operator gets immediate feedback; downstream waiting tasks become eligible immediately. Subprocess's continued tool-call attempts fail with `task_not_bound` (the cancellation registry doesn't unbind on the cancel, but the eager DB write means `runner.complete_task` etc. would 409 on `from === RUNNING` check). Worst case: a zombie subprocess (inherited parent Open Issue). |
@@ -391,13 +451,44 @@ Mirrors the server's `defaultResourceClaims` byte-for-byte (same cases, same ret
 
 ## Open Issues
 
-- **`defaultResourceClaims` is mirrored client-side rather than imported.** D3 acknowledges. If a future task type lands without updating both copies, the drift-detection test catches it. The cleaner v2 fix: extract `defaultResourceClaims` to `@ledger/parser` (it depends on `ResourceClaim` + `TaskType`, both already there) and have both consumers import it. *(Priority: LOW — drift-test mitigates.)*
+- ~~**`defaultResourceClaims` is mirrored client-side rather than imported.**~~ RESOLVED at SPEC_REVIEW (S2) by promoting `defaultResourceClaims` to `@ledger/parser/src/runner/` so both server and UI import directly. No mirror, no drift-detection test required.
 - **`MutationErrorBody` lives in `useApproveTask.ts` as its "home".** The convention works but couples hook files. A future `app/src/lib/errors.ts` extraction would centralise. *(Priority: TRIVIAL — current convention is stable.)*
 - **No 80-char truncation on operator-supplied cancel reasons.** D11 acknowledges. The existing `reasons.rejected(rationale)` and `approvedWithNote(note)` builders DO truncate; an analogous `reasons.cancelledByOperatorWithNote(note)` builder would be the natural addition. Defer until an operator actually passes a custom reason (UI doesn't today). *(Priority: TRIVIAL.)*
 - **Cancel-on-noop returns 409 `no_subprocess`.** D9 acknowledges. The UI surfaces the typed error; operator decides what to do. A future UI enhancement could hide the Cancel button on tasks whose type is in a documented "synchronous executor" set, but that requires the UI to know the type taxonomy. Out of v1 scope. *(Priority: LOW.)*
 - **Dispatch on a node already running a dispatched task** — second dispatch creates a new task, scheduler sees the resource-claim conflict, the second task lands BLOCKED with `blocked_by_claim_conflict`. The UI doesn't pre-empt; the operator sees the blocked state in the Tasks panel inspector. Documented behaviour, not a bug. *(Priority: TRIVIAL.)*
 - **SIGKILL escalation for hung cancels.** Inherited from `03`'s Open Issues. The cancellation registry would need a per-task timer; that lives in `03-claude-code-executor`'s scope, not here. Cross-reference for visibility. *(Priority: MEDIUM — surfaces when cancellation is heavily used.)*
 - **`DispatchConfirmDialog` toast surface depends on whether the UI has a toast system.** v1's `01-ui` shell may or may not ship one; the spec leaves it to the implementer to discover and document. If no toast lib exists, the dispatch button's success path could navigate to the new task's detail view directly (which makes the "task created" event tangible without a toast). *(Priority: LOW — implementation-time concern.)*
+
+---
+
+## Spec Review (2026-05-29)
+
+Independent spec review run against this DRAFT in clean Sonnet context. Verdict: **NEEDS_MINOR_REVISIONS** — 2 Blocking, 4 Should-fix, 5 Nits, 6 Confidence notes. PRD coverage matrix Addressed across §5/§6.1/§6.2/§7/§10/§11/§14; §8.4 partially-addressed (OCC closure landed via B1 fix). All findings applied. Audit:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `store.updateTaskStatus` throws if the `from === "RUNNING"` guard fails (race window: scheduler ticks RUNNING → COMPLETE between `loadTask` and the UPDATE). Cancel handler has no try/catch, so the race throws to Hono's default error handler → opaque 500 instead of a clean 409. | Cancel handler pseudocode now wraps `updateTaskStatus` in try/catch; on throw, returns `409 wrong_status` with `actual: "raced"` to distinguish from the loadTask-time 409. Same client-side error shape, one consistent 409 path regardless of which side of the race fired first. |
+| B2 | Parent §Design "Dispatch endpoint semantics" describes "single write claim on the target node" as the claim default. Actual `defaultResourceClaims` (shipped by 04) returns type-specific claims: spec_review→read, verify/reverify→read+parent, project_status_review→PRD-node read. Parent's prose is now stale; a reader trusting it expects wrong behaviour. | §Design comment after `defaultResourceClaims` call now explicitly enumerates the actual per-type claim outputs and notes the parent's simplification is superseded by 04's shipped implementation. Implementer reads this leaf's behavior, not the parent's earlier prose. |
+| S1 | 409 `no_inferred_type` hint string was identical regardless of status — PLANNED, COMPLETE, IN_PROGRESS all got the same message. Confusing operator guidance. | Hint now branches on `node.status`: PLANNED → "draft the spec first"; SPEC_REVIEW → "wait for review"; IN_PROGRESS → "check Tasks panel"; COMPLETE → "no work to dispatch"; default → generic. Each actionable. |
+| S2 | Client-side `clientDefaultResourceClaims` mirror with drift-detection test was architecturally infeasible: a test comparing both functions couldn't cleanly import across the `app/` ↔ `server/` workspace boundary (`app/package.json` has no exports field). | **Promoted `defaultResourceClaims` to `@ledger/parser/src/runner/defaultResourceClaims.ts`** (the function is a pure switch over `Task["type"]` returning `ResourceClaim[]`; all type deps already in the parser package). Server's `dispatcher/prompts/index.ts` re-exports from `@ledger/parser`; UI imports from `@ledger/parser` via the existing `app/src/lib/types.ts` re-export. No mirror, no drift, no cross-package test needed. Closes the related Open Issue at SPEC_REVIEW. |
+| S3 | `useDispatch` `onSuccess` had no `setQueryData` for the new task — looked inconsistent with stated D12 mirror pattern. | Inline comment now explains the rationale: new task is PENDING at creation; by the time the operator navigates, the scheduler has transitioned it; seeding the cache with the PENDING snapshot would cause a "PENDING → RUNNING" flicker. `["tasks"]` list invalidation covers the in-panel watch case. |
+| S4 | Parent §Design "Cancel button" uses `!task.id.includes(":")` as the runner-vs-transcript discriminant; the leaf uses `task.transcriptPath === undefined`. The two are equivalent under current ID schemes but the inconsistency could confuse the implementer. | §Requirements item 6 now explicitly notes the equivalence and explains why the `transcriptPath` form is preferred (matches the existing `TaskInspector.tsx` pattern at line 73; more semantically precise). |
+| N1 | `Task` was used in the dispatch route pseudocode (`as Task` cast) but not imported. | `Task` added to the import line. |
+| N2 | §Verification item 10 ("Parent moves to VERIFY") read like a verifier-checked gate, but parent status updates land at stage 10 (cross-doc sync), not as a verifier pass/fail. | Reworded to "Parent's manifest row updated to COMPLETE (v1) for this child as part of stage 10's cross-doc sync. With all 5 children COMPLETE, the parent's own Status header transitions APPROVED → VERIFY." |
+| N3 | `node.authored &&` was added to the Dispatch-button visibility rule without acknowledging it as an extension beyond parent §Design "Dispatch button". | §Requirements item 5 now explicitly notes the `authored` clause as a deliberate extension (manifest-only nodes have no actionable spec to dispatch against). |
+| N4 | "If no toast library, log to console for v1" was vague — `console.log` is invisible to the operator. | Picked the inline-banner pattern (consistent with existing `HitlActions` error rendering). §Requirements items 5 + 6 updated. |
+| N5 | `useCancelTask` `onSuccess` comment didn't match `useApproveTask`'s comment style. | Comment rewritten to mirror `useApproveTask`'s pattern: explains the visibility-gate atomic flip + cites the D12-amended source. |
+
+Reviewer's **Confidence notes** (recorded for stage-4 implementer):
+
+1. **B1 verified against `store.ts` lines 325–380.** The `from` guard runs inside `db.transaction()`; mismatch throws a generic `Error` (not `OptimisticLockError`). The cancel handler's try/catch wrapping is the correct fix.
+2. **B2 verified against `server/src/dispatcher/prompts/index.ts` lines 152–172** (the COMPLETE `04` output). The type-specific claim outputs directly contradict the parent's "single write claim" simplification.
+3. **S2 cross-package import infeasibility confirmed**: `app/package.json` has no `exports` field that would let `server/` test code import from `app/src/lib/dispatch.ts`. The promotion-to-parser approach eliminates the problem.
+4. **`defaultResourceClaims` reads `task.id`** (in addition to `type` and `parentTaskId`). The cast `{ id: nodeId, type: inferredType, parentTaskId: undefined } as Task` correctly provides all three. No runtime issue.
+5. **Noop is synchronous and doesn't register a subprocess.** Confirmed against `executors.ts` lines 36–40: `noopExecutor.run` calls `handle.complete(task.id)` synchronously. By the time the operator could click Cancel, the noop task is already COMPLETE; the `RUNNING` visibility gate excludes it in practice. The `409 no_subprocess` path is a documented edge case, not a normal operator flow.
+6. **Hono multiple sub-apps on same prefix verified.** `server/src/server.ts` lines 22–23 show `app.route("/api/tasks", tasksRoute)` and `app.route("/api/tasks", hitlRoute)` co-existing. D1's pattern is established.
+
+Nothing punted; all 2 blocking + 4 should-fix + 5 nits + 6 confidence notes landed at SPEC_REVIEW.
 
 ---
 
@@ -420,7 +511,7 @@ When this leaf moves from `VERIFY` to `COMPLETE`, the verifier confirms:
 7. **`TaskInspector` Cancel button** visibility matrix: RUNNING + runner-emitted show; non-RUNNING hide; transcript-derived hide.
 8. **Drift-detection test** for `defaultResourceClaims` ↔ `clientDefaultResourceClaims` passes on the canonical fixture.
 9. **No regressions** on existing endpoints (`/api/_health`, `/api/project`, `/api/docs`, `/api/tasks*`, `/mcp`) or UI panels.
-10. **Parent moves to VERIFY.** With this leaf COMPLETE, `06-agent-dispatcher` has 5/5 children COMPLETE; the parent's manifest row in PRD §14 transitions APPROVED → VERIFY; CLAUDE.md round-2 dispatcher line synced.
+10. **Parent's manifest row updated** to `COMPLETE (v1)` for this child as part of stage 10's cross-doc sync. With all 5 children now COMPLETE, the parent `06-agent-dispatcher`'s own Status header transitions APPROVED → VERIFY (per leaf-workflow), and the PRD §14 + CLAUDE.md round-2 dispatcher line are synced.
 
 ---
 
