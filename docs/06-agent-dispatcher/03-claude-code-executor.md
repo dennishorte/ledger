@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/03-claude-code-executor`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-29)
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-29 (IN_PROGRESS → VERIFY — stage-4 implementation complete)
+**Last Updated:** 2026-05-29 (VERIFY → COMPLETE — implementation review applied; live `claude` smoke deferred to operator + LEDGER_SMOKE_TESTS run; fake-claude integration verified mechanically)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tools the spawned subprocess will call; `Runner.handle`; `BindingRegistry`), `06-agent-dispatcher/04-prompt-templates` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
