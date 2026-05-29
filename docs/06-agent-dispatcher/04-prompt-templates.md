@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/04-prompt-templates`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-05-28
-**Last Updated:** 2026-05-28
+**Last Updated:** 2026-05-28 (DRAFT → SPEC_REVIEW; reviewer dispatched in clean context)
 
 **Dependencies:** `06-agent-dispatcher/02-runner-tools` (the MCP tool surface the templates reference in their tool-contract reminder), `06-agent-dispatcher/03-claude-code-executor` (loose-coupled at the function signature `renderPrompt(task, ctx): string` — sibling leaf running in parallel, no file overlap per parent's §Children carve-up)
 
