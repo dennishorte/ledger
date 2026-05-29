@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/05-dispatch-api`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-05-29
-**Last Updated:** 2026-05-29 (SPEC_REVIEW → APPROVED — applied 2 blocking + 4 should-fix + 5 nits from independent review; S2 promoted defaultResourceClaims to @ledger/parser)
+**Last Updated:** 2026-05-29 (APPROVED → IN_PROGRESS — stage-4 implementer entered worktree)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (the `ClaudeCodeExecutor` registered for the eight types + `ProjectContext.dispatchCancellation: CancellationRegistry`), `06-agent-dispatcher/04-prompt-templates` (`defaultResourceClaims(task): ResourceClaim[]` used by the dispatch endpoint to synthesise claims when the operator's body doesn't override them)
 
