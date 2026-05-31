@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/05-dispatch-api`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-05-31)
 **Created:** 2026-05-29
-**Last Updated:** 2026-05-29 (SPEC_REVIEW → APPROVED — applied 2 blocking + 4 should-fix + 5 nits from independent review; S2 promoted defaultResourceClaims to @ledger/parser)
+**Last Updated:** 2026-05-31 (VERIFY → COMPLETE — operator manually verified dispatch + cancel curl paths against running server; 595 workspace tests pass)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (the `ClaudeCodeExecutor` registered for the eight types + `ProjectContext.dispatchCancellation: CancellationRegistry`), `06-agent-dispatcher/04-prompt-templates` (`defaultResourceClaims(task): ResourceClaim[]` used by the dispatch endpoint to synthesise claims when the operator's body doesn't override them)
 
@@ -404,7 +404,7 @@ The `app/src/lib/dispatch.ts` file is NOT created. The original §Repository lay
   <DispatchConfirmDialog
     node={node}
     inferredType={inferType(node.status)}
-    defaultClaims={clientDefaultResourceClaims(node.id, inferType(node.status), node.parentId)}
+    defaultClaims={defaultResourceClaims({ id: node.id, type: inferType(node.status), parentTaskId: undefined })}
     onCancel={() => setShowDispatchDialog(false)}
     onConfirm={() => dispatch.mutate({ nodeId: node.id })}
   />
@@ -494,7 +494,106 @@ Nothing punted; all 2 blocking + 4 should-fix + 5 nits + 6 confidence notes land
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Date:** 2026-05-29  
+**Implementer:** Claude Sonnet 4.6 (worktree `agent-a8de1c2c07e93d6e9`)
+
+### Dependencies pinned
+No new deps. `defaultResourceClaims` moved from `server/src/dispatcher/prompts/index.ts` to `packages/parser/src/runner/defaultResourceClaims.ts` — no new `package.json` entries.
+
+### Bundle delta
+**`app/` post-build gzip totals:** `index-DuCb0Gs6.js` 722.66 KB gzip, `DagPanel-B-zi5WOa.js` 506.32 KB gzip. Previous baseline was not captured against main HEAD from this worktree, but added code includes: `defaultResourceClaims` (~1.5 KB), `useDispatch.ts` (~0.8 KB), `useCancelTask.ts` (~0.8 KB), `NodeInspector` additions (~1.5 KB), `TaskInspector` additions (~0.5 KB), `DispatchConfirmDialog` (~0.5 KB). Estimated net addition ~+5 KB unminified / ~+2 KB gzip — within spec's +2–4 KB estimate.
+
+**`server/dist/` delta:** `routes/dispatch.js` (+3.1 KB), `routes/tasks.js` (cancel endpoint additions ~1.2 KB), `runner/defaultResourceClaims.js` lands in `packages/parser/dist/runner/` (+1.5 KB). Total server delta ~+5 KB.
+
+### Confidence-note re-verifications (Spec Review 2026-05-29)
+
+1. **B1 verified:** `store.ts` `updateTaskStatus` runs inside `db.transaction()` and throws a generic `Error` on `from` guard mismatch (verified store.ts lines 325–380). The cancel handler's try/catch correctly maps to `409 wrong_status` with `actual: "raced"`. Test `cancel.test.ts` exercises this path by mocking `updateTaskStatus` to throw.
+
+2. **B2 verified against `server/src/dispatcher/prompts/index.ts`:** The local `defaultResourceClaims` was removed and re-exported from `@ledger/parser`. The `packages/parser/src/runner/defaultResourceClaims.ts` implements the type-specific claim outputs (`spec_review` → read, `verify/reverify` → read+parentTaskId, `project_status_review` → PRD-node read). The parent spec's "single write claim" simplification is superseded by this implementation.
+
+3. **S2 confirmed:** `app/package.json` has no `exports` field (verified). The promotion-to-parser approach eliminates the workspace-boundary test infeasibility. `defaultResourceClaims` re-exported from both `packages/parser/src/index.ts` and `app/src/lib/types.ts`. The `server/src/dispatcher/prompts/index.ts` re-exports from `@ledger/parser`, preserving all existing import paths.
+
+4. **Confidence note #4 confirmed:** `defaultResourceClaims` accepts `Pick<Task, "id" | "type" | "parentTaskId">` (not `Task`) — the signature was narrowed at migration time. The dispatch handler passes `{ id: nodeId, type: inferredType, parentTaskId: undefined }` which satisfies this shape without a cast. No runtime issue.
+
+5. **Confidence note #5 confirmed:** Noop is synchronous (verified `executors.ts` lines 36–40: `noopExecutor.run` calls `handle.complete(task.id)` synchronously). By the time an operator clicks Cancel, the noop task is already COMPLETE; the `RUNNING` visibility gate excludes it in practice. The `409 no_subprocess` path is the documented edge case (D9). Cancel button test coverage includes this.
+
+6. **Confidence note #6 confirmed:** Hono multiple sub-apps on same prefix verified in existing `server.ts` (lines 22–23 show `app.route("/api/tasks", tasksRoute)` and `app.route("/api/tasks", hitlRoute)` co-existing). D1's pattern is established and working.
+
+### Deviations from spec
+
+- **`defaultResourceClaims` signature narrowed to `Pick<Task, "id" | "type" | "parentTaskId">`** instead of `Task`. This is strictly more permissive than the spec's `task: Task` — callers can pass partial shapes. The spec's pseudocode used `as Task` cast; the implementation avoids the cast by narrowing the type. Zero drift in behaviour.
+
+- **`inferType` helper function** extracted in `NodeInspector.tsx` for the `status → TaskType` mapping (same logic as `TYPE_INFERENCE` map in the dispatch route, but as a function for the UI's conditional rendering). Not mentioned in spec but follows the same D4 rationale (Partial<Record> → function equivalent for the UI side).
+
+- **`cancelErrorBanner` extracted** as a named function in `TaskInspector.tsx` (analogous to `errorBanner` for HitlActions). This keeps the component clean and is consistent with the existing pattern.
+
+### Gates results
+- `pnpm -C packages/parser build` ✓
+- `pnpm -C packages/parser test` ✓ (127 tests)
+- `pnpm -C server build` ✓
+- `pnpm -C server typecheck` ✓
+- `pnpm -C server lint` ✓
+- `pnpm -C app typecheck` ✓
+- `pnpm -C app lint` ✓
+- `pnpm -C app build` ✓
+- `pnpm test` (workspace fan-out) ✓ (127 + 134 + 334 = 595 tests, 2 env-gated skips)
+
+### Acceptance-check items requiring operator manual verification
+The following items from §Acceptance check cannot be verified headlessly:
+
+1. **Dispatch happy path** (item 3): Open DAG panel, select an APPROVED node (e.g., `06-agent-dispatcher/05-dispatch-api` once it's APPROVED again), click "Dispatch" → dialog shows "Task type: implement, Claims: [test-node: write]" → Confirm → banner shows "Dispatched as task …" → Tasks panel shows new task transitioning PENDING → RUNNING.
+
+2. **Dispatch on non-authored node** (item 5): Button not rendered for manifest-only nodes (confirmed by test, but needs visual check in live UI).
+
+3. **Cancel happy path** (item 6): Select a RUNNING dispatcher task, click "Cancel task" → button disappears, task status updates to CANCELLED.
+
+4. **Cancel on noop task** (item 8): Click Cancel on a RUNNING noop task → 409 no_subprocess inline banner appears. (Test covers the network path; UI rendering of the banner needs visual confirmation.)
+
+5. **DispatchConfirmDialog default claims display**: The claims list renders correctly for each task type (implement shows write, spec_review shows read, verify shows read).
+
+6. **Success banner navigation**: After dispatch, the inline banner reads "Dispatched as task {short-id}…". A future enhancement would make this a link to the Tasks panel filtered on the task id (currently text-only per the inline-banner pattern; no toast library was established in `01-ui/01-shell`).
+
+### Open concerns
+- **No toast navigation from the dispatch success banner**: The spec §Verification item 3 says "toast `Dispatched as task <id>` with a link to Tasks panel filtered on the new id." The inline banner currently shows the truncated ID as text, not a link. This is documented in the Open Issues section ("DispatchConfirmDialog toast surface"). A future pass could add a `<Link>` inside the banner or integrate a toast library. The core dispatch flow works; this is UX polish.
+- **The `MutationErrorBody` import in `NodeInspector.tsx`** is imported as a type for the error casting (`err as MutationErrorBody`). This creates a direct coupling between the DAG component and the task-hook file. D7 acknowledges this; a future `app/src/lib/errors.ts` extraction would be cleaner.
+
+### Test counts by layer
+- `packages/parser/test/runner/defaultResourceClaims.test.ts`: 14 new tests
+- `server/test/dispatch.test.ts`: 10 new tests
+- `server/test/cancel.test.ts`: 7 new tests
+- `app/src/lib/useDispatch.test.ts`: 5 new tests
+- `app/src/lib/useCancelTask.test.ts`: 6 new tests
+- `app/src/components/dag/NodeInspector.test.tsx`: 12 new tests (new file)
+- `app/src/components/tasks/TaskInspector.test.tsx`: 6 new tests (extensions to existing)
+
+### Implementation Review (2026-05-29)
+
+Independent implementation review against the rebased worktree branch (`worktree-agent-a8de1c2c07e93d6e9`) in clean Sonnet context. Verdict: **READY_FOR_COMPLETE** — all 10 gates PASS (parser build + 127 tests; server build + typecheck + lint + 334 tests + 2 env-gated skips; app typecheck + lint + build + 134 tests — **595 total**), every Spec Review (B1, B2, S1–S4, N1–N5) closure HONOURED, all 6 confidence notes CONFIRMED. No blocking, no should-fix. Two nits applied (stale spec text not updated when S2 promoted `defaultResourceClaims` to the parser at SPEC_REVIEW):
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| N1 | §Design §"Confirmation dialog (NodeInspector)" pseudocode sketch (line 407) still used the deleted `clientDefaultResourceClaims(node.id, inferType(node.status), node.parentId)` call shape. The actual implementation correctly uses `defaultResourceClaims({ id, type, parentTaskId: undefined })` — the sketch was a holdover from the original draft. | Sketch rewritten: `defaultClaims={defaultResourceClaims({ id: node.id, type: inferType(node.status), parentTaskId: undefined })}`. Matches the real call shape in `NodeInspector.tsx`. |
+| N2 | §Verification item 8 still referenced "Drift-detection test for `defaultResourceClaims` ↔ `clientDefaultResourceClaims` passes on the canonical fixture" — but S2 eliminated `clientDefaultResourceClaims` and the drift test entirely. | Item 8 rewritten: "`defaultResourceClaims` is canonical in `@ledger/parser` (Spec Review S2 promotion); both server and UI import directly. No mirror, no drift-detection test — by construction." |
+
+Reviewer's structural observations:
+
+- **No surprises in scope creep.** The diff is entirely within the prescribed file set. No unexpected files; no scope creep beyond the spec.
+- **CancelAction sub-component pattern.** The implementer extracted a small `CancelAction` sub-component inside `TaskInspector.tsx` (mirroring the existing `HitlActions` pattern). Documented in §Implementation Notes deviations; consistent with the file's established structure.
+- **`cancelErrorBanner` handles 3 cases** (not just the one prescribed by §Requirements item 6): `no_subprocess` (per spec), `wrong_status` (defensive — race or already-completed), generic fallback. The defensive `wrong_status` handler is a bonus that surfaces the B1 race path to the operator gracefully.
+- **The dispatch handler narrowed the `defaultResourceClaims` parameter** from the spec's `as Task` cast to a structural `Pick<Task, "id" | "type" | "parentTaskId">` argument. Cleaner; no cast required. Documented as a deviation in §Implementation Notes.
+
+Confidence-note re-verifications (all 6):
+
+1. **`store.updateTaskStatus` throws on `from`-guard mismatch.** Confirmed via `cancel.test.ts` (mocked throw → asserted 409 wrong_status with `actual: "raced"`). Try/catch in `tasks.ts:193–202`.
+2. **`defaultResourceClaims` reads `id`/`type`/`parentTaskId` only.** Confirmed via the migrated function signature (`Pick<Task, ...>`).
+3. **Cross-package import infeasibility eliminated by S2 promotion.** Confirmed by absence of any cross-package test files.
+4. **Pick<Task, ...> dispatch-handler arg pattern is sound.** No `as Task` cast in the implementation.
+5. **Noop is synchronous.** `showCancelButton` gated on `live?.task.status === "RUNNING"` — noop tasks are COMPLETE before any operator click could fire.
+6. **Hono multi-route works.** `server.ts:22–24` co-mounts `tasksRoute`, `hitlRoute`, and `dispatchRoute`; all 334 server tests pass.
+
+App bundle (estimated +2 KB gzip per the spec's projection; gzip baselines from main aren't worktree-diffable but the estimate matches). Server `dist/` delta ~+5.8 KB (`routes/dispatch.js` +3.1 KB, `routes/tasks.js` +1.2 KB, `packages/parser/dist/runner/defaultResourceClaims.js` +1.5 KB).
+
+Nothing punted; both nits applied as documentation cleanup.
 
 ---
 
@@ -509,7 +608,7 @@ When this leaf moves from `VERIFY` to `COMPLETE`, the verifier confirms:
 5. **`useCancelTask` test passes** the response-based `setQueryData` pattern.
 6. **`NodeInspector` Dispatch button** visibility matrix: APPROVED/VERIFY/DRAFT show; IN_PROGRESS/COMPLETE/PLANNED hide; non-authored nodes hide.
 7. **`TaskInspector` Cancel button** visibility matrix: RUNNING + runner-emitted show; non-RUNNING hide; transcript-derived hide.
-8. **Drift-detection test** for `defaultResourceClaims` ↔ `clientDefaultResourceClaims` passes on the canonical fixture.
+8. **`defaultResourceClaims` is canonical in `@ledger/parser`** (Spec Review S2 promotion); both the server's dispatch route and the UI's NodeInspector import it directly. No mirror, no drift-detection test — by construction.
 9. **No regressions** on existing endpoints (`/api/_health`, `/api/project`, `/api/docs`, `/api/tasks*`, `/mcp`) or UI panels.
 10. **Parent's manifest row updated** to `COMPLETE (v1)` for this child as part of stage 10's cross-doc sync. With all 5 children now COMPLETE, the parent `06-agent-dispatcher`'s own Status header transitions APPROVED → VERIFY (per leaf-workflow), and the PRD §14 + CLAUDE.md round-2 dispatcher line are synced.
 

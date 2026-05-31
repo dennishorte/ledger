@@ -34,6 +34,9 @@ export { validateTask } from "./runner/validateTask.js";
 export { validateLogEvent } from "./runner/validateLogEvent.js";
 export { validateTaskInput } from "./runner/validateTaskInput.js";
 
+// Dispatcher helpers (06-agent-dispatcher/05-dispatch-api — promoted from server/src/dispatcher/prompts/index.ts)
+export { defaultResourceClaims } from "./runner/defaultResourceClaims.js";
+
 // HITL validators (05-task-runner/03-hitl-gate)
 export { validateHitlApprove } from "./runner/validateHitlApprove.js";
 export { validateHitlReject } from "./runner/validateHitlReject.js";

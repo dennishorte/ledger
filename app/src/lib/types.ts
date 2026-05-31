@@ -107,6 +107,10 @@ export type {
   LogEvent,
 } from "@ledger/parser";
 
+// Dispatcher helper — promoted to @ledger/parser in 06-agent-dispatcher/05-dispatch-api S2
+// so the UI's NodeInspector confirmation dialog can call it without a client/server mirror.
+export { defaultResourceClaims } from "@ledger/parser";
+
 // ---------------------------------------------------------------------------
 // Workflow-progress types — introduced by 01-ui/09-workflow-progress
 // ---------------------------------------------------------------------------

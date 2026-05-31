@@ -14,6 +14,7 @@ import { streamSSE } from "hono/streaming";
 import { validateTaskInput } from "@ledger/parser";
 import type { TaskStatus, TaskType } from "@ledger/parser";
 import type { ServerEnv } from "../server.js";
+import { reasons } from "../runner/scheduler.js";
 
 const TERMINAL_STATUSES = new Set<TaskStatus>(["COMPLETE", "FAILED", "CANCELLED"]);
 const SSE_HEARTBEAT_MS = 15_000;
@@ -170,4 +171,43 @@ export const tasksRoute = new Hono<ServerEnv>()
     const created = project.runner.createTask(result.input);
     const task = project.runner.store.loadTask(created.id) ?? created;
     return c.json({ task }, 201);
+  })
+  // -------------------------------------------------------------------------
+  // POST /:id/cancel — eager CANCELLED transition + SIGTERM (D1 — inline in tasksRoute)
+  // Spec: docs/06-agent-dispatcher/05-dispatch-api.md §Design cancel handler shape
+  // -------------------------------------------------------------------------
+  .post("/:id/cancel", async (c) => {
+    const project = c.get("project");
+    const id = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+
+    const task = project.runner.store.loadTask(id);
+    if (task === undefined) return c.json({ error: "task_not_found", id }, 404);
+    if (task.status !== "RUNNING") {
+      return c.json({ error: "wrong_status", expected: "RUNNING", actual: task.status }, 409);
+    }
+
+    const subprocess = project.dispatchCancellation.lookup(id);
+    if (subprocess === undefined) {
+      return c.json({ error: "no_subprocess", id, taskType: task.type }, 409);
+    }
+
+    const reason = body.reason ?? reasons.CANCELLED_BY_OPERATOR;
+    let updated;
+    try {
+      updated = project.runner.store.updateTaskStatus(
+        id,
+        { from: "RUNNING", to: "CANCELLED", reason },
+      );
+    } catch {
+      // Spec Review B1: `store.updateTaskStatus` throws if the `from` guard
+      // fails (race window: scheduler ticks RUNNING → COMPLETE between our
+      // loadTask check and the UPDATE). Map to 409 wrong_status — same shape
+      // as the loadTask-time check above, so the client sees one consistent
+      // 409 path regardless of which side of the race fired first.
+      return c.json({ error: "wrong_status", expected: "RUNNING", actual: "raced" }, 409);
+    }
+
+    subprocess.kill("SIGTERM");
+    return c.json({ task: updated }, 200);
   });
