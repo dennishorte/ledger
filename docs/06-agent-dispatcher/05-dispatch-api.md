@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/05-dispatch-api`
 **Parent:** `06-agent-dispatcher` (`docs/06-agent-dispatcher/00-agent-dispatcher.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-05-31)
 **Created:** 2026-05-29
-**Last Updated:** 2026-05-29 (IN_PROGRESS → VERIFY — implementation complete; all workspace gates green)
+**Last Updated:** 2026-05-31 (VERIFY → COMPLETE — operator manually verified dispatch + cancel curl paths against running server; 595 workspace tests pass)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (the `ClaudeCodeExecutor` registered for the eight types + `ProjectContext.dispatchCancellation: CancellationRegistry`), `06-agent-dispatcher/04-prompt-templates` (`defaultResourceClaims(task): ResourceClaim[]` used by the dispatch endpoint to synthesise claims when the operator's body doesn't override them)
 
