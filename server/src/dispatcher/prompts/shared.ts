@@ -4,7 +4,7 @@
  * Spec: docs/06-agent-dispatcher/04-prompt-templates.md §Design "shared.ts"
  */
 
-import type { Task } from "@ledger/parser";
+import type { Task, ResourceClaim } from "@ledger/parser";
 import type { ProjectContext } from "../../context.js";
 
 /**
@@ -16,6 +16,18 @@ export type Persona = Exclude<
   Task["type"],
   "noop" | "human_review" | "operator_session" | "agent_task"
 >;
+
+/**
+ * Returns the primary node ID for a dispatched task: the first "node"-kind
+ * resource claim. Dispatch tasks always carry at least one such claim (the
+ * target node). Templates use this to resolve the spec doc path instead of
+ * task.id (which is a UUID and does not map to any DocNode id).
+ */
+export function primaryNodeId(task: Task): string | undefined {
+  return (task.resourceClaims as ResourceClaim[]).find(
+    (c): c is Extract<ResourceClaim, { kind: "node" }> => c.kind === "node",
+  )?.nodeId;
+}
 
 /**
  * Per-persona preamble strings. Record<Persona, string> ensures compile-time

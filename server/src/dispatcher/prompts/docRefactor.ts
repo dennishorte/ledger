@@ -12,10 +12,11 @@ import {
   personaPreamble,
   mcpToolContractReminder,
   requiredReadingSection,
+  primaryNodeId,
 } from "./shared.js";
 
 export default function render(task: Task, ctx: ProjectContext): string {
-  const docPath = ctx.resolveDocPath(task.id);
+  const docPath = ctx.resolveDocPath(primaryNodeId(task) ?? "");
   const parentPath = task.parentTaskId ? ctx.resolveDocPath(task.parentTaskId) : undefined;
 
   const requiredReading = [

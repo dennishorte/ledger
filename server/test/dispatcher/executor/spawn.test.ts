@@ -61,6 +61,14 @@ describe("spawnClaudeCode", () => {
     // Order check: --mcp-config immediately before the path
     const mcpIdx = argv.indexOf("--mcp-config");
     expect(argv[mcpIdx + 1]).toBe(mcpConfigPath);
+    // --allowedTools wildcard grants all runner.* MCP tools
+    expect(argv).toContain("--allowedTools");
+    const allowedIdx = argv.indexOf("--allowedTools");
+    expect(argv[allowedIdx + 1]).toBe("mcp__ledger-runner__*");
+    // --permission-mode dontAsk prevents interactive prompts in --print mode
+    expect(argv).toContain("--permission-mode");
+    const permIdx = argv.indexOf("--permission-mode");
+    expect(argv[permIdx + 1]).toBe("dontAsk");
   });
 
   it("sets LEDGER_TASK_ID in env", async () => {

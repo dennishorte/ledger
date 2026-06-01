@@ -16,6 +16,7 @@
  * caught and transitioned with executorInternalError(msg) (D10).
  */
 
+import type { Task } from "@ledger/parser";
 import type { Executor } from "../../runner/executors.js";
 import type { ProjectContext } from "../../context.js";
 import { reasons } from "../../runner/scheduler.js";
@@ -23,6 +24,19 @@ import { spawnClaudeCode } from "./spawn.js";
 import { writeMcpConfig } from "./mcpConfig.js";
 import { reconcileExit } from "./lifecycle.js";
 import { renderPrompt } from "../prompts/index.js"; // replaces the stage-4 stub; 04 landed at the same merge bubble
+
+// Write-capable personas need Edit/Write/Bash beyond the base MCP wildcard.
+// Read-only personas only need the MCP tools; Read is auto-allowed in --print mode.
+const WRITE_TOOLS = ["Edit", "Write", "Bash"];
+const WRITE_PERSONAS: ReadonlySet<Task["type"]> = new Set([
+  "implement",
+  "spec_draft",
+  "doc_refactor",
+]);
+
+function extraAllowedTools(taskType: Task["type"]): string[] {
+  return WRITE_PERSONAS.has(taskType) ? WRITE_TOOLS : [];
+}
 
 // ---------------------------------------------------------------------------
 // Optional test-only override: allow tests to pass a claudeBin path so
@@ -48,6 +62,7 @@ export function createClaudeCodeExecutor(
           env: { LEDGER_TASK_ID: task.id },
           mcpConfigPath: mcpConfig.path,
           stdin: prompt,
+          extraAllowedTools: extraAllowedTools(task.type),
           claudeBin: opts.claudeBin,
         });
         ctx.dispatchCancellation.bind(task.id, subprocess);
