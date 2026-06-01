@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-01 (DRAFT → SPEC_REVIEW — 4 should-fix + 7 nits applied; reviewer verdict NEEDS_MINOR_REVISIONS, all resolved)
+**Last Updated:** 2026-06-01 (SPEC_REVIEW → APPROVED — all review findings resolved)
 
 **Dependencies:** `06-agent-dispatcher`
 
