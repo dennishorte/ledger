@@ -11,6 +11,8 @@ import type { McpServerHandle, McpServerHandleInternal, BindingRegistry } from "
 import { createCancellationRegistry } from "./dispatcher/executor/cancellation.js";
 import { createClaudeCodeExecutor } from "./dispatcher/executor/claudeCode.js";
 import type { CancellationRegistry } from "./dispatcher/executor/cancellation.js";
+import { createHealthDaemon } from "./daemon/index.js";
+import type { HealthDaemonHandle } from "./daemon/index.js";
 import pkg from "../package.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
@@ -45,6 +47,7 @@ export interface ProjectContext {
   docs: readonly DocNode[];
   /** Resolve a NodeId to its source docs/ path. Wraps pathForNodeId over ctx.docs. */
   resolveDocPath: (nodeId: string) => string | undefined;
+  daemon: HealthDaemonHandle; // wired in 07-health-daemon
 }
 
 export class ContextError extends Error {
@@ -120,10 +123,14 @@ export async function loadProjectContext(opts: {
   // Wire cancellation registry BEFORE creating the executor (factory reads it).
   const dispatchCancellation = createCancellationRegistry();
 
-  // Build the partial context — must include dispatchCancellation before the
-  // executor factory is called because the factory closes over it.
-  // Two-step cast matches the pattern established in 02-runner-tools wiring.
-  const ctxPartial = {
+  // Create the health daemon early — it only needs projectRoot/docsRoot/store,
+  // so it can be instantiated before the full context object is assembled.
+  // start() is called after the full ctx is built (D10).
+  const daemon = createHealthDaemon({ projectRoot, docsRoot, store: runner.store });
+
+  // Assemble the full context (including daemon) before passing to ClaudeCodeExecutor,
+  // so the type is satisfied and the executor closes over a complete ProjectContext.
+  const ctx: ProjectContext = {
     projectRoot,
     docsRoot,
     project: result.metadata,
@@ -136,15 +143,19 @@ export async function loadProjectContext(opts: {
     dispatchCancellation,
     docs,
     resolveDocPath,
+    daemon,
   };
 
   // Register ClaudeCodeExecutor for all eight dispatcher task types (D3).
   // Same instance registered for all types — prompt dispatch is 04-prompt-templates'
   // concern; the executor is type-blind at the spawn-and-wait level.
-  const claudeCodeExecutor = createClaudeCodeExecutor(ctxPartial);
+  const claudeCodeExecutor = createClaudeCodeExecutor(ctx);
   for (const type of DISPATCHER_TASK_TYPES) {
     runner.registerExecutor(type, claudeCodeExecutor);
   }
 
-  return ctxPartial;
+  // Start the daemon (D10) — after full context is assembled.
+  daemon.start();
+
+  return ctx;
 }

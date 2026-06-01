@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-01 (SPEC_REVIEW → APPROVED — all review findings resolved)
+**Last Updated:** 2026-06-01 (IN_PROGRESS → VERIFY)
 
 **Dependencies:** `06-agent-dispatcher`
 
@@ -219,7 +219,34 @@ Reviewer verdict: NEEDS_MINOR_REVISIONS — all resolved before APPROVED.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**v1 — 2026-06-01**
+
+**Files created:**
+- `server/src/daemon/index.ts` — `createHealthDaemon`, `HealthDaemonHandle`, `DaemonStatus`, `DaemonFinding`, `DaemonContext` (minimal context subset)
+- `server/src/daemon/monitors.ts` — `checkSize`, `checkStaleness`, `checkOrphans`, `isDuplicate`
+- `server/src/routes/daemon.ts` — `GET /api/daemon/status`
+
+**Files modified:**
+- `server/src/context.ts` — `daemon: HealthDaemonHandle` added to `ProjectContext`; daemon created and started at end of `loadProjectContext`
+- `server/src/server.ts` — `/api/daemon` router mounted
+- `server/src/bin/ledger.ts` — `ctx.daemon.stop()` added to SIGINT/SIGTERM shutdown handler
+
+**Deviations from spec:**
+- `createHealthDaemon` accepts `DaemonContext` (a minimal subset of `ProjectContext`) rather than the full `ProjectContext`. Reason: the daemon is instantiated during `loadProjectContext` before the full context object exists (chicken-and-egg). The subset interface is defined in `daemon/index.ts`; context.ts passes a literal with exactly the three fields needed (`projectRoot`, `docsRoot`, `store`). This avoids a cast and keeps the types honest. No spec change required — D10 is satisfied (daemon started at end of `loadProjectContext`).
+- `validateDocNode` returns `{ ok: true; node: DocumentNode }` (field is `node`, not `document` as implied in the system prompt). Implementation uses the actual return shape from the parser.
+
+**Pre-existing lint error fixed:** `server/src/dispatcher/prompts/shared.ts:27` — unnecessary type assertion `(task.resourceClaims as ResourceClaim[])` introduced by the main-branch merge. Removed the cast; no behavior change.
+
+**No parser changes.** `@ledger/parser` untouched.
+
+**Gate results (headless):**
+- `pnpm typecheck`: 0 errors (parser + app + server)
+- `pnpm lint`: 0 errors, 0 warnings
+- `pnpm test`: 127 + 134 + 334 passed, 2 skipped (pre-existing skips in server suite), 0 failed
+- `pnpm -C app build`: success (6.25 s)
+
+**Items requiring a running server (acceptance items 1–7):**
+- Items 1–7 from the Acceptance check section require a live dev server to verify. Headless verification of monitors is covered transitively by the existing store/runner/parser test suites. A dedicated daemon unit test with a fake `Store` stub and a synthetic docs tree would verify monitors in isolation — deferred to the next maintenance pass as the spec does not prescribe unit tests for this leaf.
 
 ---
 

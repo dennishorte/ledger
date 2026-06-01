@@ -7,6 +7,7 @@ import { docsRoute } from "./routes/docs.js";
 import { tasksRoute } from "./routes/tasks.js";
 import { hitlRoute } from "./routes/hitl.js";
 import { dispatchRoute } from "./routes/dispatch.js";
+import { daemonRoute } from "./routes/daemon.js";
 
 export type ServerEnv = { Variables: { project: ProjectContext } };
 
@@ -23,6 +24,7 @@ export function createServer(project: ProjectContext): Hono<ServerEnv> {
   app.route("/api/tasks", tasksRoute);
   app.route("/api/tasks", hitlRoute);
   app.route("/api/dispatch", dispatchRoute);
+  app.route("/api/daemon", daemonRoute);
   app.route("/mcp", project.mcp.mcpRoute); // MCP server — /mcp not /api/mcp (parent D4)
   return app;
 }
