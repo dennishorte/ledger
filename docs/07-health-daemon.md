@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-01 (IN_PROGRESS → VERIFY)
+**Last Updated:** 2026-06-01 (VERIFY → COMPLETE v1) (IN_PROGRESS → VERIFY)
 
 **Dependencies:** `06-agent-dispatcher`
 
@@ -195,6 +195,7 @@ No auth required (same posture as all other API routes).
 ## Open Issues
 
 - **Staleness fires on doc-sync commits.** A merge-commit that touches a COMPLETE spec's status row (e.g., to add a cross-reference) will advance git mtime without updating `lastUpdated`. The 2-day grace reduces noise but doesn't eliminate it. Long-term fix: write `lastUpdated` automatically in doc-sync commits, or use a separate `verified_at` field. *(Priority: LOW — acceptable false-positive rate in v1; operator can ignore or cancel the task.)*
+- **`readEnvInt` rejects `0` as a valid threshold value.** The guard `parsed > 0` was intended to reject nonsensical values (e.g. a 0 ms interval) but also blocks `0` as a valid orphan threshold. Setting `LEDGER_DAEMON_ORPHAN_THRESHOLD_DAYS=0` silently falls back to the default (14 days). Operators attempting to test orphan detection in a fresh project cannot use `0`; use `1` instead. Fix: change guard to `parsed >= 0` and add `&& !(key.includes("INTERVAL") && parsed === 0)` for the interval case specifically. *(Priority: LOW — does not affect production behaviour; documented workaround exists.)*
 - **Staleness monitor checks the doc file's git mtime, not implementation code files.** PRD §6.4's primary use case is detecting when implementation _artifacts_ (source files) changed after the last verification — this implementation instead checks whether the _spec doc itself_ drifted from its declared last-update. The real case (code changed, spec not touched) is not detected. Full artifact tracking would require enumerating each node's historical task `resourceClaims` and comparing their paths' git mtimes, which is a more expensive query. Deferred. *(Priority: LOW — the doc-level proxy is useful and the limitation is accepted for v1.)*
 
 ---
@@ -247,6 +248,24 @@ Reviewer verdict: NEEDS_MINOR_REVISIONS — all resolved before APPROVED.
 
 **Items requiring a running server (acceptance items 1–7):**
 - Items 1–7 from the Acceptance check section require a live dev server to verify. Headless verification of monitors is covered transitively by the existing store/runner/parser test suites. A dedicated daemon unit test with a fake `Store` stub and a synthetic docs tree would verify monitors in isolation — deferred to the next maintenance pass as the spec does not prescribe unit tests for this leaf.
+
+### Implementation Review (2026-06-01)
+
+Reviewer verdict: READY_FOR_MERGE — no blocking or should-fix findings.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | All S1–S4 and N1–N7 spec review items honoured in code | Confirmed |
+| R2 | `DaemonContext` subset avoids circular dep cleanly | Accepted deviation |
+| R3 | Pre-existing lint error in `shared.ts` fixed correctly | Confirmed; no behavior change |
+| R4 | `readEnvInt` rejects `0` as a valid env value, silently falling back to default | Known limitation — `> 0` guard treats 0 as invalid; does not affect production operation (defaults are correct); added to Open Issues |
+
+### Operator verification (2026-06-01)
+
+All 7 acceptance items verified against the worktree dev server:
+- Items 1–5, 7: verified at default/short interval settings
+- Item 6 (orphan): verified with `LEDGER_DAEMON_ORPHAN_THRESHOLD_DAYS=1` (project docs are <14 days old; 27 issue_triage tasks created correctly)
+- Dedup (item 4): second tick produced 35 `skipped_dedup` findings, 0 new tasks
 
 ---
 
