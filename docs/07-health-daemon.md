@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-01
+**Last Updated:** 2026-06-01 (DRAFT → SPEC_REVIEW — 4 should-fix + 7 nits applied; reviewer verdict NEEDS_MINOR_REVISIONS, all resolved)
 
 **Dependencies:** `06-agent-dispatcher`
 
@@ -45,6 +45,7 @@ Land the **document health daemon** — a periodic background process that monit
 loadProjectContext()
   └── createHealthDaemon(ctx) → HealthDaemonHandle
         start()               ← called once at the end of loadProjectContext
+          nextRunAt = now + intervalMs   // set immediately so status() is defined from boot
           setInterval(tick, intervalMs)
         tick()
           readDocsTree(ctx.docsRoot)           // fresh parse each tick
@@ -96,7 +97,9 @@ if estimatedTokens > sizeThresholdTokens:
 
 **Staleness monitor** (COMPLETE nodes only):
 ```
+relPath = path.relative(projectRoot, absFilePath)   // same working tree the server opened
 gitMtime = await execa('git', ['log', '-1', '--format=%aI', '--', relPath], { cwd: projectRoot })
+// doc.lastUpdated is always a bare YYYY-MM-DD per parseDocNode's annotation-stripping — no pre-processing required
 lastUpdatedDate = new Date(doc.lastUpdated + "T00:00:00Z")
 staleBy = gitMtime - lastUpdatedDate   (ms)
 if staleBy > stalenessGraceDays * 86_400_000 AND gitMtime is not empty:
@@ -106,8 +109,12 @@ if staleBy > stalenessGraceDays * 86_400_000 AND gitMtime is not empty:
 **Orphan monitor** (COMPLETE, PLANNED, DEFERRED, ISSUE_OPEN nodes with authored source):
 ```
 openIssuesText = doc.sections["Open Issues"]
-hasRealIssues = !openIssuesText.match(/^\s*\*\(none[^)]*\)\*\s*$/i)
-               && openIssuesText.trim().length > 0
+EMPTY_PLACEHOLDERS = [
+  /^\s*\*\(none[^)]*\)\*\s*$/i,   // *(none...)*  form
+  /^\s*none\.?\s*$/i,               // None.  or  none  (bare prose form)
+]
+hasRealIssues = openIssuesText.trim().length > 0
+               && !EMPTY_PLACEHOLDERS.some(p => p.test(openIssuesText.trim()))
 lastUpdatedAge = now - new Date(doc.lastUpdated + "T00:00:00Z")   (ms)
 if hasRealIssues AND lastUpdatedAge > orphanThresholdDays * 86_400_000:
   → issue_triage task with resourceClaims: [{ kind: "node", nodeId, mode: "write" }]
@@ -134,7 +141,7 @@ function isDuplicate(store: Store, type: TaskType, nodeId: string): boolean {
 
 ### Git mtime helper
 
-Uses `execa` (already a server dep). Runs `git log -1 --format=%aI -- <relPath>` with `cwd: projectRoot`. Returns `undefined` if the file has no git history (untracked) — staleness check skips those nodes.
+Uses `execa` — no new dependency; already in `server/package.json` from `06-agent-dispatcher/03-claude-code-executor`. Runs `git log -1 --format=%aI -- <relPath>` with `cwd: projectRoot`. Returns `undefined` if the file has no git history (untracked) — staleness check skips those nodes.
 
 ### API endpoint
 
@@ -153,15 +160,17 @@ No auth required (same posture as all other API routes).
 | `server/src/context.ts` | Add `daemon: HealthDaemonHandle` field; call `createHealthDaemon` + `daemon.start()` at end of `loadProjectContext` |
 | `server/src/routes/daemon.ts` | New — `GET /api/daemon/status` |
 | `server/src/server.ts` | Mount `/api/daemon` router |
+| `server/src/bin/ledger.ts` | Register `ctx.daemon.stop()` on SIGINT/SIGTERM teardown |
 
 ### Acceptance check
 
-1. `GET /api/daemon/status` returns `{ running: true, lastFindingsCount: 0, lastFindings: [] }` immediately after server boot (before first tick).
+1. `GET /api/daemon/status` returns `{ running: true, lastFindingsCount: 0, lastFindings: [] }` immediately after server boot (before first tick). `nextRunAt` is already set (to boot time + interval).
 2. After one tick interval, `lastRunAt` is set and `nextRunAt` is approximately `lastRunAt + intervalMs`.
 3. A doc whose markdown exceeds `sizeThresholdTokens * 4` chars generates a `doc_refactor` task visible in `GET /api/tasks`.
 4. A second tick does **not** duplicate the `doc_refactor` task (dedup fires, `action: "skipped_dedup"` in `lastFindings`).
-5. Killing the server and restarting: `GET /api/daemon/status` resets to `{ running: true, lastFindingsCount: 0 }` (no persisted state).
+5. Killing the server and restarting: `GET /api/daemon/status` resets to `{ running: true, lastFindingsCount: 0, lastFindings: [] }` (no persisted state bleeds across boot).
 6. A doc with non-placeholder Open Issues and `lastUpdated` older than threshold generates an `issue_triage` task.
+7. A COMPLETE doc whose git mtime is more than `stalenessGraceDays` past its `lastUpdated` generates a `reverify` task.
 
 ---
 
@@ -174,7 +183,7 @@ No auth required (same posture as all other API routes).
 | D3 | **Size in estimated tokens (chars / 4), not raw chars** | Token budget is the meaningful limit for the `doc_refactor` agent; char count is just the implementation proxy. The `/ 4` constant is well-known and accurate enough for prose. |
 | D4 | **Staleness = git mtime of doc file > frontmatter `lastUpdated` + grace days** | Detects commits that modified the doc without bumping the header. Untracked files (no git history) are skipped — they haven't been reviewed yet, so staleness doesn't apply. |
 | D5 | **Orphan detection via `sections["Open Issues"]` string matching** | `DocumentNode.sections` is already parsed. A regex check for the `*(none...)*` placeholder pattern correctly distinguishes real issues from the spec template's empty-state. |
-| D6 | **Dedup via `store.listTasks()` scan each tick** | Authoritative; no in-memory state to diverge from the store. Task counts are small; the scan is cheap. |
+| D6 | **Dedup via `store.listTasks()` scan each tick** | Authoritative; no in-memory state to diverge from the store. Task counts are small; the scan is cheap. No TOCTOU gap — the single-threaded Node process + synchronous better-sqlite3 API ensures no concurrent tick can interleave between the `listTasks` read and the `createTask` write. |
 | D7 | **Fresh `readDocsTree` + `parseDocNode` per tick** | `ctx.docs` is a boot-time snapshot of `DocNode` (lite). Daemon needs full `DocumentNode.sections` + `lastUpdated`; those require `parseDocNode`. Freshness also means the daemon sees docs committed since boot. |
 | D8 | **`DaemonStatus` is server-internal; not promoted to `@ledger/parser`** | UI-facing types go in parser when they're consumed by the app. This type is only served by one endpoint and consumed by one future UI component. Promote when the UI component is built. |
 | D9 | **`GET /api/daemon/status` only; no UI changes in v1** | The `/health` panel (`01-ui/06-health.md`) is COMPLETE. Adding daemon status is an additive maintenance update — appropriate for the next maintenance pass, not this leaf. |
@@ -186,8 +195,27 @@ No auth required (same posture as all other API routes).
 ## Open Issues
 
 - **Staleness fires on doc-sync commits.** A merge-commit that touches a COMPLETE spec's status row (e.g., to add a cross-reference) will advance git mtime without updating `lastUpdated`. The 2-day grace reduces noise but doesn't eliminate it. Long-term fix: write `lastUpdated` automatically in doc-sync commits, or use a separate `verified_at` field. *(Priority: LOW — acceptable false-positive rate in v1; operator can ignore or cancel the task.)*
+- **Staleness monitor checks the doc file's git mtime, not implementation code files.** PRD §6.4's primary use case is detecting when implementation _artifacts_ (source files) changed after the last verification — this implementation instead checks whether the _spec doc itself_ drifted from its declared last-update. The real case (code changed, spec not touched) is not detected. Full artifact tracking would require enumerating each node's historical task `resourceClaims` and comparing their paths' git mtimes, which is a more expensive query. Deferred. *(Priority: LOW — the doc-level proxy is useful and the limitation is accepted for v1.)*
 
 ---
+
+## Spec Review (2026-06-01)
+
+Reviewer verdict: NEEDS_MINOR_REVISIONS — all resolved before APPROVED.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | Orphan regex `\*\(none…\)\*` misses the `None.` bare-prose form used in some docs | Extended to two-pattern EMPTY_PLACEHOLDERS array in Design |
+| S2 | D6 missing TOCTOU note | Added sentence: single-threaded Node + sync better-sqlite3 prevents interleaving |
+| S3 | `relPath` computation unspecified in git mtime helper | Added `path.relative(projectRoot, absFilePath)` note to Staleness pseudocode |
+| S4 | Spec should note `doc.lastUpdated` is already annotation-stripped by parseDocNode | Added note in Staleness pseudocode block |
+| N1 | Acceptance item 5 missing `lastFindings: []` | Added to item 5 |
+| N2 | No acceptance item for staleness monitor | Added item 7 |
+| N3 | Verification missing `pnpm test` | Added as item 4 |
+| N4 | `server/src/bin/ledger.ts` missing from Files changed | Added row |
+| N5 | No note that execa is already a dep | Added to Git mtime helper subsection |
+| N6 | `nextRunAt` ambiguous for pre-first-tick state | Added `nextRunAt = now + intervalMs` set at `start()` time to lifecycle pseudocode |
+| N7 | Open Issues missing the code-file staleness gap | Added LOW-priority open issue |
 
 ## Implementation Notes
 
@@ -202,10 +230,11 @@ Before promoting to COMPLETE, verify:
 1. `GET /api/daemon/status` shape matches `DaemonStatus` exactly (no extra or missing fields).
 2. `pnpm typecheck` passes with zero errors (strict + noUncheckedIndexedAccess).
 3. `pnpm lint` passes.
-4. `pnpm -C app build` passes (no app-side changes, but confirm no regressions).
-5. All acceptance check items 1–6 pass against a running dev server.
-6. Dedup verified: two consecutive ticks with the same oversized doc produce exactly one `doc_refactor` task in the store.
-7. Server restart resets `DaemonStatus` (no persisted state bleeds across boot).
+4. `pnpm test` exits zero.
+5. `pnpm -C app build` passes (no app-side changes, but confirm no regressions).
+6. All acceptance check items 1–7 pass against a running dev server.
+7. Dedup verified: two consecutive ticks with the same oversized doc produce exactly one `doc_refactor` task in the store.
+8. Server restart resets `DaemonStatus` (no persisted state bleeds across boot).
 
 ---
 
