@@ -56,10 +56,7 @@ CLI args: `<project-path>` is required; `--port N` overrides the default 4180 (a
 
 **Build-order quirk**: `packages/parser/dist/` AND `server/dist/` are both gitignored. `app/` and `server/` resolve `@ledger/parser` via the package's `main` field (`dist/index.js`); `pnpm exec ledger` resolves `server/dist/bin/ledger.js` from the package's `bin` field. Run `pnpm -C packages/parser build` after a fresh clone or any parser-source change; run `pnpm -C server build` if you want `pnpm exec ledger` instead of `pnpm -C server dev`. (Logged for a future `pnpm -w build:packages` script that runs both automatically.)
 
-**`.env` and Anthropic auth (for `06-agent-dispatcher`'s dispatch flow):** the dispatched `claude` subprocess runs with `--bare`, which strictly requires `ANTHROPIC_API_KEY` or `apiKeyHelper` (OAuth and keychain reads are blocked by design — see `03-claude-code-executor` D6/D17). Project-root `.env` holds the key; `.env.example` documents the shape. `.env` is gitignored. Two ways to populate `ANTHROPIC_API_KEY`:
-
-1. **Subscription-backed (Pro/Max)** — run `claude setup-token` once interactively, paste the resulting token. Billing draws from the Claude subscription.
-2. **API-credit** — create a key at `console.anthropic.com/settings/keys`, paste the `sk-ant-…` value. Billing draws from API credits.
+**`.env` and Anthropic auth (for `06-agent-dispatcher`'s dispatch flow):** the dispatched `claude` subprocess runs with `--bare`, which strictly requires `ANTHROPIC_API_KEY` or `apiKeyHelper` (OAuth and keychain reads are blocked by design — see `03-claude-code-executor` D6/D17). Project-root `.env` holds the key; `.env.example` documents the shape. `.env` is gitignored. Populate `ANTHROPIC_API_KEY` with an API-credit key from `console.anthropic.com/settings/keys` (format `sk-ant-api03-…`). `claude setup-token`'s OAuth-format token (`sk-ant-oat01-…`) does NOT work here — subscription-auth support is logged as a deferred Open Issue in the parent dispatcher spec (verified during the parent's stage-8 verification on 2026-06-01).
 
 **Env-file loading per boot path:**
 
