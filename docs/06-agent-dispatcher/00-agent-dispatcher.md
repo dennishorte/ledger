@@ -2,7 +2,7 @@
 
 **Node ID:** `06-agent-dispatcher`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-05-28
 **Last Updated:** 2026-05-31 (APPROVED → VERIFY — all 5 children COMPLETE; parent now ready for end-to-end verification per §Acceptance check items 1–10)
 
@@ -398,7 +398,19 @@ Nothing punted. All B/S/N findings landed.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation; decomposition into children below)*
+**Stage-8 live verification (2026-06-01) — three bugs found and fixed:**
+
+1. **Prompt templates used UUID task ID for doc-path resolution.** All six write-task templates called `ctx.resolveDocPath(task.id)` where `task.id` is the UUID task ID, not a node ID. `pathForNodeId` always returned `undefined`, so the node's actual source path was omitted from the agent's required reading and the success-criteria docRef fell back to a `(spec doc for node <UUID>)` placeholder. Fix: `primaryNodeId(task)` helper added to `shared.ts` reads the first node-kind resource claim; all six templates updated to `ctx.resolveDocPath(primaryNodeId(task) ?? "")`. (`04-prompt-templates` implementation bug.)
+
+2. **MCP tool permissions blocked in `--print --bare` mode.** `claude --print --bare` with `--allowedTools <list>` still hits the interactive permission gate because the default permission mode prompts even for pre-approved tools — blocking indefinitely in a non-interactive context. Fix: `--permission-mode dontAsk` added to the subprocess argv (auto-denies unlisted tools, auto-approves listed tools without prompting); `--allowedTools "mcp__ledger-runner__*"` wildcard grants all five runner tools at once. (`03-claude-code-executor` + `spawn.ts` bug. Correct format verified via `claude --help` + documentation research: `--permission-mode` choices include `dontAsk`; MCP wildcard `mcp__<server-key>__*` is documented.)
+
+3. **Write-capable personas lacked Edit/Write/Bash grants.** `--permission-mode dontAsk` + MCP-only `--allowedTools` blocked `Edit`, `Write`, `Bash` for implement/spec_draft/doc_refactor tasks. Fix: `SpawnOpts` gains `extraAllowedTools`; `claudeCode.ts` populates it from a `WRITE_PERSONAS` set so read-only personas (spec_review, verify, reverify, issue_triage, project_status_review) receive no write grants and implement/spec_draft/doc_refactor receive `["Edit", "Write", "Bash"]`. (`03-claude-code-executor` implementation bug — the per-persona tool grant design was implicit in D17 but not spelled out.)
+
+**Acceptance check item 5 (partial):** The implement executor and MCP tool path work end-to-end — a dispatched implement task correctly calls `runner.fail_task` via MCP with detailed agent reasoning. The specific "spec file updated" assertion was not exercised because no APPROVED leaf exists in the current project state (all current leaves are COMPLETE). Full exercise will occur naturally when `07-health-daemon` reaches APPROVED and is dispatched.
+
+**Acceptance check item 9 (deferred):** UI coexistence of dispatcher-driven and transcript-derived tasks was not browser-verified. The dual-source `useTaskList` discriminant (`id.includes(":")` for transcripts vs bare UUID for runner tasks) was mechanically verified in `05-task-runner/05-ui-hook-migration` stage-8. Browser confirmation deferred to routine use.
+
+**Findings from the live spec_review dispatch (item 6):** The agent (dispatched against node `root` — PRD `docs/00-project.md`) returned verdict NEEDS_MINOR_REVISIONS with two should-fix doc-vs-code divergences: (S1) §8.4 reject → ISSUE_OPEN contradicts code (`hitl.ts` uses FAILED + reason `rejected:<feedback>`; TaskStatus has no ISSUE_OPEN/REJECTED); (S6) §10 "no task without declared resource claims" is a target invariant, not enforced (`TaskInput.resourceClaims` defaults `[]`; noop runs empty). These are PRD drift items to reconcile before the next PRD-touching node.
 
 ---
 
