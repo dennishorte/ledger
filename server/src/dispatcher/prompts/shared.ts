@@ -24,7 +24,7 @@ export type Persona = Exclude<
  * task.id (which is a UUID and does not map to any DocNode id).
  */
 export function primaryNodeId(task: Task): string | undefined {
-  return (task.resourceClaims as ResourceClaim[]).find(
+  return task.resourceClaims.find(
     (c): c is Extract<ResourceClaim, { kind: "node" }> => c.kind === "node",
   )?.nodeId;
 }

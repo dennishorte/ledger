@@ -117,6 +117,7 @@ async function main() {
         // Graceful shutdown.
         const shutdown = () => {
           process.stdout.write("ledger: shutting down\n");
+          project.daemon.stop();
           server.close(() => process.exit(0));
           // Force-exit if drain takes longer than 5s.
           setTimeout(() => process.exit(1), 5000).unref();
