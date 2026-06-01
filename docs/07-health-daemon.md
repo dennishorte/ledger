@@ -2,7 +2,7 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-06-01
 **Last Updated:** 2026-06-01 (SPEC_REVIEW → APPROVED — all review findings resolved)
 
