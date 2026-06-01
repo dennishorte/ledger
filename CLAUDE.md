@@ -56,6 +56,21 @@ CLI args: `<project-path>` is required; `--port N` overrides the default 4180 (a
 
 **Build-order quirk**: `packages/parser/dist/` AND `server/dist/` are both gitignored. `app/` and `server/` resolve `@ledger/parser` via the package's `main` field (`dist/index.js`); `pnpm exec ledger` resolves `server/dist/bin/ledger.js` from the package's `bin` field. Run `pnpm -C packages/parser build` after a fresh clone or any parser-source change; run `pnpm -C server build` if you want `pnpm exec ledger` instead of `pnpm -C server dev`. (Logged for a future `pnpm -w build:packages` script that runs both automatically.)
 
+**`.env` and Anthropic auth (for `06-agent-dispatcher`'s dispatch flow):** the dispatched `claude` subprocess runs with `--bare`, which strictly requires `ANTHROPIC_API_KEY` or `apiKeyHelper` (OAuth and keychain reads are blocked by design — see `03-claude-code-executor` D6/D17). Project-root `.env` holds the key; `.env.example` documents the shape. `.env` is gitignored. Two ways to populate `ANTHROPIC_API_KEY`:
+
+1. **Subscription-backed (Pro/Max)** — run `claude setup-token` once interactively, paste the resulting token. Billing draws from the Claude subscription.
+2. **API-credit** — create a key at `console.anthropic.com/settings/keys`, paste the `sk-ant-…` value. Billing draws from API credits.
+
+**Env-file loading per boot path:**
+
+| Command | `.env` auto-loaded? | Notes |
+|---|---|---|
+| `pnpm -C server dev <path>` | ✓ via `tsx --env-file-if-exists=../.env` in the `dev` script | Quiet no-op if `.env` absent. |
+| `pnpm exec ledger <path>` | ✗ | Export `ANTHROPIC_API_KEY` in the shell first, or wrap: `node --env-file=.env $(pnpm exec which ledger) <path>`. |
+| `node server/dist/bin/ledger.js <path>` | ✗ | `node --env-file=.env server/dist/bin/ledger.js <path>` works directly. |
+
+Without the env file loaded, dispatched tasks transition `RUNNING → FAILED` with `subprocess_failed:` carrying claude's auth error stderr — the failure surface is clean but the cause is not obvious; check the task's status_change reason first.
+
 Dev server is pinned to **port 4179** in `app/vite.config.ts` with `strictPort: true` (default 5173 collides with other local projects). API server defaults to **port 4180** (`LEDGER_PORT` env var or `--port` flag to override).
 
 ## Agent scripts

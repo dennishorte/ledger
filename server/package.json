@@ -15,7 +15,7 @@
     "ledger": "./dist/bin/ledger.js"
   },
   "scripts": {
-    "dev": "tsx watch src/bin/ledger.ts --no-open",
+    "dev": "tsx watch --env-file-if-exists=../.env src/bin/ledger.ts --no-open",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
