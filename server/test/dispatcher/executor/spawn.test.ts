@@ -34,7 +34,7 @@ async function writeHelperScript(body: string): Promise<string> {
 }
 
 describe("spawnClaudeCode", () => {
-  it("includes --print --bare --mcp-config in argv", async () => {
+  it("includes --print --mcp-config in argv; --bare NOT present (D17 amended 2026-06-01)", async () => {
     const mcpConfigPath = "/tmp/test-fake.mcp.json";
     // Script: print argv as JSON, exit 0
     const scriptPath = await writeHelperScript(`
@@ -55,7 +55,7 @@ describe("spawnClaudeCode", () => {
     expect(result.exitCode).toBe(0);
     const argv = JSON.parse(String(result.stdout)) as string[];
     expect(argv).toContain("--print");
-    expect(argv).toContain("--bare");
+    expect(argv).not.toContain("--bare");  // D17 amended 2026-06-01: --bare dropped after live testing revealed it rejects OAuth tokens from `claude setup-token`
     expect(argv).toContain("--mcp-config");
     expect(argv).toContain(mcpConfigPath);
     // Order check: --mcp-config immediately before the path

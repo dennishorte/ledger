@@ -1,6 +1,6 @@
 /**
- * Thin execa wrapper that pins the exact claude argv:
- *   claude --print --bare --mcp-config <path>
+ * Thin execa wrapper that pins the claude argv:
+ *   claude --print --mcp-config <path>
  * with the rendered prompt piped via stdin (no --prompt-file flag exists — D16),
  * LEDGER_TASK_ID env set, and cwd set to the project root.
  *
@@ -9,6 +9,14 @@
  *
  * reject: false — non-zero exit codes return rather than throw, so the
  * lifecycle reconciler can inspect result.exitCode directly.
+ *
+ * D17 amendment (parent 00-agent-dispatcher.md, 2026-06-01 stage-8 verification):
+ *   --bare was dropped after live testing revealed it strictly rejects OAuth
+ *   credentials. `claude setup-token`'s subscription-backed token (`sk-ant-oat01-…`)
+ *   is the operator's preferred auth path, and works via OAuth/keychain when
+ *   --bare is absent. Trade-off: CLAUDE.md auto-discovery, hooks, plugin sync,
+ *   and background prefetches all run for the dispatched subprocess. Operator
+ *   accepts this for the auth ergonomics; tested live before the trade was made.
  */
 
 import { execa, type ResultPromise } from "execa";
@@ -41,7 +49,7 @@ export function spawnClaudeCode(opts: SpawnOpts): ResultPromise {
 
   return execa(
     cmd,
-    [...prefixArgs, "--print", "--bare", "--mcp-config", opts.mcpConfigPath],
+    [...prefixArgs, "--print", "--mcp-config", opts.mcpConfigPath],
     {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
