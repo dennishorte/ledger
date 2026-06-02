@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1.3, 2026-05-27 — ELK layout-engine migration + root-id-collision patch + depth-based subtree intensity)
+**Status:** VERIFY (v1.4, 2026-06-02 — collapsible subtrees + status-driven default expansion + edge aggregation; gates green, awaiting operator browser walk-through)
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-27
+**Last Updated:** 2026-06-02
 
 ---
 
@@ -29,6 +29,22 @@ Phase-1 scope, narrower than PRD §8.1 because no task runner exists yet:
 - Live updates (no API, no SSE). The graph is static per page load.
 - Editing or status-mutation affordances.
 - Resource-claim, in-flight animation, blocked-dependency highlight, daemon-source distinction (all PRD §8.1 items that depend on a runtime that doesn't exist yet).
+
+### v1.4 addendum — collapsible subtrees (2026-06-02)
+
+Actions the Open Issue at the former line 181 ("auto-collapse subtree when all children are terminal"), reframed and broadened: the real problem the operator hit is **horizontal sprawl from an always-expanded tree that mixes complex container nodes with simple leaves**, and it will worsen as the backend manifest grows past the current ~30 nodes. The fix is a collapse model, not just terminal-state auto-collapse.
+
+v1.4 requirements:
+
+1. Every subtree parent (≥2 children) is **collapsible** to a single leaf-sized rollup tile and **expandable** back to the dashed container. Collapsed and expanded are both first-class render states.
+2. A collapsed subtree tile is **visually distinct from a leaf** (stacked-card depth cue) and carries a **status rollup** of its descendants (counts by lifecycle state) plus a descendant count.
+3. **Default expansion is status-driven** ("focus follows work"): the root is always expanded; a subtree is expanded by default iff it transitively contains an *active-frontier* descendant (status ∈ {SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, ISSUE_OPEN}); otherwise it starts collapsed. This auto-opens the path to live work and collapses finished subsystems to rollups.
+4. The operator can **override** any node's expansion; overrides persist across reloads (localStorage). Global controls: **Expand all**, **Collapse all**, **Reset to active work** (clears overrides → reverts to the §3 default).
+5. **Edge aggregation:** when a subtree is collapsed, dependency edges touching a hidden descendant reroute to the nearest visible ancestor; resulting duplicate and self (now-internal) edges are dropped. No dangling edge endpoints.
+6. Toggle affordance (chevron) is **distinct from** the inspector-open affordance — collapsing a node must not open the inspector and vice-versa.
+7. `pnpm typecheck`, `pnpm lint`, `pnpm build` continue to pass at zero output.
+
+**Still out of scope:** changing the data source (still build-time `docs/**` parse), live updates, the top-tier `rectpacking` overview (deferred — `layered`/`DOWN` retained for v1.4; revisit if the collapsed top rank still reads too wide).
 
 ---
 
@@ -99,19 +115,37 @@ These types are intentionally co-located with the panel that introduces them per
 
 **Why ELK over dagre (recap of D10).** The v1.1/v1.2 workaround pile (bounds union, depth-based `zIndex`, wrapper `pointer-events`, paint-order ordering, crossed dep edges) is the symptom set of forcing a flat-graph engine to render a compound graph. ELK's compound primitives dissolve the workarounds; `layered` with port constraints also resolves the two known crossed dep edges flagged at line 173.
 
+### Collapsible subtrees (v1.4)
+
+**Expansion state — overrides, not absolutes.** A dedicated persisted store (`stores/dagView.ts`) holds `overrides: Record<NodeId, boolean>` — *only* the nodes the operator has explicitly toggled. The effective expanded state of a subtree parent is `override ?? defaultExpanded(node)`, with `root` always forced expanded. This makes the three global controls trivial and correct: **Collapse all** / **Expand all** write an override for every subtree parent; **Reset to active work** clears the map so the status-driven default takes over again. It also answers the old Open Issue's question ("does ISSUE_OPEN unwind a collapsed subtree?") cleanly: if the operator hasn't overridden it, the default policy re-expands a subtree the moment a descendant enters the active frontier; if they *have* manually collapsed it, their intent wins until they Reset.
+
+**Default policy — `computeDefaultExpansion(docs)` (pure, in `lib/dagExpansion.ts`).** Returns the set of subtree-parent ids expanded by default: `root`, plus any subtree parent with a transitive descendant whose status is in the active-frontier set `{SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, ISSUE_OPEN}`. Because every ancestor of a frontier node transitively contains it, this expands exactly the *path* to live work and leaves finished/deferred siblings collapsed. In the current all-COMPLETE repo state it yields "root expanded, all subsystems collapsed" — a compact grid of rollup tiles, which is the right snapshot for a finished milestone.
+
+**Hierarchical visibility.** A node renders only if every ancestor is expanded. The layout builder enforces this structurally: in `buildElkNode`, a collapsed subtree parent emits a leaf-sized box (no `children` recursion), so ELK never lays out its descendants. Layout cost and on-screen density therefore scale with what's *open*, not with total node count — the core scaling win.
+
+**Three render forms** (was two): leaf `doc` tile; expanded `subtree` container (today's dashed rect, now with a collapse chevron in the header); and a new collapsed `collapsedSubtree` tile. The collapsed tile reuses the leaf footprint (240×64) but is styled as a stacked card (offset shadow + doubled top edge) so "opens into more" reads at a glance, and shows the parent's status chip + id + title + a descendant rollup (count + per-status tally).
+
+**Edge aggregation.** Before edges go to ELK or render, each endpoint is remapped through `representative(id)`: walk the root→node ancestor chain and return the first collapsed subtree parent encountered, else the node itself. Edges are then deduped by `(source,target)` and self-edges (both endpoints map to the same visible node — a now-hidden internal dependency) are dropped. This keeps every rendered edge terminating on a visible node and prevents dangling endpoints into pruned descendants. Transitive reduction runs on the aggregated set, unchanged otherwise.
+
+**Affordance separation (Req 6).** The collapse chevron is its own `<button>` with `stopPropagation`; the rest of the header keeps firing `onHeaderClick` → inspector. On the collapsed tile, the chevron expands and the body opens the inspector. Global controls render as a React Flow `<Panel>` top-left, cream-themed to match `Controls`.
+
 ### Components
 
 ```
 src/components/dag/
-  DagCanvas.tsx          // React Flow wrapper, ReactFlowProvider, controls
-  DocDagNode.tsx         // custom node renderer (title, id, status chip)
-  DocSubtreeNode.tsx     // subtree container whose header strip IS the parent node (D13); dashed interior is click-inert
-  StatusChip.tsx         // small colored pill, one per NodeStatus
-  NodeInspector.tsx      // content shown in the shell inspector on click
-  useDagLayout.ts        // ELK-backed compound-graph layout (async) + subtree-rect emission (v1.3)
-  useDocGraph.ts         // returns DocNode[] from the build-time parse
+  DagCanvas.tsx              // React Flow wrapper, ReactFlowProvider, controls; computes effective expansion + bulk-toggle Panel (v1.4)
+  DocDagNode.tsx             // custom node renderer (title, id, status chip)
+  DocSubtreeNode.tsx         // expanded subtree container; header strip IS the parent (D13) + collapse chevron (v1.4); dashed interior click-inert
+  DocCollapsedSubtreeNode.tsx// collapsed subtree rollup tile — stacked card + status tally + expand chevron (v1.4)
+  StatusChip.tsx             // small colored pill, one per NodeStatus
+  NodeInspector.tsx          // content shown in the shell inspector on click
+  useDagLayout.ts            // ELK-backed compound-graph layout (async); collapse-aware ELK build + edge aggregation (v1.4)
+  useDocGraph.ts             // returns DocNode[] from the build-time parse
 src/lib/
-  parseDocs.ts           // pure parser: raw markdown text → DocNode[]
+  parseDocs.ts               // pure parser: raw markdown text → DocNode[]
+  dagExpansion.ts            // pure: subtree-parent set, computeDefaultExpansion, representative/edge-remap helpers (v1.4)
+src/stores/
+  dagView.ts                 // persisted expansion overrides + bulk actions (v1.4)
 ```
 
 `DagPanel.tsx` becomes a thin shell: render `<DagCanvas />`, wire its `onNodeClick` to `openInspector(<NodeInspector node={…} />)`.
@@ -164,6 +198,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 | D11 | Parent edges are not drawn at all. Hierarchy is conveyed by a translucent rounded-rect *subtree* node behind each parent's children (rendered only when the parent has ≥2 children). Parent relations are still passed to dagre for rank ordering | Parent-of is already encoded in the node id (`01-ui/02-dag` ⇒ parent is `01-ui`). Drawing it as an edge adds visual weight without adding information. The interesting edges in this view are **deps** — what blocks what. Spatial grouping is the standard idiom for "these nodes share a context" (cf. subway-map line shading) and degrades gracefully as the tree deepens. Long-term, when the panel renders the *task* DAG instead of the doc tree, there will be no parents to draw anyway — this pivot anticipates that. |
 | D12 | v1.1 visual simplification: drop the "depends on" edge label, hide React Flow's connection-handle dots on doc tiles, and remove the minimap | Each removal pays its own keep. The "depends on" label is redundant — the only edges drawn are deps (per D11), so a label restating the edge type adds noise without information. Handle dots advertise an interaction (`nodesConnectable={true}`) that this panel intentionally disables (`nodesConnectable={false}`), so they were misleading affordances; handles remain in the DOM with `opacity:0` + `isConnectable={false}` so dagre-routed edges still attach correctly. The minimap added chrome without payoff — at ≤30 nodes a `fitView` initial layout plus pan/zoom is enough, and the minimap viewport box wasn't even rendering reliably for the operator (likely a CSS-token interaction with the cream theme's mask color, but rather than debug a low-value affordance, we removed it). |
 | D13 | v1.2 collapsed-parent model: the subtree rect's header strip IS the parent node. Subtree parents are not emitted as separate `doc` tiles. The `DocSubtreeData` carries the full parent `DocNode`; the header renders its `StatusChip` + id + title with a solid background, distinguishable from the dashed interior. Bounds are computed **bottom-up** (deepest subtrees first): leaf-child tile positions first, then parent subtrees union over their already-computed inner bounds — this ensures outer rects fully enclose nested inner rects. D11 (subtree-rect-as-grouping) is **refined**, not superseded: the grouping idea stands; what changes is that the parent doc tile collapses into the rect's header. Header click → opens the inspector for the parent node; non-header area remains click-inert. **Bounds-computation half superseded 2026-05-27 by D14** — ELK's compound graph computes parent dimensions natively, so the bottom-up bounds machinery is removed in v1.3; the visual model (header IS parent, dashed interior click-inert) is unchanged. | The "orphaned parent" visual was confusing: the parent tile floated above its box with no visual connection. Collapsing them makes the parent's identity, status, and interactivity immediately legible as part of the container. Bottom-up bounds ensures correctness for nested subtrees (live case: `root` subtree contains `01-ui` and `04-api-server` subtrees). |
+| D15 | v1.4 collapsible subtrees. Subtree parents render in three forms (leaf / expanded container / collapsed rollup tile). Expansion is stored as a **per-node override map** (`stores/dagView.ts`, persisted) layered over a **status-driven default** (`computeDefaultExpansion`: root + ancestors of any active-frontier node). Collapsed subtrees are pruned from the ELK graph; dep edges touching hidden descendants reroute to their nearest visible ancestor (`representative`) then dedup/self-drop. Collapse chevron is a distinct affordance from the inspector-open header click. | Resolves the long-standing sprawl / always-expanded Open Issue and pre-empts the scaling cliff as the backend manifest grows. **Override-over-default** beats storing absolute expansion because it lets the status-driven default keep reacting to lifecycle changes (a newly-IN_PROGRESS subtree auto-opens) while still honoring explicit operator intent, and makes Collapse/Expand/Reset-all one-liners. **Pruning collapsed subtrees from ELK** (not just hiding them in CSS) is what makes layout cost track open-node count rather than total — the actual scaling fix. **Edge aggregation** is mandatory once pruning exists: without remapping, `transitiveReduction` would operate on endpoints that no longer have a rendered node. Default policy reuses the project's own "focus follows work" heuristic from CLAUDE.md. Top-tier `rectpacking` overview considered and deferred — collapse alone resolves the reported sprawl; revisit if the collapsed top rank still reads wide. |
 | D14 | v1.3 layout-engine swap: `@dagrejs/dagre` → `elkjs` (`elkjs/lib/elk.bundled.js`, `layered` algorithm). Subtree parents become ELK compound nodes (children nested in `children`); flat absolute coordinates accumulated for React Flow. `useDagLayout` becomes async: useState + useEffect + cancellation flag; initial render returns empty arrays, ELK resolves in ~50–200ms for ≤30 nodes. Route-level lazy-load on `DagPanel` via `React.lazy` + `Suspense` so the ~250 KB gzip elkjs chunk lands off the landing route. **No changes** to `DocDagNode`, `DocSubtreeNode`, `StatusChip`, `NodeInspector`, transitive-reduction of dep edges, depth-based subtree `zIndex`, `pointer-events: "none"` on subtree wrappers, or the cream theme. | Executes the parent's D10 decision. Two concrete wins beyond what D10 anticipated: (a) the v1.2 hand-rolled `buildSubtreeNodes` bottom-up bounds computation deletes entirely — ELK does this as a core feature, not a workaround; (b) the two known crossed dep edges (`08-markdown → 03-docs`, `02-dag → 09-workflow-progress`, line 173) should resolve under ELK `layered`'s crossing minimization. Async hook is the minimum-surface accommodation: ELK is unconditionally async, and a Promise wrapper around a sync engine would be worse than embracing async at the boundary. Route-level lazy-load is the bundle-cost mitigation from D10; landing it together with the migration produces a single coherent bundle delta in Implementation Notes. |
 
 ---
@@ -178,7 +213,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 - ~~**Dagre rank-ordering causes crossed dep edges.** Surfaced during round-1 verification (2026-05-26): with the transitive reduction now in place, two real (non-redundant) dep edges still cross uselessly — `08-markdown → 03-docs` and `02-dag → 09-workflow-progress`. Dagre places `03-docs` and `09-workflow-progress` in an order that forces the crossing; ordering hints or post-layout swap would resolve it. Independent of the parent-floating issue. *(Priority: LOW — visual quirk only; revisit in a future round.)*~~ → expected to resolve under v1.3 ELK `layered` crossing minimization (D14); confirm at stage-8 operator verification.
 - ~~**Outer subtree paints over inner subtree's header and intercepts clicks.** Surfaced during v1.2 operator verification (2026-05-27). `useDagLayout.ts` emits all subtree nodes with `zIndex: -1`; with nested subtrees (`root` enclosing `01-ui`, `04-api-server`), the bottom-up sort pushes the outer subtree into the nodes array *after* the inner one, so React Flow paints `root` on top of `01-ui`. Two consequences from the single paint-order bug: (a) `root`'s cream-wash background washes out `01-ui`'s header strip visually; (b) React Flow's node wrapper defaults to `pointer-events: all`, so `root`'s wrapper captures clicks anywhere inside its bounds — including `01-ui`'s header button. Fix: depth-based `zIndex` (outer = lower, doc tiles = 0) so paint order is correct regardless of array order, plus `pointerEvents: "none"` on the subtree wrapper (the inner `<button>` keeps `pointer-events-auto` and wins as a CSS leaf). *(Priority: HIGH — blocks v1.2 sign-off; fix in `useDagLayout.ts`.)*~~ → addressed in v1.2 paint-order patch (2026-05-27).
 - ~~**v1.3 stage-8: `root` subtree rect not rendered.** Surfaced 2026-05-27 during operator verification of v1.3 (ELK migration). The two inner subtrees (`01-ui`, `04-api-server`) render correctly; the outer `root` rect that should enclose them is missing. **Root cause:** `useDagLayout.ts` `layout()` builds the ELK graph wrapper with `id: "root"` (an ELK convention for the top-level graph), but the PRD's doc root node also has `id: "root"`. The `walk()` function short-circuits on `elkNode.id === "root"`, treating *both* the ELK wrapper and the doc-root compound as the sentinel — so it recurses into children without emitting a `subtree-root` React Flow node. Fix: rename the ELK graph wrapper to a sentinel that cannot collide with a doc id (e.g. `__elk_root__`) and compare on that. The rest of the render path is unchanged. Affected lines: the `elkGraph` constructor and the `walk()` sentinel check. *(Priority: HIGH — blocks v1.3 sign-off; trivial fix in `useDagLayout.ts`.)*~~ → addressed in v1.3 root-id-collision patch (2026-05-27).
-- **Auto-collapse subtree when all children are terminal (COMPLETE / DEFERRED).** Filed during v1.2 sign-off (2026-05-27). Once every descendant of a subtree parent reaches a terminal lifecycle state, the children carry no actionable information — the subtree's header (status chip + id + title) is sufficient. Collapse the rect to a header-only tile so the canvas reserves space for whatever subtree is still in flight. Open questions: should the collapse be operator-toggleable (click-to-expand) or automatic on terminal-reach? Does ISSUE_OPEN unwind a previously-collapsed subtree back to expanded? Treat DEFERRED as terminal alongside COMPLETE per PRD §6.2. Likely changes: `useDagLayout.ts` (skip emitting child doc tiles + intra-subtree dep edges when all-terminal predicate is true) and `DocSubtreeNode.tsx` (header-only render path). *(Priority: LOW — visual/scaling improvement; not blocking.)*
+- ~~**Auto-collapse subtree when all children are terminal (COMPLETE / DEFERRED).** Filed during v1.2 sign-off (2026-05-27). Once every descendant of a subtree parent reaches a terminal lifecycle state, the children carry no actionable information — the subtree's header (status chip + id + title) is sufficient. Collapse the rect to a header-only tile so the canvas reserves space for whatever subtree is still in flight. Open questions: should the collapse be operator-toggleable (click-to-expand) or automatic on terminal-reach? Does ISSUE_OPEN unwind a previously-collapsed subtree back to expanded? Treat DEFERRED as terminal alongside COMPLETE per PRD §6.2. Likely changes: `useDagLayout.ts` (skip emitting child doc tiles + intra-subtree dep edges when all-terminal predicate is true) and `DocSubtreeNode.tsx` (header-only render path). *(Priority: LOW — visual/scaling improvement; not blocking.)*~~ → addressed by v1.4 (2026-06-02, D15), broadened from terminal-only auto-collapse to a general collapse model. Both open questions answered: collapse is **operator-toggleable** with a **status-driven default** (not pure auto-on-terminal); ISSUE_OPEN **does** re-expand via the default policy unless the operator has a standing manual override. DEFERRED treated as terminal (not active-frontier) alongside COMPLETE.
 - ~~**Swap layout engine from `@dagrejs/dagre` to `elkjs`; keep React Flow.** Filed during v1.2 sign-off (2026-05-27) as open-ended substrate research; **decision recorded same day** in `00-ui.md` D10 after reconsidering with two forward-looking constraints surfaced by the operator: the `05-task-runner` task DAG will be **interactive** (drag, edge creation, manual claim reassignment), and the project will eventually grow a **C4-style architecture browser** with drill-down across abstraction levels. Both keep React Flow structurally cheaper than a full canvas swap; both push past dagre's flat-graph assumption (compound nodes, port-aware edge routing, per-view algorithm selection). The v1.1/v1.2 workaround pile (bounds union, depth-based `zIndex`, wrapper `pointer-events: none`, paint-order ordering, the still-open crossed dep edges `08-markdown → 03-docs` and `02-dag → 09-workflow-progress`) is the symptom set that should dissolve under ELK's `layered` algorithm with port constraints. Rejected alternatives (recorded in `00-ui.md` D10): Cytoscape.js, hand-rolled SVG, stay-with-dagre. **Migration is scoped to `useDagLayout.ts` + dependency swap + bundle-impact measurement under route-level lazy-load**; no changes to `DocDagNode`, `DocSubtreeNode`, `StatusChip`, `NodeInspector`, or the cream theme. **Trigger to execute:** next `02-dag` v1.X cycle via leaf-workflow §8b, scheduled before `05-task-runner` ships UI so the task panel is built against ELK natively (one consumer of the layout hook migrates more cleanly than two). *(Priority: MEDIUM-when-triggered — research closed; execution gated on operator opening the §8b cycle.)*~~ → §8b cycle opened 2026-05-27 (COMPLETE → ISSUE_OPEN). Execution tracked under D14 + v1.3 Implementation Notes.
 
 ---
@@ -434,6 +469,35 @@ Operator stage-8 feedback after the root-id-collision patch: the outer `root` re
 
 Background washes (30 / 70 / 90% surface-sunken) unchanged. Gates re-run: typecheck + lint exit 0.
 
+### v1.4 collapsible subtrees (2026-06-02)
+
+Executes D15. Reopened COMPLETE v1.3 → ISSUE_OPEN → IN_PROGRESS to action the broadened "auto-collapse" Open Issue.
+
+**New files:**
+- `app/src/lib/dagExpansion.ts` — pure policy: `ACTIVE_FRONTIER` set, `buildSubtreeParentIds`, `computeDefaultExpansion` (root + ancestors of any active-frontier node), `computeEffectiveExpansion` (override-over-default, root forced expanded).
+- `app/src/lib/dagExpansion.test.ts` — 10 unit tests over a 13-node fixture (path-to-deep-frontier, all-terminal collapse, override both directions, root force).
+- `app/src/stores/dagView.ts` — persisted (`ledger.dagView`) override map + `setOverride`/`setMany`/`reset`.
+- `app/src/components/dag/DocCollapsedSubtreeNode.tsx` — collapsed rollup tile: stacked-card cue, status chip + id + truncated title, descendant count + per-status colored-dot tally, expand chevron.
+- `app/src/components/ui/statusColors.ts` — `STATUS_STYLES` extracted out of `StatusChip.tsx` so the chevron/dot consumers can share the map without tripping `react-refresh/only-export-components` (the component file must export components only).
+
+**Changed files:**
+- `useDagLayout.ts` — signature gains `expandedIds: Set<NodeId>` + `onToggleExpand`. `buildElkNode` emits a leaf box (no `children`) for collapsed subtree parents, so ELK never lays out hidden descendants (the scaling win). New `representative()` walks the root→node ancestor chain to the first collapsed parent; edges are remapped through it, deduped by `(source,target)`, self-edges dropped; `transitiveReduction` now runs on the aggregated set. `walk` emits a third node form (`collapsedSubtree`) with a transitive `descendantTally`. Local `buildSubtreeParentIds` removed in favor of the `dagExpansion` import.
+- `DocSubtreeNode.tsx` — header split into a chevron `<button>` (collapse) + a body `<button>` (inspector), sibling buttons (not nested) for valid markup; affordances kept distinct per Req 6.
+- `DagCanvas.tsx` — registers `collapsedSubtree` node type; memoizes `computeEffectiveExpansion(docs, overrides)`; `onToggleExpand` writes the negated effective state as an override; top-left `<Panel>` with Expand all / Collapse all / Reset to active work; `fitView` changed from per-layout to **once-per-mount** (`didFitRef`) so toggles don't yank the viewport.
+
+**Default behavior in the current repo state:** every node is COMPLETE, so `computeDefaultExpansion` returns root only → the canvas opens to a compact grid of collapsed subsystem rollup tiles (root expanded, all subsystems collapsed). This is the intended "finished-milestone snapshot." The moment any descendant enters the active frontier, its ancestor chain auto-expands on next load (absent a standing manual override).
+
+**Gates (2026-06-02):**
+- `pnpm -C app typecheck`: exit 0, zero output.
+- `pnpm -C app lint`: exit 0, zero output under `--max-warnings=0`.
+- `pnpm -C app build`: exit 0, 2,392 modules; DagPanel chunk 1,656.93 kB / gzip 508.01 kB (+~3 kB gzip vs v1.3 — the new components + lucide chevron icons).
+- `pnpm -C app test`: 144 passed (was 134; +10 `dagExpansion` tests).
+- Dev server serves `/dag` HTTP 200, no transform/runtime errors in the dev log.
+
+**Deviations:** Title is now shown on the collapsed tile (the original Open Issue mused "header-only"); the rollup tally earns the extra line. Top-tier `rectpacking` overview deferred per D15 — collapse alone resolves the reported sprawl.
+
+**Awaiting operator browser walk-through** of the §Verification v1.4 items (collapse/expand toggles, default expansion, persistence across reload, edge rerouting, bulk controls) before VERIFY → COMPLETE. No browser automation is installed in this environment, so the visual sign-off is manual (consistent with every prior version of this node).
+
 ### Open follow-ups
 
 - React Flow ships a sizable CSS file (`@xyflow/react/dist/style.css`). Audit which classes are actually used and consider cherry-picking once styles stabilize.
@@ -457,6 +521,15 @@ When this node moves to `VERIFY`, the verifier confirms:
 8. Removing a `.md` file under `docs/` and reloading drops the corresponding node; adding one (with a valid `**Node ID:**` and `**Parent:**`) adds it.
 9. `pnpm typecheck`, `pnpm lint`, and `pnpm build` all exit zero.
 10. No new network requests beyond Vite dev-server traffic.
+
+**v1.4 (collapsible subtrees, D15):**
+
+11. On a fresh load (cleared `ledger.dagView`), the canvas opens with root expanded and every all-terminal subsystem collapsed to a rollup tile. With a subtree containing an IN_PROGRESS/VERIFY/etc. descendant, that subtree (and its ancestor chain) opens automatically.
+12. A collapsed subtree tile reads as a stacked card (distinct from a leaf), showing the parent chip + id + title, a descendant count, and per-status colored dots that sum to the count.
+13. Clicking the chevron toggles collapse/expand without opening the inspector; clicking the tile body / header text opens the inspector without toggling.
+14. Collapsing a subtree reroutes any dependency edge that crossed its boundary to the collapsed tile (no edge dangles into empty space); expanding restores the original endpoints.
+15. Expand all / Collapse all affect every subtree parent; Reset to active work clears overrides and returns to the §11 default.
+16. Expansion state survives a page reload (localStorage `ledger.dagView`).
 
 ---
 

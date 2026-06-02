@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import type { DocNode, NodeId } from "@/lib/types";
+import type { DocNode, NodeId, NodeStatus } from "@/lib/types";
+import { buildSubtreeParentIds } from "@/lib/dagExpansion";
 
 export interface DocNodeData extends Record<string, unknown> {
   node: DocNode;
@@ -12,6 +13,8 @@ export interface DocSubtreeData extends Record<string, unknown> {
   parentNode: DocNode;
   /** Called when the user clicks the header strip. */
   onHeaderClick: () => void;
+  /** Called when the user clicks the collapse chevron (v1.4 / D15). */
+  onToggleExpand: () => void;
   /**
    * Nesting depth in the doc tree (0 = outermost, ≥1 = nested inside another
    * subtree). Drives depth-based wash/border intensity in `DocSubtreeNode`
@@ -19,6 +22,22 @@ export interface DocSubtreeData extends Record<string, unknown> {
    * the canvas is zoomed out.
    */
   depth: number;
+}
+
+/** Per-status descendant tally for a collapsed subtree's rollup (v1.4). */
+export type StatusTally = Partial<Record<NodeStatus, number>>;
+
+export interface DocCollapsedSubtreeData extends Record<string, unknown> {
+  /** Full DocNode for the parent — chip + id + title on the rollup tile. */
+  parentNode: DocNode;
+  /** Called when the user clicks the tile body. */
+  onHeaderClick: () => void;
+  /** Called when the user clicks the expand chevron. */
+  onToggleExpand: () => void;
+  /** Total transitive descendant count. */
+  total: number;
+  /** Transitive descendant counts keyed by lifecycle status. */
+  counts: StatusTally;
 }
 
 const NODE_WIDTH = 240;
@@ -121,25 +140,29 @@ function transitiveReduction(edges: Edge[]): Edge[] {
  */
 export function useDagLayout(
   docs: DocNode[],
+  expandedIds: Set<NodeId>,
+  onToggleExpand: (id: NodeId) => void,
   onSubtreeHeaderClick: (node: DocNode) => void,
 ): LayoutResult {
   const [result, setResult] = useState<LayoutResult>(EMPTY_RESULT);
 
   useEffect(() => {
     let cancelled = false;
-    void layout(docs, onSubtreeHeaderClick).then((next) => {
+    void layout(docs, expandedIds, onToggleExpand, onSubtreeHeaderClick).then((next) => {
       if (!cancelled) setResult(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [docs, onSubtreeHeaderClick]);
+  }, [docs, expandedIds, onToggleExpand, onSubtreeHeaderClick]);
 
   return result;
 }
 
 async function layout(
   docs: DocNode[],
+  expandedIds: Set<NodeId>,
+  onToggleExpand: (id: NodeId) => void,
   onSubtreeHeaderClick: (node: DocNode) => void,
 ): Promise<LayoutResult> {
   if (docs.length === 0) return EMPTY_RESULT;
@@ -148,8 +171,12 @@ async function layout(
   const docIds = new Set(docs.map((d) => d.id));
 
   // Subtree parents are nodes with ≥2 children in the doc set. They become
-  // ELK compound nodes; their visual header strip IS the parent (D13/v1.2).
-  const subtreeParentIds = buildSubtreeParentIds(docs, docIds);
+  // ELK compound nodes when expanded; collapsed they render as a single
+  // rollup tile (D13/v1.2 + D15/v1.4).
+  const subtreeParentIds = buildSubtreeParentIds(docs);
+  // A subtree parent is rendered as a container only when explicitly expanded.
+  const isExpandedSubtree = (id: NodeId): boolean =>
+    subtreeParentIds.has(id) && expandedIds.has(id);
 
   const kidsByParent = new Map<NodeId, NodeId[]>();
   for (const d of docs) {
@@ -164,41 +191,75 @@ async function layout(
     .filter((d) => d.parentId == null || !docIds.has(d.parentId))
     .map((d) => d.id);
 
-  // Build dep edges (all of them — ELK uses the full set for layering;
-  // transitive reduction is applied later, at render emission only).
-  const allDepEdges: Edge[] = [];
+  // Edge aggregation (D15/v1.4): a dep edge touching a node hidden inside a
+  // collapsed subtree reroutes to that subtree's collapsed tile. `representative`
+  // walks the root→node ancestor chain and returns the first collapsed subtree
+  // parent it hits (everything above that point is expanded by construction),
+  // else the node itself — which is therefore always a rendered node.
+  function representative(id: NodeId): NodeId {
+    const chain: NodeId[] = [];
+    let cursor: NodeId | null = id;
+    while (cursor != null) {
+      chain.unshift(cursor);
+      const doc = docById.get(cursor);
+      cursor = doc?.parentId != null && docIds.has(doc.parentId) ? doc.parentId : null;
+    }
+    for (const node of chain) {
+      if (subtreeParentIds.has(node) && !expandedIds.has(node)) return node;
+    }
+    return id;
+  }
+
+  const edgeStyle = {
+    stroke: "var(--color-accent)",
+    strokeDasharray: "4 4",
+    strokeWidth: 1.5,
+  } as const;
+  const edgeMarker = {
+    type: MarkerType.ArrowClosed,
+    color: "var(--color-accent)",
+    width: 14,
+    height: 14,
+  } as const;
+
+  // Remap each declared dep through `representative`, then dedup by
+  // (source,target) and drop self-edges (both endpoints collapsed into the
+  // same visible node — a now-hidden internal dependency). ELK uses the full
+  // aggregated set for layering; transitive reduction trims it at render only.
+  const aggregatedDepEdges: Edge[] = [];
+  const seenEdgeKeys = new Set<string>();
   for (const d of docs) {
     for (const dep of d.dependsOn) {
       if (!docIds.has(dep) || dep === d.id) continue;
-      allDepEdges.push({
-        id: `dep-${dep}->${d.id}`,
-        source: dep,
-        target: d.id,
+      const source = representative(dep);
+      const target = representative(d.id);
+      if (source === target) continue;
+      const key = `${source}->${target}`;
+      if (seenEdgeKeys.has(key)) continue;
+      seenEdgeKeys.add(key);
+      aggregatedDepEdges.push({
+        id: `dep-${key}`,
+        source,
+        target,
         type: "default",
         animated: false,
-        style: {
-          stroke: "var(--color-accent)",
-          strokeDasharray: "4 4",
-          strokeWidth: 1.5,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: "var(--color-accent)",
-          width: 14,
-          height: 14,
-        },
+        style: edgeStyle,
+        markerEnd: edgeMarker,
       });
     }
   }
 
-  const elkEdges: ElkExtendedEdge[] = allDepEdges.map((e) => ({
+  const elkEdges: ElkExtendedEdge[] = aggregatedDepEdges.map((e) => ({
     id: e.id,
     sources: [e.source],
     targets: [e.target],
   }));
 
   function buildElkNode(docId: NodeId): ElkNode {
-    if (subtreeParentIds.has(docId)) {
+    // Only expanded subtree parents become compound nodes. A collapsed subtree
+    // parent emits a leaf-sized box and its descendants are never laid out —
+    // the scaling win (D15): ELK cost tracks open-node count, not total.
+    if (isExpandedSubtree(docId)) {
       const childIds = kidsByParent.get(docId) ?? [];
       return {
         id: docId,
@@ -227,11 +288,29 @@ async function layout(
   // zIndex on subtree wrappers) along the way.
   const docNodes: Node<DocNodeData>[] = [];
   const subtreeNodes: Node<DocSubtreeData>[] = [];
+  const collapsedNodes: Node<DocCollapsedSubtreeData>[] = [];
 
   function depthOf(id: NodeId): number {
     const doc = docById.get(id);
     if (!doc?.parentId || !docIds.has(doc.parentId)) return 0;
     return 1 + depthOf(doc.parentId);
+  }
+
+  // Transitive descendant tally for a collapsed subtree's rollup chip.
+  function descendantTally(id: NodeId): { total: number; counts: StatusTally } {
+    const counts: StatusTally = {};
+    let total = 0;
+    const stack = [...(kidsByParent.get(id) ?? [])];
+    while (stack.length > 0) {
+      const childId = stack.pop();
+      if (childId === undefined) break;
+      const child = docById.get(childId);
+      if (!child) continue;
+      total += 1;
+      counts[child.status] = (counts[child.status] ?? 0) + 1;
+      for (const grandchild of kidsByParent.get(childId) ?? []) stack.push(grandchild);
+    }
+    return { total, counts };
   }
 
   function walk(elkNode: ElkNode, parentAbsX: number, parentAbsY: number): void {
@@ -247,7 +326,7 @@ async function layout(
     const doc = docById.get(docId);
     if (!doc) return;
 
-    if (subtreeParentIds.has(docId)) {
+    if (isExpandedSubtree(docId)) {
       const width = elkNode.width ?? 0;
       const height = elkNode.height ?? 0;
       // Depth-based zIndex: outer subtrees paint behind inner ones; doc tiles
@@ -266,6 +345,9 @@ async function layout(
           onHeaderClick: () => {
             onSubtreeHeaderClick(captured);
           },
+          onToggleExpand: () => {
+            onToggleExpand(captured.id);
+          },
           depth: parentDepth,
         },
         draggable: false,
@@ -282,6 +364,32 @@ async function layout(
       return;
     }
 
+    if (subtreeParentIds.has(docId)) {
+      // Collapsed subtree: a single rollup tile, no descendant recursion.
+      const captured = doc;
+      const { total, counts } = descendantTally(docId);
+      collapsedNodes.push({
+        id: docId,
+        type: "collapsedSubtree",
+        position: { x: absX, y: absY },
+        data: {
+          parentNode: doc,
+          onHeaderClick: () => {
+            onSubtreeHeaderClick(captured);
+          },
+          onToggleExpand: () => {
+            onToggleExpand(captured.id);
+          },
+          total,
+          counts,
+        },
+        draggable: false,
+        selectable: false,
+        focusable: false,
+      });
+      return;
+    }
+
     docNodes.push({
       id: docId,
       type: "doc",
@@ -292,24 +400,13 @@ async function layout(
 
   walk(laidOut, 0, 0);
 
-  const reducedDepEdges = transitiveReduction(allDepEdges);
+  const reducedDepEdges = transitiveReduction(aggregatedDepEdges);
 
   // Subtree rects first so they sit behind doc tiles in the array order
-  // (belt-and-suspenders alongside the zIndex style).
-  return { nodes: [...subtreeNodes, ...docNodes], edges: reducedDepEdges };
-}
-
-/** Returns the set of node IDs that qualify as subtree parents (≥2 children). */
-function buildSubtreeParentIds(docs: DocNode[], docIds: Set<NodeId>): Set<NodeId> {
-  const childCount = new Map<NodeId, number>();
-  for (const d of docs) {
-    if (d.parentId == null) continue;
-    if (!docIds.has(d.parentId)) continue;
-    childCount.set(d.parentId, (childCount.get(d.parentId) ?? 0) + 1);
-  }
-  const result = new Set<NodeId>();
-  for (const [id, count] of childCount) {
-    if (count >= 2) result.add(id);
-  }
-  return result;
+  // (belt-and-suspenders alongside the zIndex style). Collapsed-subtree tiles
+  // and doc tiles share the foreground (default zIndex 0).
+  return {
+    nodes: [...subtreeNodes, ...docNodes, ...collapsedNodes],
+    edges: reducedDepEdges,
+  };
 }

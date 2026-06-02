@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { type NodeProps } from "@xyflow/react";
+import { ChevronDown } from "lucide-react";
 import { StatusChip } from "@/components/ui/StatusChip";
 import type { DocSubtreeData } from "@/components/dag/useDagLayout";
 
@@ -15,7 +16,7 @@ import type { DocSubtreeData } from "@/components/dag/useDagLayout";
  * Header click → onHeaderClick() → DagCanvas opens the inspector.
  */
 export function DocSubtreeNode({ data }: NodeProps): JSX.Element {
-  const { parentNode, onHeaderClick, depth } = data as DocSubtreeData;
+  const { parentNode, onHeaderClick, onToggleExpand, depth } = data as DocSubtreeData;
 
   // Depth-based visual intensity so nested rects pop against their outer
   // enclosing rect when zoomed out. Outermost (depth 0) is a faint wash; each
@@ -31,23 +32,39 @@ export function DocSubtreeNode({ data }: NodeProps): JSX.Element {
       className="pointer-events-none relative h-full w-full rounded-xl border border-dashed"
       style={{ backgroundColor, borderColor: borderColorVar }}
     >
-      {/* Header strip — solid background, interactive */}
-      <button
-        type="button"
-        onClick={onHeaderClick}
-        className="pointer-events-auto absolute inset-x-0 top-0 flex cursor-pointer items-center gap-2 rounded-t-xl border-b border-dashed bg-[color:var(--color-surface-raised)] px-3 py-2 text-left transition-colors hover:bg-[color:var(--color-surface-sunken)]"
+      {/* Header strip — solid background, interactive. Two distinct
+          affordances (D15): the chevron collapses the subtree; the rest of the
+          strip opens the inspector. Nested as sibling <button>s (not one inside
+          the other) to keep the markup valid. */}
+      <div
+        className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-1 rounded-t-xl border-b border-dashed bg-[color:var(--color-surface-raised)] pr-3 transition-colors"
         style={{ borderColor: borderColorVar }}
       >
-        <StatusChip status={parentNode.status} />
-        <span className="font-mono text-[11px] text-[color:var(--color-muted)]">
-          {parentNode.id}
-        </span>
-        {parentNode.title ? (
-          <span className="truncate text-[11px] text-[color:var(--color-fg)]">
-            {parentNode.title}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-label={`Collapse ${parentNode.id}`}
+          title="Collapse subtree"
+          className="flex shrink-0 cursor-pointer items-center rounded-tl-xl py-2 pl-2.5 pr-1 text-[color:var(--color-muted)] transition-colors hover:text-[color:var(--color-fg)]"
+        >
+          <ChevronDown size={14} strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={onHeaderClick}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-left transition-colors hover:opacity-80"
+        >
+          <StatusChip status={parentNode.status} />
+          <span className="font-mono text-[11px] text-[color:var(--color-muted)]">
+            {parentNode.id}
           </span>
-        ) : null}
-      </button>
+          {parentNode.title ? (
+            <span className="truncate text-[11px] text-[color:var(--color-fg)]">
+              {parentNode.title}
+            </span>
+          ) : null}
+        </button>
+      </div>
     </div>
   );
 }
