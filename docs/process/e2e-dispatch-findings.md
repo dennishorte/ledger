@@ -50,6 +50,12 @@ reflects reality.**
   detect "committed but no terminal call" rather than blanket-FAILED. Investigate
   the concurrent-init binding race directly.
 
+> **Direction (2026-06-02):** findings #2 and #3 are addressed not by hardening the
+> write path but by a **report-only redesign** of the daemon — it stops dispatching
+> write-agents and instead produces a durable, deduplicated report; remediation
+> becomes an explicit operator action. See `docs/07-health-daemon.md` §"Proposed
+> redesign (v2)". Findings #1 and #4–#6 are independent of that and still stand.
+
 ### 2. 🔴 HIGH — Daemon auto-dispatches unreviewed write-agents that commit and race the git index
 Booting the server with a valid `ANTHROPIC_API_KEY` is sufficient for the health
 daemon to enqueue `doc_refactor` (write-persona) tasks against every spec over the
