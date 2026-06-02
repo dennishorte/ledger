@@ -91,7 +91,28 @@ const COMPOUND_PADDING =
   String(GROUP_PAD_X) +
   "]";
 
-const COMPOUND_LAYOUT_OPTIONS: Record<string, string> = {
+// Layered options for a compound whose children have real dependency flow
+// among them — direction matters, so rank them top-down (the v1.3 behavior).
+const LAYERED_COMPOUND_OPTIONS: Record<string, string> = {
+  "elk.algorithm": "layered",
+  "elk.direction": "DOWN",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+  "elk.spacing.nodeNode": "40",
+  // Edges attached here may connect nodes nested in different expanded child
+  // subtrees; INCLUDE_CHILDREN lets layered rank across those boundaries.
+  "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+  "elk.padding": COMPOUND_PADDING,
+};
+
+// Rectpacking options for a compound we want compacted into a near-square grid
+// rather than stretched along one rank (v1.4 / D15). Used for the top-level
+// overview and for any compound whose children carry no inter-child deps.
+// rectpacking ignores edges for placement — safe here because React Flow draws
+// its own bezier edges from node positions; ELK edge geometry is never read.
+const RECTPACK_COMPOUND_OPTIONS: Record<string, string> = {
+  "elk.algorithm": "rectpacking",
+  "elk.aspectRatio": "1.6",
+  "elk.spacing.nodeNode": "32",
   "elk.padding": COMPOUND_PADDING,
 };
 
@@ -148,9 +169,11 @@ export function useDagLayout(
 
   useEffect(() => {
     let cancelled = false;
-    void layout(docs, expandedIds, onToggleExpand, onSubtreeHeaderClick).then((next) => {
-      if (!cancelled) setResult(next);
-    });
+    void computeDagLayout(docs, expandedIds, onToggleExpand, onSubtreeHeaderClick).then(
+      (next) => {
+        if (!cancelled) setResult(next);
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -159,7 +182,11 @@ export function useDagLayout(
   return result;
 }
 
-async function layout(
+/**
+ * Pure async layout core — exported for headless geometry tests. The hook
+ * wraps this with React state + cancellation.
+ */
+export async function computeDagLayout(
   docs: DocNode[],
   expandedIds: Set<NodeId>,
   onToggleExpand: (id: NodeId) => void,
@@ -191,12 +218,8 @@ async function layout(
     .filter((d) => d.parentId == null || !docIds.has(d.parentId))
     .map((d) => d.id);
 
-  // Edge aggregation (D15/v1.4): a dep edge touching a node hidden inside a
-  // collapsed subtree reroutes to that subtree's collapsed tile. `representative`
-  // walks the root→node ancestor chain and returns the first collapsed subtree
-  // parent it hits (everything above that point is expanded by construction),
-  // else the node itself — which is therefore always a rendered node.
-  function representative(id: NodeId): NodeId {
+  // Ancestor chain root→id (inclusive), restricted to ids in the doc set.
+  function chainOf(id: NodeId): NodeId[] {
     const chain: NodeId[] = [];
     let cursor: NodeId | null = id;
     while (cursor != null) {
@@ -204,7 +227,16 @@ async function layout(
       const doc = docById.get(cursor);
       cursor = doc?.parentId != null && docIds.has(doc.parentId) ? doc.parentId : null;
     }
-    for (const node of chain) {
+    return chain;
+  }
+
+  // Edge aggregation (D15/v1.4): a dep edge touching a node hidden inside a
+  // collapsed subtree reroutes to that subtree's collapsed tile. `representative`
+  // returns the first collapsed subtree parent on the root→node chain
+  // (everything above it is expanded by construction), else the node itself —
+  // which is therefore always a rendered node.
+  function representative(id: NodeId): NodeId {
+    for (const node of chainOf(id)) {
       if (subtreeParentIds.has(node) && !expandedIds.has(node)) return node;
     }
     return id;
@@ -249,11 +281,48 @@ async function layout(
     }
   }
 
-  const elkEdges: ElkExtendedEdge[] = aggregatedDepEdges.map((e) => ({
-    id: e.id,
-    sources: [e.source],
-    targets: [e.target],
-  }));
+  // Per-compound algorithm + edge placement (v1.4 / D15).
+  //
+  // A compound keeps layered/DOWN when its children carry real dependency flow
+  // (direction reads) and switches to rectpacking when they don't (pack into a
+  // near-square grid instead of stretching along one rank). The top-level
+  // overview always packs — it wants compactness, not a wide dependency rank.
+  //
+  // Each aggregated edge is assigned to its lowest-common-ancestor compound (the
+  // node where the two endpoints' root→node chains diverge). That compound
+  // becomes layered and the edge is attached to *its* `edges` array — NOT the
+  // graph wrapper. This matters once any ancestor is rectpacking: ELK's JSON
+  // import rejects a wrapper-level edge that dives into a packed subtree
+  // ("Referenced shape does not exist"). Edges whose LCA is the top-level
+  // overview (depth 0) are dropped from the ELK graph entirely and drawn by
+  // React Flow alone — placement there is by packing, not by rank. (React Flow
+  // renders every edge from node positions; ELK edge geometry is never read.)
+  const elkEdgesByContainer = new Map<NodeId, ElkExtendedEdge[]>();
+  const layeredCompounds = new Set<NodeId>();
+  for (const e of aggregatedDepEdges) {
+    const sourceChain = chainOf(e.source);
+    const targetChain = chainOf(e.target);
+    let i = 0;
+    while (
+      i < sourceChain.length &&
+      i < targetChain.length &&
+      sourceChain[i] === targetChain[i]
+    ) {
+      i += 1;
+    }
+    const lca = sourceChain[i - 1];
+    // Skip when one endpoint is an ancestor of the other (no divergence) — there
+    // is no enclosing compound that ranks them as siblings.
+    if (lca === undefined || i >= sourceChain.length || i >= targetChain.length) continue;
+    if (depthOf(lca) === 0) continue; // top-level overview packs; RF draws this edge
+    layeredCompounds.add(lca);
+    const arr = elkEdgesByContainer.get(lca) ?? [];
+    arr.push({ id: e.id, sources: [e.source], targets: [e.target] });
+    elkEdgesByContainer.set(lca, arr);
+  }
+
+  const compoundOptions = (docId: NodeId): Record<string, string> =>
+    layeredCompounds.has(docId) ? LAYERED_COMPOUND_OPTIONS : RECTPACK_COMPOUND_OPTIONS;
 
   function buildElkNode(docId: NodeId): ElkNode {
     // Only expanded subtree parents become compound nodes. A collapsed subtree
@@ -261,10 +330,12 @@ async function layout(
     // the scaling win (D15): ELK cost tracks open-node count, not total.
     if (isExpandedSubtree(docId)) {
       const childIds = kidsByParent.get(docId) ?? [];
+      const containedEdges = elkEdgesByContainer.get(docId);
       return {
         id: docId,
-        layoutOptions: COMPOUND_LAYOUT_OPTIONS,
+        layoutOptions: compoundOptions(docId),
         children: childIds.map(buildElkNode),
+        ...(containedEdges ? { edges: containedEdges } : {}),
       };
     }
     return {
@@ -274,11 +345,13 @@ async function layout(
     };
   }
 
+  // Edges live in their LCA compound (see elkEdgesByContainer), never on the
+  // wrapper — a wrapper-level edge into a packed subtree breaks ELK's importer.
   const elkGraph: ElkNode = {
     id: ELK_GRAPH_ROOT_ID,
     layoutOptions: ROOT_LAYOUT_OPTIONS,
     children: rootIds.map(buildElkNode),
-    edges: elkEdges,
+    edges: [],
   };
 
   const laidOut = await elk.layout(elkGraph);
