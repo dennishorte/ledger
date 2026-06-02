@@ -155,7 +155,21 @@ export async function loadProjectContext(opts: {
   }
 
   // Start the daemon (D10) — after full context is assembled.
-  daemon.start();
+  //
+  // DISABLED BY DEFAULT (2026-06-01). The first end-to-end dispatch test found
+  // the daemon unsafe to run unattended: it auto-dispatches unreviewed write-
+  // agents that `git commit` specs and race the shared git index, and its
+  // enqueued tasks starve because it writes via raw store.createTask without
+  // ticking the scheduler. See docs/process/e2e-dispatch-findings.md §2-§3 and
+  // docs/00-project.md §11. Re-enable explicitly with LEDGER_DAEMON_ENABLED=1
+  // once the worktree-isolation + HITL-gate + runner-driven-enqueue fixes land.
+  if (process.env["LEDGER_DAEMON_ENABLED"] === "1") {
+    daemon.start();
+  } else {
+    console.log(
+      "[daemon] disabled (set LEDGER_DAEMON_ENABLED=1 to enable; see docs/process/e2e-dispatch-findings.md)",
+    );
+  }
 
   return ctx;
 }

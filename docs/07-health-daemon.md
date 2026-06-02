@@ -2,13 +2,28 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE
+**Status:** COMPLETE (implementation) — **DISABLED at runtime (2026-06-01)**
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-01 (VERIFY → COMPLETE v1)
+**Last Updated:** 2026-06-02 (disabled by default at runtime — see banner)
 
 **Dependencies:** `06-agent-dispatcher`
 
 ---
+
+> **⚠️ DISABLED BY DEFAULT (2026-06-01).** The daemon is implemented and COMPLETE,
+> but does **not** start unless `LEDGER_DAEMON_ENABLED=1` is set (gated in
+> `server/src/context.ts`). It was disabled after the first end-to-end dispatch
+> test found it unsafe to run unattended:
+> - It auto-dispatches unreviewed `doc_refactor` write-agents that `git commit`
+>   specs directly on the working branch with no HITL gate, and they race the
+>   shared git index (most commits dropped). *(§11 / findings §2)*
+> - Its enqueued tasks **starve** — it writes via raw `store.createTask` and the
+>   scheduler has no self-timer, so daemon tasks sit `PENDING` until unrelated
+>   operator activity ticks the scheduler. *(findings §3)*
+>
+> Re-enable only after the worktree-isolation + HITL-gate + runner-driven-enqueue
+> remediation lands. Full detail: `docs/process/e2e-dispatch-findings.md` §2–§3
+> and `docs/00-project.md` §11.
 
 ## Requirements
 
@@ -194,6 +209,7 @@ No auth required (same posture as all other API routes).
 
 ## Open Issues
 
+- **Daemon disabled at runtime pending safety fixes (2026-06-01).** See the banner at the top of this doc. The first e2e dispatch test exposed two HIGH defects — uncontrolled write-agent dispatch racing the git index, and starved enqueues — that make the daemon unsafe to run unattended. It now requires `LEDGER_DAEMON_ENABLED=1` to start. Remediation (worktree-isolated write-agents landing via `human_review`/PR; daemon drives the runner instead of raw `store.createTask`; daemon-originated tasks gated behind HITL) is to be drafted as a follow-up node. *(Priority: HIGH — blocks unattended operation. Tracked in `docs/00-project.md` §11 and `docs/process/e2e-dispatch-findings.md` §2–§3.)*
 - **Staleness fires on doc-sync commits.** A merge-commit that touches a COMPLETE spec's status row (e.g., to add a cross-reference) will advance git mtime without updating `lastUpdated`. The 2-day grace reduces noise but doesn't eliminate it. Long-term fix: write `lastUpdated` automatically in doc-sync commits, or use a separate `verified_at` field. *(Priority: LOW — acceptable false-positive rate in v1; operator can ignore or cancel the task.)*
 - **`readEnvInt` rejects `0` as a valid threshold value.** The guard `parsed > 0` was intended to reject nonsensical values (e.g. a 0 ms interval) but also blocks `0` as a valid orphan threshold. Setting `LEDGER_DAEMON_ORPHAN_THRESHOLD_DAYS=0` silently falls back to the default (14 days). Operators attempting to test orphan detection in a fresh project cannot use `0`; use `1` instead. Fix: change guard to `parsed >= 0` and add `&& !(key.includes("INTERVAL") && parsed === 0)` for the interval case specifically. *(Priority: LOW — does not affect production behaviour; documented workaround exists.)*
 - **Staleness monitor checks the doc file's git mtime, not implementation code files.** PRD §6.4's primary use case is detecting when implementation _artifacts_ (source files) changed after the last verification — this implementation instead checks whether the _spec doc itself_ drifted from its declared last-update. The real case (code changed, spec not touched) is not detected. Full artifact tracking would require enumerating each node's historical task `resourceClaims` and comparing their paths' git mtimes, which is a more expensive query. Deferred. *(Priority: LOW — the doc-level proxy is useful and the limitation is accepted for v1.)*
