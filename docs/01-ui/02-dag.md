@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag`
 **Parent:** `01-ui`
-**Status:** VERIFY (v1.4, 2026-06-02 — collapsible subtrees + status-driven default expansion + edge aggregation + per-compound rectpacking overview; gates green, awaiting operator browser walk-through)
+**Status:** COMPLETE (v1.4, 2026-06-02 — collapsible subtrees + status-driven default expansion + edge aggregation + per-compound rectpacking overview)
 **Created:** 2026-05-22
 **Last Updated:** 2026-06-02
 
