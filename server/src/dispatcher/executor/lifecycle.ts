@@ -32,6 +32,7 @@ export type ExitResult = {
   exitCode?: number | undefined;
   signal?: string | undefined;
   stderr?: string | undefined;
+  stdout?: string | undefined;
 };
 
 export function reconcileExit(
@@ -63,5 +64,5 @@ export function reconcileExit(
   // while the task was still RUNNING (the cancel route never wrote CANCELLED).
   // Pass stderr (or "" if undefined under strict inference) to the builder;
   // the builder truncates to 80 chars at the reason layer (Spec Review S3, N1).
-  handle.fail(task.id, reasons.subprocessFailed(result.stderr ?? ""));
+  handle.fail(task.id, reasons.subprocessFailed(result.stderr || result.stdout || ""));
 }

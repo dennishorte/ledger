@@ -79,7 +79,8 @@ export function createClaudeCodeExecutor(
         // the execa generic resolves the union broadly under the default Options
         // instantiation — coerce to string to satisfy the structural type (S3).
         const stderrStr = typeof result.stderr === "string" ? result.stderr : undefined;
-        reconcileExit(task, { exitCode: result.exitCode, signal: result.signal, stderr: stderrStr }, final, handle);
+        const stdoutStr = typeof result.stdout === "string" ? result.stdout : undefined;
+        reconcileExit(task, { exitCode: result.exitCode, signal: result.signal, stderr: stderrStr, stdout: stdoutStr }, final, handle);
       } catch (err) {
         // Pre-spawn failures: renderPrompt throw, writeMcpConfig fail,
         // claude binary not found (synchronous execa throw), etc.
