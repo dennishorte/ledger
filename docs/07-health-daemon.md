@@ -4,7 +4,7 @@
 **Parent:** project root (`docs/00-project.md`)
 **Status:** DRAFT (v2 redesign)
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-03 (v2 redesign — on-demand scanner, append log, report-only)
+**Last Updated:** 2026-06-03 (v2 redesign — on-demand scanner, append log, report-only; staleness monitor dropped; size threshold raised to 12000)
 
 **Dependencies:** `06-agent-dispatcher`
 
@@ -19,7 +19,7 @@
 
 ## Requirements
 
-Replace the v1 poll-based daemon with an **on-demand health scanner** — a server-side service that, when triggered by an operator API call, reads the doc tree, runs four monitors, and appends the result to a durable scan log. No background process. No task enqueue. No agent dispatch. The scanner's only write authority is its own findings log.
+Replace the v1 poll-based daemon with an **on-demand health scanner** — a server-side service that, when triggered by an operator API call, reads the doc tree, runs three monitors, and appends the result to a durable scan log. No background process. No task enqueue. No agent dispatch. The scanner's only write authority is its own findings log.
 
 **Monitors:**
 
@@ -111,8 +111,6 @@ listScans(): HealthScan[];   // newest-first (ORDER BY scanned_at DESC)
     "sizeThresholdTokens": {
       "type": "integer", "minimum": 1,
       "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
-    },
-      "type": "integer", "minimum": 0,
     },
     "orphanThresholdDays": {
       "type": "integer", "minimum": 0,
