@@ -278,6 +278,50 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 
 ---
 
+## Implementation Notes
+
+**v2 — 2026-06-03**
+
+**Files created:**
+- `server/src/scanner/index.ts` — `createHealthScanner`, `runScan()` orchestrator
+- `server/src/scanner/monitors.ts` — `checkSize`, `checkOrphans`
+- `server/src/scanner/types.ts` — `HealthFinding`, `HealthScan`, `HealthScannerHandle`, `ScannerContext`
+- `server/src/routes/scans.ts` — `POST /api/health/scan`, `GET /api/health/scans`
+- `server/src/runner/migrations/002-health-scans.sql` — `health_scans` table
+- `app/src/lib/useHealthScans.ts` — TanStack Query hook for GET /api/health/scans
+- `app/src/lib/useRunScan.ts` — TanStack mutation hook for POST /api/health/scan
+- `app/src/components/health/ScanHistoryWidget.tsx` — Run Scan button + expandable scan history
+
+**Files modified:**
+- `server/src/runner/store.ts` — `insertScan` + `listScans` added to `Store` interface and implementation
+- `server/src/runner/events.ts` — `insertScan` + `listScans` added to `withPublishing` pass-through
+- `server/src/context.ts` — `daemon: HealthDaemonHandle` → `healthScanner: HealthScannerHandle`; `LEDGER_DAEMON_ENABLED` gate removed
+- `server/src/server.ts` — `/api/daemon` unmounted; `/api/health` mounted
+- `server/src/bin/ledger.ts` — `ctx.daemon.stop()` removed from shutdown handler
+- `packages/parser/src/project/types.ts` — `HealthConfig` + `HEALTH_DEFAULTS` added; `ProjectMetadata.health` always-present field
+- `packages/parser/src/project/validateProjectMetadata.ts` — applies `HEALTH_DEFAULTS` after AJV validation
+- `packages/parser/src/index.ts` — `HealthConfig`, `HEALTH_DEFAULTS` exported
+- `docs/_schemas/project-metadata.schema.json` — optional `health` object added
+- `app/src/components/health/HealthDashboard.tsx` — `ScanHistoryWidget` added as full-width card below 2×2 grid
+- `server/test/runner/migrations.test.ts` — expectations updated for two-migration state
+
+**Files deleted:**
+- `server/src/daemon/index.ts`, `server/src/daemon/monitors.ts` — v1 daemon
+- `server/src/routes/daemon.ts` — `GET /api/daemon/status`
+
+**Deviations from spec:**
+- Route file is `server/src/routes/scans.ts`, not `health.ts` (name was already taken by the `GET /api/_health` server-health route).
+- Staleness monitor dropped post-implementation (2026-06-03): fired on doc-sync commits with no actionable signal. `HealthConfig`, schema, and type union updated accordingly. Spec Requirements and Design sections updated to reflect three monitors only.
+
+**Gate results:**
+- `pnpm typecheck` (parser + server + app): 0 errors
+- `pnpm lint`: 0 errors, 0 warnings
+- `pnpm -C packages/parser test`: 127 passed
+- `pnpm -C server test`: 334 passed, 2 skipped
+- `pnpm -C app build`: success
+
+---
+
 ## Verification
 
 Before promoting to COMPLETE, verify:
