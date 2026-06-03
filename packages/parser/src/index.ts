@@ -6,7 +6,8 @@ export type { DocumentNode } from "./schema/types.js";
 
 // Project metadata
 export { validateProjectMetadata } from "./project/validateProjectMetadata.js";
-export type { ProjectMetadata, ProjectMetadataResult } from "./project/types.js";
+export type { ProjectMetadata, ProjectMetadataResult, HealthConfig } from "./project/types.js";
+export { HEALTH_DEFAULTS } from "./project/types.js";
 
 // Docs graph
 export { buildDocGraph, idForPath, pathForNodeId } from "./docs/buildDocGraph.js";

@@ -14,51 +14,52 @@ function makeMemoryDb(): InstanceType<typeof Database> {
 }
 
 describe("applyMigrations", () => {
-  it("applies migration 001 to a fresh DB", () => {
+  it("applies all migrations to a fresh DB", () => {
     const db = makeMemoryDb();
     const { applied } = applyMigrations(db);
-    expect(applied).toEqual([1]);
+    expect(applied).toEqual([1, 2]);
 
-    // PRAGMA user_version must be 1 after apply (S3 — set AFTER transaction)
+    // PRAGMA user_version must match the last migration
     const version = db.pragma("user_version", { simple: true }) as number;
-    expect(version).toBe(1);
+    expect(version).toBe(2);
 
-    // tasks table must exist
     const tablesRow = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     ).all() as { name: string }[];
     const tableNames = tablesRow.map((r) => r.name);
     expect(tableNames).toContain("tasks");
     expect(tableNames).toContain("events");
+    expect(tableNames).toContain("health_scans");
     expect(tableNames).toContain("migrations");
 
     db.close();
   });
 
-  it("migrations table has exactly one row after apply", () => {
+  it("migrations table has one row per migration after apply", () => {
     const db = makeMemoryDb();
     applyMigrations(db);
 
-    const rows = db.prepare("SELECT version FROM migrations").all() as { version: number }[];
-    expect(rows).toHaveLength(1);
+    const rows = db.prepare("SELECT version FROM migrations ORDER BY version").all() as { version: number }[];
+    expect(rows).toHaveLength(2);
     expect(rows[0]?.version).toBe(1);
+    expect(rows[1]?.version).toBe(2);
 
     db.close();
   });
 
-  it("second apply is a no-op — user_version stays 1, migrations table stays at 1 row", () => {
+  it("second apply is a no-op — user_version and migrations table unchanged", () => {
     const db = makeMemoryDb();
     const { applied: firstApply } = applyMigrations(db);
-    expect(firstApply).toEqual([1]);
+    expect(firstApply).toEqual([1, 2]);
 
     const { applied: secondApply } = applyMigrations(db);
     expect(secondApply).toEqual([]);
 
     const version = db.pragma("user_version", { simple: true }) as number;
-    expect(version).toBe(1);
+    expect(version).toBe(2);
 
     const rows = db.prepare("SELECT version FROM migrations").all() as { version: number }[];
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
 
     db.close();
   });

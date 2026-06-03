@@ -5,6 +5,18 @@
  * Keep in lockstep with the JSON Schema. See 03-project-metadata D9.
  */
 
+export interface HealthConfig {
+  sizeThresholdTokens: number;
+  stalenessGraceDays: number;
+  orphanThresholdDays: number;
+}
+
+export const HEALTH_DEFAULTS: HealthConfig = {
+  sizeThresholdTokens: 3000,
+  stalenessGraceDays: 2,
+  orphanThresholdDays: 14,
+};
+
 export interface ProjectMetadata {
   /** Authored by the operator; const: 1 in schema. */
   schemaVersion: 1;
@@ -14,6 +26,8 @@ export interface ProjectMetadata {
   docs: string;
   /** Identifier of the agent runtime used to dispatch tasks. */
   agent: string;
+  /** Health scanner thresholds. Always present after parsing — defaults applied by validateProjectMetadata. */
+  health: HealthConfig;
 }
 
 import type { ValidationError } from "../schema/validateDocNode";

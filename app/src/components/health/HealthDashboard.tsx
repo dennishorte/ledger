@@ -12,6 +12,7 @@ import { IssueRollupWidget } from "./IssueRollupWidget";
 import { StalenessWidget } from "./StalenessWidget";
 import { TokenCostWidget } from "./TokenCostWidget";
 import { DepImpactWidget } from "./DepImpactWidget";
+import { ScanHistoryWidget } from "./ScanHistoryWidget";
 
 interface HealthDashboardProps {
   data: HealthData;
@@ -88,6 +89,19 @@ export function HealthDashboard({ data }: HealthDashboardProps): JSX.Element {
       <WidgetCard title="Dep-Impact Preview">
         <DepImpactWidget nodes={data.nodes} />
       </WidgetCard>
+
+      <div
+        className="col-span-full rounded-md p-4"
+        style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface-raised)" }}
+      >
+        <h2
+          className="mb-3 text-sm font-semibold uppercase tracking-wider"
+          style={{ color: "var(--color-muted)" }}
+        >
+          Health Scans
+        </h2>
+        <ScanHistoryWidget />
+      </div>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import type {
   ReviewPayload,
 } from "@ledger/parser";
 import { newTaskId, newEventId } from "./ids.js";
+import type { HealthScan } from "../scanner/types.js";
 
 // ---------------------------------------------------------------------------
 // Public error class (spec §Store API surface)
@@ -157,6 +158,8 @@ export interface Store {
    * Throws if the task does not exist.
    */
   updateReviewPayload(taskId: TaskId, reviewPayload: ReviewPayload): void;
+  insertScan(scan: HealthScan): void;
+  listScans(): HealthScan[];
   close(): void;
 }
 
@@ -245,6 +248,14 @@ export function createStore(db: Database): Store {
 
   const stmtUpdateReviewPayload = db.prepare<[string, string]>(
     `UPDATE tasks SET review_payload = ? WHERE id = ?`,
+  );
+
+  const stmtInsertScan = db.prepare<[string, string, string]>(
+    `INSERT INTO health_scans (id, scanned_at, findings) VALUES (?, ?, ?)`,
+  );
+
+  const stmtListScans = db.prepare(
+    `SELECT id, scanned_at, findings FROM health_scans ORDER BY scanned_at DESC`,
   );
 
   // ---------------------------------------------------------------------------
@@ -472,6 +483,20 @@ export function createStore(db: Database): Store {
     }
   }
 
+  function insertScan(scan: HealthScan): void {
+    stmtInsertScan.run(scan.id, scan.scannedAt, JSON.stringify(scan.findings));
+  }
+
+  function listScans(): HealthScan[] {
+    interface ScanRow { id: string; scanned_at: string; findings: string }
+    const rows = stmtListScans.all() as ScanRow[];
+    return rows.map((r) => ({
+      id: r.id,
+      scannedAt: r.scanned_at,
+      findings: JSON.parse(r.findings) as HealthScan["findings"],
+    }));
+  }
+
   function close(): void {
     db.close();
   }
@@ -486,6 +511,8 @@ export function createStore(db: Database): Store {
     listPendingEligible,
     getEvents,
     updateReviewPayload,
+    insertScan,
+    listScans,
     close,
   };
 }
