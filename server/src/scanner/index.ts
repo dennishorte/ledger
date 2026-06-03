@@ -1,7 +1,6 @@
-import path from "node:path";
 import { parseDocNode, validateDocNode } from "@ledger/parser";
 import { readDocsTree } from "../readDocs.js";
-import { checkSize, checkStaleness, checkOrphans } from "./monitors.js";
+import { checkSize, checkOrphans } from "./monitors.js";
 import type { HealthScan, HealthFinding, HealthScannerHandle, ScannerContext } from "./types.js";
 
 export type { HealthScan, HealthFinding, HealthScannerHandle, ScannerContext } from "./types.js";
@@ -37,22 +36,9 @@ export function createHealthScanner(ctx: ScannerContext): HealthScannerHandle {
       }
 
       const doc = result.node;
-      const absFilePath = path.join(ctx.docsRoot, relKey);
 
       const sizeFinding = checkSize(doc, content, ctx.config.sizeThresholdTokens);
       if (sizeFinding !== null) findings.push(sizeFinding);
-
-      try {
-        const stalenessFinding = await checkStaleness(
-          doc,
-          absFilePath,
-          ctx.projectRoot,
-          ctx.config.stalenessGraceDays,
-        );
-        if (stalenessFinding !== null) findings.push(stalenessFinding);
-      } catch (err) {
-        console.warn(`[scanner] checkStaleness failed for ${doc.nodeId}:`, (err as Error).message);
-      }
 
       const orphanFinding = checkOrphans(doc, ctx.config.orphanThresholdDays);
       if (orphanFinding !== null) findings.push(orphanFinding);

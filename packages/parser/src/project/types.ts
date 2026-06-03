@@ -7,13 +7,11 @@
 
 export interface HealthConfig {
   sizeThresholdTokens: number;
-  stalenessGraceDays: number;
   orphanThresholdDays: number;
 }
 
 export const HEALTH_DEFAULTS: HealthConfig = {
   sizeThresholdTokens: 3000,
-  stalenessGraceDays: 2,
   orphanThresholdDays: 14,
 };
 

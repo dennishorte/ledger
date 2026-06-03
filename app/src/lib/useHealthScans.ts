@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 export interface HealthFinding {
-  monitor: "size" | "staleness" | "orphan" | "schema_invalid";
+  monitor: "size" | "orphan" | "schema_invalid";
   nodeId: string;
   detail: string;
 }

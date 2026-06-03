@@ -24,9 +24,8 @@ Replace the v1 poll-based daemon with an **on-demand health scanner** — a serv
 **Monitors:**
 
 1. **Size** — a doc's estimated token count exceeds a configurable threshold. Finding: `size`.
-2. **Staleness** — a `COMPLETE` doc's git mtime is more than a configurable grace period past its `lastUpdated` frontmatter field. Finding: `staleness`.
-3. **Orphaned issues** — a doc in a stable state (`COMPLETE`, `PLANNED`, `DEFERRED`, `ISSUE_OPEN`) has non-placeholder content in its Open Issues section and its `lastUpdated` is older than a configurable threshold. Finding: `orphan`.
-4. **Schema-invalid** — `validateDocNode` returns `{ ok: false }` for the doc. Finding: `schema_invalid`. (v1 silently skipped these; v2 surfaces them explicitly.)
+2. **Orphaned issues** — a doc in a stable state (`COMPLETE`, `PLANNED`, `DEFERRED`, `ISSUE_OPEN`) has non-placeholder content in its Open Issues section and its `lastUpdated` is older than a configurable threshold. Finding: `orphan`.
+3. **Schema-invalid** — `validateDocNode` returns `{ ok: false }` for the doc. Finding: `schema_invalid`. (v1 silently skipped these; v2 surfaces them explicitly.)
 
 **Hard constraints:**
 
@@ -41,7 +40,6 @@ Replace the v1 poll-based daemon with an **on-demand health scanner** — a serv
 - Auto-triggering on git commit or filesystem change.
 - Finding lifecycle (open/resolved/acked) — each scan is a self-contained snapshot.
 - UI: token cost widget wiring (deferred; placeholder zeros remain).
-- Staleness tracking against implementation code files (doc-level git mtime only).
 - Cross-project coordination or distributed locking.
 
 ---
@@ -66,7 +64,7 @@ export interface HealthScannerHandle {
 // server/src/scanner/types.ts — server-internal; promote to @ledger/parser when UI consumes them
 
 export interface HealthFinding {
-  monitor: "size" | "staleness" | "orphan" | "schema_invalid";
+  monitor: "size" | "orphan" | "schema_invalid";
   nodeId: string;
   detail: string;  // human-readable; e.g. "~4200 tokens (threshold: 3000)" or validation error text
 }
@@ -114,9 +112,7 @@ listScans(): HealthScan[];   // newest-first (ORDER BY scanned_at DESC)
       "type": "integer", "minimum": 1,
       "description": "Estimated token count above which a doc triggers a size finding. Default: 3000."
     },
-    "stalenessGraceDays": {
       "type": "integer", "minimum": 0,
-      "description": "Days of git-mtime vs lastUpdated drift before a staleness finding. Default: 2."
     },
     "orphanThresholdDays": {
       "type": "integer", "minimum": 0,
@@ -129,14 +125,14 @@ listScans(): HealthScan[];   // newest-first (ORDER BY scanned_at DESC)
 The `parseProjectMetadata` function in `@ledger/parser` is updated to:
 - Accept the optional `health` key
 - Apply defaults when fields are absent
-- Expose `health: { sizeThresholdTokens: number; stalenessGraceDays: number; orphanThresholdDays: number }` on the parsed metadata object
+- Expose `health: { sizeThresholdTokens: number; orphanThresholdDays: number }` on the parsed metadata object
 
 ### Scanner implementation
 
 ```
 server/src/scanner/
   index.ts      — createHealthScanner(ctx) → HealthScannerHandle; runScan() orchestrator
-  monitors.ts   — checkSize, checkStaleness, checkOrphans, checkSchemaInvalid (pure; take config + parsed doc)
+  monitors.ts   — checkSize, checkOrphans, checkSchemaInvalid (pure; take config + parsed doc)
   types.ts      — HealthFinding, HealthScan
 ```
 
@@ -153,7 +149,6 @@ for each file:
     continue                        // skip remaining monitors for invalid doc
   doc = result.node
   checkSize(doc, raw, config)      → HealthFinding | null
-  checkStaleness(doc, path, ctx.projectRoot, config)  → Promise<HealthFinding | null>
   checkOrphans(doc, config)        → HealthFinding | null
 collect findings (filter nulls)
 scan = { id: uuid(), scannedAt: new Date().toISOString(), findings }
@@ -171,18 +166,6 @@ estimatedTokens = Math.ceil(raw.length / 4)
 if estimatedTokens > sizeThresholdTokens:
   detail = `~${estimatedTokens} tokens (threshold: ${sizeThresholdTokens})`
   → { monitor: "size", nodeId: doc.id, detail }
-```
-
-**Staleness** (COMPLETE nodes only):
-```
-relPath = path.relative(projectRoot, absFilePath)
-gitMtime = await execa('git', ['log', '-1', '--format=%aI', '--', relPath], { cwd: projectRoot })
-if gitMtime is empty: skip (untracked file)
-lastUpdatedDate = new Date(doc.lastUpdated + "T00:00:00Z")
-staleBy = gitMtime - lastUpdatedDate   (ms)
-if staleBy > stalenessGraceDays * 86_400_000:
-  detail = `git mtime ${gitMtime.slice(0, 10)} is ${Math.floor(staleBy/86_400_000)}d past lastUpdated ${doc.lastUpdated}`
-  → { monitor: "staleness", nodeId: doc.id, detail }
 ```
 
 **Orphan** (COMPLETE, PLANNED, DEFERRED, ISSUE_OPEN with authored source):
@@ -234,7 +217,7 @@ For schema-invalid docs, `nodeId` is derived from the file path (basename withou
 | File | Change |
 |------|--------|
 | `server/src/scanner/index.ts` | New — `createHealthScanner`, `HealthScannerHandle`, `runScan()` |
-| `server/src/scanner/monitors.ts` | New — `checkSize`, `checkStaleness`, `checkOrphans` |
+| `server/src/scanner/monitors.ts` | New — `checkSize`, `checkOrphans` |
 | `server/src/scanner/types.ts` | New — `HealthFinding`, `HealthScan` |
 | `server/src/daemon/index.ts` | **Deleted** |
 | `server/src/daemon/monitors.ts` | **Deleted** |
@@ -278,7 +261,7 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 | D1 | **On-demand trigger only — no `setInterval`** | Eliminates the ambient write-agent dispatch risk from v1. Operator controls when the scan runs. |
 | D2 | **Scanner has no write authority except `store.insertScan`** | Dissolves findings #2 and #3 from the e2e test outright — no runner tasks, no git index contention, no starved PENDING queue. Remediation is an explicit operator decision. PRD §6.4's `doc_refactor` / `reverify` / `issue_triage` task types are not removed; a human may still dispatch them deliberately. |
 | D3 | **Append log (all scans retained)** | Historical scans let operators see whether health is trending better or worse over time. No cleanup needed until the log grows large — deferred. |
-| D4 | **Finding shape is flat — `{monitor, nodeId, detail}`; no severity field** | Each monitor type has an implicit severity (schema_invalid > size ≈ staleness > orphan). A severity field adds a classification burden without meaningfully changing what the operator does with a finding. Detail string carries the quantitative signal (token count, day delta). |
+| D4 | **Finding shape is flat — `{monitor, nodeId, detail}`; no severity field** | Each monitor type has an implicit severity (schema_invalid > size > orphan). A severity field adds a classification burden without meaningfully changing what the operator does with a finding. Detail string carries the quantitative signal (token count, day delta). |
 | D5 | **Config in `.ledger/project.json`, not env vars** | Env vars were a pragmatic shortcut in v1 to avoid extending the schema. Now that we're touching the schema for health config, `project.json` is the correct home — it's version-controlled, per-project, and visible to the operator alongside other project settings. |
 | D6 | **`schemaVersion` stays at 1 for the `health` key addition** | Adding an optional field with defaults is backwards-compatible. Old project.json files without `health` remain valid. `schemaVersion` bumps only on breaking changes. |
 | D7 | **`schema_invalid` finding is caught in the orchestrator, not a monitor function** | An invalid doc can't be passed to the other monitors (no `DocumentNode` to inspect). The orchestrator short-circuits and emits the finding directly, then skips to the next file. |
@@ -291,8 +274,6 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 
 ## Open Issues
 
-- **Staleness fires on doc-sync commits.** A merge-commit touching a COMPLETE spec (e.g. adding a cross-reference) advances git mtime without updating `lastUpdated`. The grace period reduces noise but doesn't eliminate it. Long-term fix: write `lastUpdated` automatically in doc-sync commits, or add a `verified_at` field. *(Priority: LOW)*
-- **Staleness monitor checks the doc file's git mtime, not implementation code files.** PRD §6.4's primary use case is detecting when implementation artifacts changed after last verification — this checks whether the spec doc itself drifted. The real case (code changed, spec not touched) is not detected. Full artifact tracking would require enumerating each node's historical task `resourceClaims`. Deferred. *(Priority: LOW)*
 - **Scan log grows without bound.** All scans are retained. This is fine initially but will need a retention policy (e.g. keep last N scans) once the log becomes large. *(Priority: LOW)*
 
 ---

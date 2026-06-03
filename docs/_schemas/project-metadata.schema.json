@@ -37,11 +37,6 @@
           "minimum": 1,
           "description": "Estimated token count above which a doc triggers a size finding. Default: 3000."
         },
-        "stalenessGraceDays": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Days of git-mtime vs lastUpdated drift before a staleness finding. Default: 2."
-        },
         "orphanThresholdDays": {
           "type": "integer",
           "minimum": 0,

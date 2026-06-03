@@ -1,5 +1,3 @@
-import path from "node:path";
-import { execa } from "execa";
 import type { DocumentNode } from "@ledger/parser";
 import type { HealthFinding } from "./types.js";
 
@@ -28,41 +26,6 @@ export function checkSize(
     monitor: "size",
     nodeId: doc.nodeId,
     detail: `~${estimatedTokens.toString()} tokens (threshold: ${sizeThresholdTokens.toString()})`,
-  };
-}
-
-export async function checkStaleness(
-  doc: DocumentNode,
-  absFilePath: string,
-  projectRoot: string,
-  stalenessGraceDays: number,
-): Promise<HealthFinding | null> {
-  if (doc.status !== "COMPLETE") return null;
-
-  const relPath = path.relative(projectRoot, absFilePath);
-  let gitMtimeStr: string;
-  try {
-    const result = await execa("git", ["log", "-1", "--format=%aI", "--", relPath], {
-      cwd: projectRoot,
-    });
-    gitMtimeStr = result.stdout.trim();
-  } catch {
-    return null;
-  }
-
-  if (!gitMtimeStr) return null; // untracked
-
-  const gitMtime = new Date(gitMtimeStr);
-  const lastUpdatedDate = new Date(doc.lastUpdated + "T00:00:00Z");
-  const staleByMs = gitMtime.getTime() - lastUpdatedDate.getTime();
-
-  if (staleByMs <= stalenessGraceDays * 86_400_000) return null;
-
-  const staleByDays = Math.floor(staleByMs / 86_400_000);
-  return {
-    monitor: "staleness",
-    nodeId: doc.nodeId,
-    detail: `git mtime ${gitMtimeStr.slice(0, 10)} is ${staleByDays.toString()}d past lastUpdated ${doc.lastUpdated}`,
   };
 }
 

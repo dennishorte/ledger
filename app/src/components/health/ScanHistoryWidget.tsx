@@ -4,7 +4,6 @@ import { useRunScan } from "@/lib/useRunScan";
 
 const MONITOR_LABEL: Record<HealthFinding["monitor"], string> = {
   size: "size",
-  staleness: "staleness",
   orphan: "orphan",
   schema_invalid: "schema",
 };
