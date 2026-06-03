@@ -66,7 +66,7 @@ export interface HealthScannerHandle {
 export interface HealthFinding {
   monitor: "size" | "orphan" | "schema_invalid";
   nodeId: string;
-  detail: string;  // human-readable; e.g. "~4200 tokens (threshold: 3000)" or validation error text
+  detail: string;  // human-readable; e.g. "~14000 tokens (threshold: 12000)" or validation error text
 }
 
 export interface HealthScan {
@@ -110,7 +110,7 @@ listScans(): HealthScan[];   // newest-first (ORDER BY scanned_at DESC)
   "properties": {
     "sizeThresholdTokens": {
       "type": "integer", "minimum": 1,
-      "description": "Estimated token count above which a doc triggers a size finding. Default: 3000."
+      "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
     },
       "type": "integer", "minimum": 0,
     },
