@@ -1,12 +1,101 @@
 import { useState, type JSX } from "react";
 import { useHealthScans, type HealthFinding } from "@/lib/useHealthScans";
 import { useRunScan } from "@/lib/useRunScan";
+import { useDispatch } from "@/lib/useDispatch";
+import { MutationErrorBody } from "@/lib/useApproveTask";
 
 const MONITOR_LABEL: Record<HealthFinding["monitor"], string> = {
   size: "size",
   orphan: "orphan",
   schema_invalid: "schema",
 };
+
+// ---------------------------------------------------------------------------
+// FindingRow — one <tr> per finding; owns per-row dispatch state for size findings.
+// ---------------------------------------------------------------------------
+
+function FindingRow({ finding }: { finding: HealthFinding }): JSX.Element {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const dispatch = useDispatch();
+
+  const isSize = finding.monitor === "size";
+
+  function handleConfirm(): void {
+    dispatch.mutate(
+      { nodeId: finding.nodeId, type: "doc_refactor" },
+      {
+        onSuccess: (data) => {
+          setConfirmOpen(false);
+          setBanner({ kind: "ok", text: `Dispatched ${data.task.id.slice(0, 8)}…` });
+        },
+        onError: (e) => {
+          setConfirmOpen(false);
+          setBanner({
+            kind: "err",
+            text:
+              e instanceof MutationErrorBody
+                ? `Dispatch failed (HTTP ${String(e.status)}).`
+                : "Dispatch failed.",
+          });
+        },
+      },
+    );
+  }
+
+  return (
+    <>
+      {confirmOpen && (
+        <RefactorConfirmDialog
+          nodeId={finding.nodeId}
+          isPending={dispatch.isPending}
+          onCancel={() => { setConfirmOpen(false); }}
+          onConfirm={handleConfirm}
+        />
+      )}
+      <tr style={{ borderBottom: "1px solid var(--color-border-subtle, var(--color-border))" }}>
+        <td className="py-1 pr-2 font-mono" style={{ color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+          {MONITOR_LABEL[finding.monitor]}
+        </td>
+        <td className="py-1 pr-2 font-mono" style={{ whiteSpace: "nowrap" }}>
+          {finding.nodeId}
+        </td>
+        <td className="py-1" style={{ color: "var(--color-muted)" }}>
+          {finding.detail}
+        </td>
+        <td className="py-1 pl-2 text-right" style={{ whiteSpace: "nowrap" }}>
+          {isSize && banner === null && (
+            <button
+              type="button"
+              className="rounded px-2 py-0.5 text-[10px] font-medium"
+              style={{
+                backgroundColor: "var(--color-surface-sunken)",
+                border: "1px solid var(--color-border)",
+                color: "var(--color-text)",
+                cursor: "pointer",
+              }}
+              onClick={() => { setConfirmOpen(true); }}
+            >
+              Refactor
+            </button>
+          )}
+          {isSize && banner !== null && (
+            <span
+              className="text-[10px]"
+              style={{ color: banner.kind === "ok" ? "var(--color-muted)" : "var(--color-danger, #dc2626)" }}
+            >
+              {banner.text}
+            </span>
+          )}
+        </td>
+      </tr>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FindingsTable — renders the findings for one scan.
+// ---------------------------------------------------------------------------
 
 function FindingsTable({ findings }: { findings: HealthFinding[] }): JSX.Element {
   if (findings.length === 0) {
@@ -29,26 +118,23 @@ function FindingsTable({ findings }: { findings: HealthFinding[] }): JSX.Element
           <th className="py-1 text-left font-semibold" style={{ color: "var(--color-muted)" }}>
             detail
           </th>
+          <th className="py-1 pl-2 text-right font-semibold" style={{ color: "var(--color-muted)" }}>
+            action
+          </th>
         </tr>
       </thead>
       <tbody>
         {findings.map((f, i) => (
-          <tr key={i} style={{ borderBottom: "1px solid var(--color-border-subtle, var(--color-border))" }}>
-            <td className="py-1 pr-2 font-mono" style={{ color: "var(--color-muted)", whiteSpace: "nowrap" }}>
-              {MONITOR_LABEL[f.monitor]}
-            </td>
-            <td className="py-1 pr-2 font-mono" style={{ whiteSpace: "nowrap" }}>
-              {f.nodeId}
-            </td>
-            <td className="py-1" style={{ color: "var(--color-muted)" }}>
-              {f.detail}
-            </td>
-          </tr>
+          <FindingRow key={i} finding={f} />
         ))}
       </tbody>
     </table>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ScanRow — collapsible row showing one scan's timestamp + finding count.
+// ---------------------------------------------------------------------------
 
 function ScanRow({
   scan,
@@ -90,6 +176,10 @@ function ScanRow({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ScanHistoryWidget — exported panel section.
+// ---------------------------------------------------------------------------
 
 export function ScanHistoryWidget(): JSX.Element {
   const { data: scans, isLoading, error } = useHealthScans();
@@ -140,6 +230,74 @@ export function ScanHistoryWidget(): JSX.Element {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RefactorConfirmDialog — inlined (single use site).
+// ---------------------------------------------------------------------------
+
+function RefactorConfirmDialog({
+  nodeId,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  nodeId: string;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): JSX.Element {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm refactor dispatch"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+    >
+      <div className="flex w-80 flex-col gap-4 rounded-lg border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] p-4 shadow-lg">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--color-muted)]">
+            Confirm dispatch
+          </div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--color-fg)]">
+            {nodeId}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--color-muted)]">
+            Task type
+          </div>
+          <div className="mt-1 font-mono text-xs text-[color:var(--color-fg)]">
+            doc_refactor
+          </div>
+        </div>
+
+        <p className="text-xs text-[color:var(--color-muted)]">
+          The agent will propose changes to this doc. You&apos;ll review them at the HITL gate before anything is written.
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onConfirm}
+            className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-accent)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-accent-fg)] hover:opacity-90 disabled:opacity-50"
+          >
+            {isPending ? "Dispatching…" : "Confirm"}
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onCancel}
+            className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
