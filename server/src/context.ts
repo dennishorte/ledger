@@ -17,7 +17,7 @@ import pkg from "../package.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
 
-// The eight dispatcher task types handled by ClaudeCodeExecutor (D3).
+// The dispatcher task types handled by ClaudeCodeExecutor (D3).
 // `satisfies readonly TaskType[]` gives exhaustiveness checking at compile time —
 // a new TaskType in @ledger/parser will not cause a TS error here, but a deliberate
 // check can be added if needed.
@@ -28,6 +28,7 @@ const DISPATCHER_TASK_TYPES = [
   "spec_draft",
   "reverify",
   "doc_refactor",
+  "doc_decompose",
   "issue_triage",
   "project_status_review",
 ] as const satisfies readonly TaskType[];
