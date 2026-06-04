@@ -23,7 +23,7 @@ function FindingRow({ finding }: { finding: HealthFinding }): JSX.Element {
 
   function handleConfirm(): void {
     dispatch.mutate(
-      { nodeId: finding.nodeId, type: "doc_refactor" },
+      { nodeId: finding.nodeId, type: "doc_trim" },
       {
         onSuccess: (data) => {
           setConfirmOpen(false);
@@ -271,7 +271,7 @@ function RefactorConfirmDialog({
             Task type
           </div>
           <div className="mt-1 font-mono text-xs text-[color:var(--color-fg)]">
-            doc_refactor
+            doc_trim
           </div>
         </div>
 

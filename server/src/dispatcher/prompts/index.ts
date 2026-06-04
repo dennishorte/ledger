@@ -25,6 +25,7 @@ import verify from "./verify.js";
 import specDraft from "./specDraft.js";
 import reverify from "./reverify.js";
 import docRefactor from "./docRefactor.js";
+import docTrim from "./docTrim.js";
 import issueTriage from "./issueTriage.js";
 import projectStatusReview from "./projectStatusReview.js";
 
@@ -35,6 +36,7 @@ const renderers: Record<Persona, (task: Task, ctx: ProjectContext) => string> = 
   spec_draft: specDraft,
   reverify,
   doc_refactor: docRefactor,
+  doc_trim: docTrim,
   issue_triage: issueTriage,
   project_status_review: projectStatusReview,
 };

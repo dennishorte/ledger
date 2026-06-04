@@ -29,6 +29,7 @@ export type TaskType =
   | "implement"
   | "verify"
   | "doc_refactor"
+  | "doc_trim"
   | "issue_triage"
   | "human_review"
   | "reverify"

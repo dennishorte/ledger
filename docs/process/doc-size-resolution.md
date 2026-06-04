@@ -34,12 +34,12 @@ If the doc is genuinely complex and scope-coherent, decomposition is the right a
 ### Option A — Manual trim (small, obvious cases)
 Edit the file directly. Remove or relocate historical content. Re-run a scan to confirm the finding is gone.
 
-### Option B — Agent-assisted refactor
-For docs that need decomposition or a thorough editorial pass, dispatch a `doc_refactor` task from the Health panel:
+### Option B — Agent-assisted trim
+For docs that need a thorough editorial pass, dispatch a `doc_trim` task from the Health panel:
 
 1. In the **Health** panel, expand the scan that contains the finding.
 2. Click **Refactor** on the `size` finding row for the target doc.
-3. Confirm the dispatch dialog (task type: `doc_refactor`).
+3. Confirm the dispatch dialog (task type: `doc_trim`).
 4. Navigate to the **Tasks** panel. When the task reaches `AWAITING_HUMAN_REVIEW`, open it and review the agent's proposed changes.
 5. **Approve** if the refactor is correct. **Reject** (with a rationale) if the agent missed the mark — it will re-attempt once.
 6. After the task reaches `COMPLETE`, return to the Health panel and click **Run Scan**.
