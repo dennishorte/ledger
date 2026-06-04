@@ -47,7 +47,7 @@ const TYPE_INFERENCE: Partial<Record<NodeStatus, TaskType>> = {
   DRAFT: "spec_review",
 } as const;
 
-export const dispatchRoute = new Hono<ServerEnv>().post("/:nodeId", async (c) => {
+export const dispatchRoute = new Hono<ServerEnv>().post("/:nodeId{.+}", async (c) => {
   const project = c.get("project");
   const nodeId = c.req.param("nodeId");
   const node = project.docs.find((n) => n.id === nodeId);
