@@ -76,13 +76,14 @@ export function TaskInspector({
   const showHitlButtons =
     isRunnerEmitted && live?.task.status === "AWAITING_HUMAN_REVIEW";
 
-  // Cancel button gating: runner-emitted ∧ live status === RUNNING.
-  // `transcriptPath === undefined` is the same runner-vs-transcript discriminant
-  // used for HitlActions above (05-dispatch-api S4 note: functionally equivalent
-  // to `!task.id.includes(":")` under current ID schemes; the transcriptPath form
-  // is more semantically precise and matches the existing pattern).
-  const showCancelButton =
-    isRunnerEmitted && live?.task.status === "RUNNING";
+  // Cancel button gating: runner-emitted ∧ live status is cancellable
+  // (RUNNING, BLOCKED, or PENDING). BLOCKED/PENDING have no subprocess;
+  // the server handles them with a direct status transition.
+  const cancellableStatus =
+    live?.task.status === "RUNNING" ||
+    live?.task.status === "BLOCKED" ||
+    live?.task.status === "PENDING";
+  const showCancelButton = isRunnerEmitted && cancellableStatus;
 
   // "task no longer found" branch (404 from the right endpoint — D2).
   if (taskQuery.status === "success" && live === null) {
@@ -292,7 +293,7 @@ function cancelErrorBanner(err: unknown): string | null {
     return `Task is RUNNING but no subprocess to cancel (type: ${body.taskType ?? "unknown"}). Was it noop?`;
   }
   if (e.status === 409 && body?.error === "wrong_status") {
-    return "Task is no longer RUNNING — it may have already completed or been cancelled.";
+    return "Task can no longer be cancelled — it may have already completed or transitioned.";
   }
   return `Cancel failed (HTTP ${String(e.status)}).`;
 }

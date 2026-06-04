@@ -43,8 +43,8 @@ export function useCancelTask() {
     onSuccess: (data, { taskId }) => {
       // Response-based cache update: write the post-transition task into the
       // inspector's cache so the Cancel button visibility (gated on
-      // live?.task.status === "RUNNING") flips false atomically on the same
-      // render. Mirrors useApproveTask's D12-amended pattern (05-task-runner/
+      // cancellable status) flips false atomically on the same render.
+      // Mirrors useApproveTask's D12-amended pattern (05-task-runner/
       // 05-ui-hook-migration stage-8b loop-back).
       queryClient.setQueryData<TaskDetail | null>(
         ["task", taskId],

@@ -98,12 +98,12 @@ describe("POST /api/tasks/:id/cancel", () => {
     expect(res.status).toBe(409);
     const body = await res.json() as { error: string; expected: string; actual: string };
     expect(body.error).toBe("wrong_status");
-    expect(body.expected).toBe("RUNNING");
+    expect(body.expected).toBe("cancellable");
     expect(body.actual).toBe("COMPLETE");
     ctx.closeAll();
   });
 
-  it("409 wrong_status on PENDING task", async () => {
+  it("200 cancels a PENDING task directly (no subprocess needed)", async () => {
     const ctx = makeInMemoryContext();
     const app = createServer(ctx);
 
@@ -115,11 +115,9 @@ describe("POST /api/tasks/:id/cancel", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
-    expect(res.status).toBe(409);
-    const body = await res.json() as { error: string; expected: string; actual: string };
-    expect(body.error).toBe("wrong_status");
-    expect(body.expected).toBe("RUNNING");
-    expect(body.actual).toBe("PENDING");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { task: Task };
+    expect(body.task.status).toBe("CANCELLED");
     ctx.closeAll();
   });
 
