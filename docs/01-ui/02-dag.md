@@ -52,9 +52,11 @@ v1.4 requirements:
 
 ## Design
 
-### Data source: build-time parse of `docs/**`
+### Data source: live API with build-time fallback
 
-Vite `import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eager: true })` pulls every project doc into the bundle at build time. A small parser extracts per-file:
+`useDocGraph.ts` fetches `GET /api/docs` via TanStack Query (`staleTime: 30_000`). The Vite dev proxy (`vite.config.ts`) forwards `/api/*` → `http://127.0.0.1:4180/api/*` so the browser call is same-origin. The query's `placeholderData` returns `loadDocNodes()` — the build-time `import.meta.glob` parse — so the first paint is instant and the panel degrades gracefully to the build-time snapshot when the API server is unreachable.
+
+**Build-time parse (fallback path).** Vite `import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eager: true })` pulls every project doc into the bundle at build time. `parseDocs.ts` extracts per-file:
 
 - **Node ID** — from the `**Node ID:** \`…\`` line, or `root` for `00-project.md`.
 - **Parent** — from `**Parent:** …`, or `null` for the project root.
@@ -66,12 +68,12 @@ Children rows whose `id` does not correspond to an authored doc are surfaced as 
 
 Edges and hierarchy (post-D11, revised in v1.2 per D13):
 
-- **No parent → child lines are drawn.** Parent relations still feed dagre's rank assignment, but the hierarchy is conveyed *spatially* via a translucent rounded-rect *subtree* node that **is** each parent node (rendered only when the parent has ≥2 children). The subtree container's header strip carries the parent's status chip, id, and title — the parent is no longer a separate floating doc tile.
+- **No parent → child lines are drawn.** Hierarchy is conveyed *spatially* via a translucent rounded-rect *subtree* node that **is** each parent node (rendered only when the parent has ≥2 children). The subtree container's header strip carries the parent's status chip, id, and title — the parent is no longer a separate floating doc tile.
 - **Dependency** edges from the manifest's `dependsOn` column are the only edges drawn — dashed bezier arrows in `--color-accent`. All dep edges render, including sibling-on-sibling ones (e.g., `02-dag → 01-shell`).
 
 Why build-time parse instead of a hand-authored TS fixture: the manifests in `00-project.md` §14 and `01-ui/00-ui.md` Children are already canonical. Duplicating them into TS guarantees drift. The parser is ~80 lines and the docs schema is already regular enough to make it tractable.
 
-This data source is **explicitly a Phase-1 placeholder**. When the API server lands, `src/lib/api.ts` exposes the same `DocNode[]` shape from a backend endpoint and the panel switches sources behind a TanStack Query.
+The API-backed primary source was landed in `04-api-server/05-ui-hook-migration`; the fetch is inline in `useDocGraph.ts` (no separate `src/lib/api.ts` was created).
 
 ### Domain types (`src/lib/types.ts`)
 
@@ -143,10 +145,14 @@ src/components/dag/
   DocDagNode.tsx             // custom node renderer (title, id, status chip)
   DocSubtreeNode.tsx         // expanded subtree container; header strip IS the parent (D13) + collapse chevron (v1.4); dashed interior click-inert
   DocCollapsedSubtreeNode.tsx// collapsed subtree rollup tile — stacked card + status tally + expand chevron (v1.4)
-  StatusChip.tsx             // small colored pill, one per NodeStatus
-  NodeInspector.tsx          // content shown in the shell inspector on click
+  NodeInspector.tsx          // inspector content: metadata, parent, dependsOn, children, doc link, Dispatch button (06-agent-dispatcher), WorkflowProgressSection (09-workflow-progress); props: { node: DocNode; allNodes: DocNode[] }
   useDagLayout.ts            // ELK-backed compound-graph layout (async); collapse-aware ELK build + edge aggregation (v1.4)
-  useDocGraph.ts             // returns DocNode[] from the build-time parse
+  useDocGraph.ts             // TanStack Query against GET /api/docs; loadDocNodes() as placeholderData
+  WorkflowProgressSection.tsx// lifecycle-stage progress rows + children rollup; added by 09-workflow-progress
+  WorkflowStageRow.tsx       // single stage row sub-component; added by 09-workflow-progress
+src/components/ui/
+  StatusChip.tsx             // small colored pill, one per NodeStatus (moved from src/components/dag/ post-v1.4)
+  statusColors.ts            // STATUS_STYLES map shared by StatusChip + collapsed-tile dot tally (v1.4)
 src/lib/
   parseDocs.ts               // pure parser: raw markdown text → DocNode[]
   dagExpansion.ts            // pure: subtree-parent set, computeDefaultExpansion, representative/edge-remap helpers (v1.4)
@@ -154,7 +160,7 @@ src/stores/
   dagView.ts                 // persisted expansion overrides + bulk actions (v1.4)
 ```
 
-`DagPanel.tsx` becomes a thin shell: render `<DagCanvas />`, wire its `onNodeClick` to `openInspector(<NodeInspector node={…} />)`.
+`DagPanel.tsx` becomes a thin shell: render `<DagCanvas />`, wire its `onNodeClick` to `openInspector(<NodeInspector node={…} allNodes={docs} />)`.
 
 ### Status color mapping
 
@@ -196,7 +202,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 | D3 | Manifest-only "PLANNED" nodes render with dashed border | Operator should see the full intended tree, not just what's been authored. Visual distinction prevents confusion with real nodes. |
 | D4 | `DocNode` shape introduced in `src/lib/types.ts` (was empty) | First domain types arrive with the first panel that needs them, per `01-ui` §Design conventions. **Updated 2026-05-26 by `04-api-server/02-parser-extraction`:** the canonical home for `NodeId`, `NodeStatus`, and `DocNode` is now `@ledger/parser/src/coreTypes.ts` (and `@ledger/parser/src/docs/types.ts` for `DocNode`). `app/src/lib/types.ts` retains a re-export shell for those three types so existing `@/lib/types` import sites continue to work unchanged; all other types defined in `types.ts` (`Task`, `LogEvent`, etc.) stay there. |
 | D5 | Click → inspector, not click → navigate | Inspector keeps the operator's spatial context (graph still visible). A "View document" link inside the inspector handles the navigate case. |
-| D6 | No live updates / SSE in this node | No API exists. Static-per-load keeps the implementation honest about its data source; live updates land with the API. |
+| D6 | No live updates / SSE in this node | No API exists. Static-per-load keeps the implementation honest about its data source; live updates land with the API. **Updated 2026-05-26 by `04-api-server/05-ui-hook-migration`:** `useDocGraph.ts` now polls `GET /api/docs` via TanStack Query (`staleTime: 30s`) with a build-time `placeholderData` fallback. There is no SSE push; the 30s poll is the "live" mechanism. D6's original statement ("no API exists") is superseded, but the design intent (no SSE, no streaming) still holds. |
 | D7 | Dependency edges (`dependsOn`) drawn as dashed bezier arrows in `--color-accent` with a "depends on" label | Reuses React Flow's edge type system without custom edge components. (Originally stated "distinct from parent-child solid arrows" — but D11 removes parent edges entirely, so deps are now the only drawn edges.) |
 | D8 | Parent-field parser: detect the "project root" sentinel text **before** backtick extraction | The PRD-mandated parent line for top-level subtrees reads `**Parent:** project root (\`docs/00-project.md\`)`. The backtick captures the doc path, not the node id `root`, so the original order silently produced an unresolvable parent. Project-root sentinel detection is the canonical case and must win. |
 | D9 | ~~Suppress visible `dependsOn` edges when source and target share a parent.~~ **Superseded by D11.** | Round-2 feedback (F4 below) clarified that sibling deps carry real information — `02-dag` "depends on `01-shell`" is a meaningfully different statement from "is parented by `01-ui`." Suppressing them lost that information. Replaced with D11 which removes parent edges instead. |
@@ -212,7 +218,7 @@ A reviewer running `pnpm dev` and visiting `/dag` must see:
 ## Open Issues
 
 - **Cross-subtree dependency edges.** The manifest's `dependsOn` column today only references siblings under the same parent (e.g., `02-dag` depends on `01-shell`). PRD §6.1 allows cross-subtree dependencies. Parser resolves by id within the full node set, but no current manifest exercises cross-subtree, so this is untested. *(Priority: LOW.)*
-- **Graph layout for very large trees.** dagre struggles past ~500 nodes. Re-evaluate when the doc count grows past ~50. *(Priority: LOW.)*
+- **Graph layout for very large trees.** ELK `layered` is significantly more capable than dagre (which it replaced in v1.3), but at some node count the compound layout will slow or the rendering will become unreadable. Re-evaluate if the doc count grows past ~100. *(Priority: LOW.)*
 - **Inspector content shape conflicts when multiple panels open it.** This node ships a `NodeInspector` specific to DAG node clicks. Later panels (Tasks, Docs) will each ship their own. The shell store holds `ReactNode`, so there's no contract conflict — but a future "inspector context registry" might be cleaner. Defer. *(Priority: LOW.)*
 - ~~**Parent node renders floating above its own subtree container.** When a parent is decomposed (`01-ui` is the live example), the parent renders as one node and its children render inside a separate labelled container box. The two are not visually connected — the parent appears orphaned. Collapse the model: the container's title bar *is* the parent node (status chip, ID, name in the header; children inside; no separate floating element). Affects `DocSubtreeNode.tsx` and `useDagLayout.ts`. *(Priority: MEDIUM — confusing in the current screenshot; trivial fix.)*~~ → addressed in v1.2 (2026-05-27).
 - ~~**Redundant transitive dependency edges drawn.** Today the layout draws every declared `dependsOn` edge. When `A → B` and `B → C` are both declared, the implied `A → C` is also drawn, producing visual clutter (live example: `01-shell → 03-docs` is implied by `01-shell → 08-markdown → 03-docs`). Compute the transitive reduction over the edge set before passing to dagre. Caveat: when task-DAG edges arrive (claims, deps), reduction must respect edge type — same-type only. *(Priority: MEDIUM — affects readability; fix in `useDagLayout.ts`.)*~~ → addressed by `99-maintenance/01-round-1` R1 (2026-05-26).
@@ -504,6 +510,17 @@ Executes D15. Reopened COMPLETE v1.3 → ISSUE_OPEN → IN_PROGRESS to action th
 **Deviations:** Title is now shown on the collapsed tile (the original Open Issue mused "header-only"); the rollup tally earns the extra line. Rectpacking trades spatial encoding of dependency direction at the *overview* level for compactness — top-level dep arrows still render but no longer all point downward.
 
 **Awaiting operator browser walk-through** of the §Verification v1.4 items (collapse/expand toggles, default expansion, persistence across reload, edge rerouting, bulk controls) before VERIFY → COMPLETE. No browser automation is installed in this environment, so the visual sign-off is manual (consistent with every prior version of this node).
+
+### Refactored 2026-06-03
+
+Doc-code drift corrections; no behavior changes. Status field left COMPLETE.
+
+| # | Section | What changed | Direction |
+|---|---------|--------------|-----------|
+| R1 | §Design > Data source | Removed "explicitly a Phase-1 placeholder" language and the aspirational `src/lib/api.ts` note. Replaced with a description of the actual implementation: `useDocGraph.ts` uses TanStack Query against `GET /api/docs` with `loadDocNodes()` as `placeholderData` fallback; the fetch is inline in `useDocGraph.ts`. The swap was done by `04-api-server/05-ui-hook-migration`. | Code → Spec |
+| R2 | §Design > Components | `StatusChip.tsx` moved to `src/components/ui/` post-v1.4 (the spec still listed it under `src/components/dag/`). `statusColors.ts` entry added to `src/components/ui/` (was already noted in v1.4 Implementation Notes but omitted from the Components table). `WorkflowProgressSection.tsx` and `WorkflowStageRow.tsx` added — both live in `src/components/dag/` and were added by `09-workflow-progress`. `NodeInspector.tsx` comment updated to reflect its expanded role: now accepts `allNodes: DocNode[]` and renders Dispatch button (06-agent-dispatcher) + WorkflowProgressSection in addition to the original metadata fields. `useDocGraph.ts` comment updated to describe TanStack Query source. `DagPanel.tsx` shell call updated to show `allNodes={docs}`. | Code → Spec |
+| R3 | §Decisions > D6 | Rationale said "No API exists." — API has existed since 04-api-server. Annotated with the actual post-swap behavior (TanStack Query, 30s stale time, no SSE). Original decision intent (no streaming push) remains valid. | Code → Spec |
+| R4 | §Open Issues | "dagre struggles past ~500 nodes" — dagre was replaced by ELK in v1.3; the scaling statement now references ELK and raises the re-evaluation threshold to ~100 nodes. | Code → Spec |
 
 ### Open follow-ups
 
