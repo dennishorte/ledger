@@ -64,6 +64,13 @@ export async function loadProjectContext(opts: {
   projectPath: string;
   port: number;
 }): Promise<ProjectContext> {
+  if (!process.env["ANTHROPIC_API_KEY"]) {
+    throw new ContextError(
+      "ANTHROPIC_API_KEY is not set — dispatched agents will fail. " +
+      "Boot via `pnpm -C server dev <path>` (auto-loads .env) or export the key first.",
+    );
+  }
+
   const projectRoot = resolve(opts.projectPath);
   const metadataPath = resolve(projectRoot, ".ledger/project.json");
 
