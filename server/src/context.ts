@@ -160,5 +160,9 @@ export async function loadProjectContext(opts: {
     runner.registerExecutor(type, claudeCodeExecutor);
   }
 
+  // Re-evaluate any BLOCKED/PENDING tasks left over from a previous run.
+  // Executors must be registered first so the tick can actually dispatch them.
+  runner.tick();
+
   return ctx;
 }
