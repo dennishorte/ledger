@@ -20,6 +20,7 @@ export const ALL_TASK_TYPES: TaskType[] = [
   "verify",
   "reverify",
   "doc_refactor",
+  "doc_decompose",
   "issue_triage",
   "human_review",
   "project_status_review",
