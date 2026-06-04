@@ -20,7 +20,7 @@ export function defaultResourceClaims(task: Pick<Task, "id" | "type" | "parentTa
     case "implement":
     case "spec_draft":
     case "doc_refactor":
-    case "doc_trim":
+    case "doc_decompose":
     case "issue_triage":
       return [{ kind: "node", nodeId: task.id, mode: "write" }];
 

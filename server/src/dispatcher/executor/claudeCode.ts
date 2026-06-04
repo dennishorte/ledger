@@ -32,7 +32,7 @@ const WRITE_PERSONAS: ReadonlySet<Task["type"]> = new Set([
   "implement",
   "spec_draft",
   "doc_refactor",
-  "doc_trim",
+  "doc_decompose",
 ]);
 
 function extraAllowedTools(taskType: Task["type"]): string[] {
