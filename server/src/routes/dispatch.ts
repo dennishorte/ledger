@@ -9,35 +9,8 @@
 
 import { Hono } from "hono";
 import { defaultResourceClaims } from "@ledger/parser";
-import type { TaskType, NodeStatus, ResourceClaim, DocNode } from "@ledger/parser";
+import type { TaskType, NodeStatus, ResourceClaim } from "@ledger/parser";
 import type { ServerEnv } from "../server.js";
-
-/**
- * For doc_decompose, return write claims covering the whole family — the
- * parent node (if any) and all its children — so concurrent decompose
- * operations on any member of the family conflict and queue rather than race.
- *
- * Family definition:
- *   - Target has a parent  → family root is the parent; family = parent + all its children
- *   - Target is a parent (has children, no parent) → family = target + all its children
- *   - Target is an isolated leaf → family = target only (falls back to default)
- */
-function decomposeResourceClaims(nodeId: string, docs: readonly DocNode[]): ResourceClaim[] {
-  const target = docs.find((n) => n.id === nodeId);
-  if (target === undefined) return [{ kind: "node", nodeId, mode: "write" }];
-
-  const familyRootId = target.parentId ?? nodeId;
-  const familyMembers = docs.filter(
-    (n) => n.id === familyRootId || n.parentId === familyRootId,
-  );
-
-  if (familyMembers.length <= 1) {
-    // Isolated node — no family to broaden to
-    return [{ kind: "node", nodeId, mode: "write" }];
-  }
-
-  return familyMembers.map((n) => ({ kind: "node" as const, nodeId: n.id, mode: "write" as const }));
-}
 
 // Lifecycle status → inferred task type. Status values not in this map
 // produce 409 no_inferred_type unless the body overrides `type`. (D4)
@@ -86,11 +59,16 @@ export const dispatchRoute = new Hono<ServerEnv>().post("/:nodeId{.+}", async (c
   // the helper reads `task.id`, `task.type`, and `task.parentTaskId`.
   // Confidence note #4: this minimum shape is sufficient.
   // defaultResourceClaims accepts Pick<Task, "id" | "type" | "parentTaskId">.
-  const claims = body.resourceClaims ?? (
-    inferredType === "doc_decompose"
-      ? decomposeResourceClaims(nodeId, project.docs)
-      : defaultResourceClaims({ id: nodeId, type: inferredType, parentTaskId: undefined })
-  );
+  //
+  // All types — including doc_decompose — claim a single write on the target
+  // node only. A decompose rewrites the target and creates new children *under*
+  // it; it never writes the parent or siblings, so a broader family claim would
+  // over-serialize unrelated dispatches. Keeping claims[0] === the target also
+  // guarantees primaryNodeId(task) resolves to the dispatched node in the
+  // prompt template (the family context for required-reading is recomputed
+  // independently there). See docDecompose.ts.
+  const claims = body.resourceClaims
+    ?? defaultResourceClaims({ id: nodeId, type: inferredType, parentTaskId: undefined });
 
   const title = `Dispatch ${inferredType} on ${nodeId}`;
   const task = project.runner.createTask({

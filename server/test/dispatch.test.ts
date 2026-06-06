@@ -214,6 +214,31 @@ describe("POST /api/dispatch/:nodeId", () => {
     ctx.closeAll();
   });
 
+  it("doc_decompose claims only the target node, even within a full family", async () => {
+    // A parent with multiple children: a buggy family-scoped claim would emit a
+    // write claim per family member and (worse) leave claims[0] as the parent.
+    // The fix scopes the claim to the dispatched target alone.
+    const ctx = makeInMemoryContext([
+      makeDocNode({ id: "01-ui", status: "COMPLETE", parentId: "root" }),
+      makeDocNode({ id: "01-ui/02-dag", status: "COMPLETE", parentId: "01-ui" }),
+      makeDocNode({ id: "01-ui/03-docs", status: "COMPLETE", parentId: "01-ui" }),
+    ]);
+    const app = createServer(ctx);
+
+    const res = await app.request("/api/dispatch/01-ui/02-dag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "doc_decompose" }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { task: Task };
+    expect(body.task.type).toBe("doc_decompose");
+    expect(body.task.resourceClaims).toEqual([
+      { kind: "node", nodeId: "01-ui/02-dag", mode: "write" },
+    ]);
+    ctx.closeAll();
+  });
+
   it("explicit type override allows dispatch on non-dispatchable status", async () => {
     const ctx = makeInMemoryContext([makeDocNode({ id: "complete-node", status: "COMPLETE" })]);
     const app = createServer(ctx);

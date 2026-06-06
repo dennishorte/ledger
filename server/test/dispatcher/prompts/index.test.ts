@@ -53,6 +53,7 @@ const MOCK_CTX: ProjectContext = {
 const DISPATCHER_TYPES: TaskType[] = [
   "implement", "spec_review", "verify", "spec_draft",
   "reverify", "doc_refactor", "issue_triage", "project_status_review",
+  "doc_decompose",
 ];
 
 describe("renderPrompt", () => {
@@ -145,6 +146,13 @@ describe("defaultResourceClaims", () => {
 
   it("issue_triage → single write claim on task.id", () => {
     const task = makeTask("issue_triage");
+    expect(defaultResourceClaims(task)).toEqual([
+      { kind: "node", nodeId: TASK_ID, mode: "write" },
+    ]);
+  });
+
+  it("doc_decompose → single write claim on task.id (never family-broadened)", () => {
+    const task = makeTask("doc_decompose");
     expect(defaultResourceClaims(task)).toEqual([
       { kind: "node", nodeId: TASK_ID, mode: "write" },
     ]);
