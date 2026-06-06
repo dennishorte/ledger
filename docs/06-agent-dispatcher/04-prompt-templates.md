@@ -482,6 +482,16 @@ Implementer's decision assessments:
 
 Nothing punted on correctness; S1 applied (with snapshot regeneration); N1 + N2 applied as documentation cleanup.
 
+### v1.1 — 2026-06-06 — status-aware `doc_decompose` (D12)
+
+`doc_decompose` (the 9th persona, added post-v1 in `c75cedc`) hardcoded PLANNED children and "do not change any status." The first live end-to-end decompose (COMPLETE `01-ui/02-dag`, 2026-06-06) exposed the flaw: it emitted four PLANNED children for already-shipped subsystems — a COMPLETE parent cannot own PLANNED children. `docDecompose.ts` is now status-aware per D12:
+
+- **Children inherit the target's status** — `childStatus = COMPLETE | VERIFY` when the target is COMPLETE/VERIFY, else `PLANNED`. The child skeleton's `**Status:**`, the parent manifest-row Status, the mode framing, and the Implementation-Notes/Verification body placeholders all key off it. An unresolved target status (`ctx.docs` miss) defaults to the forward/PLANNED case.
+- **Retroactive (Mode B) routes through human_review** — a COMPLETE/VERIFY target ends with `runner.await_human_review` (not `complete_task`); the agent is re-describing code it did not write, so the operator confirms the split faithfully represents it.
+- **IN_PROGRESS is refused** — the template early-returns a stop-and-await prompt rather than fork a spec out from under a running implementer.
+
+Tests: `docDecompose.test.ts` gains a Mode-A-default case, a Mode-B case (COMPLETE → inherited status + human_review routing + schema-valid skeleton), and an IN_PROGRESS-refusal case. Gates green: server typecheck + lint clean, 367 pass / 2 skip (env-gated smoke). No snapshot churn — `doc_decompose` has no snapshot test (its round-trip validates the rendered skeleton against the real `@ledger/parser` schema instead). The open question on Mode-A parent status is logged as a MEDIUM Open Issue.
+
 ---
 
 ## Verification
