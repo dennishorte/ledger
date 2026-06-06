@@ -4,7 +4,7 @@ Living reference / issue writeup, not an implementation node. Captures a
 reproducible dispatcher failure found while validating the `doc_decompose` fix
 (`c75cedc`) end-to-end, so it can be fixed in a clean context without re-deriving.
 
-Sibling doc: `docs/process/e2e-dispatch-findings.md` — this is a **new, distinct**
+Sibling doc: `docs/_investigations/e2e-dispatch-findings.md` — this is a **new, distinct**
 failure from that doc's Finding #1 (see "Relationship" below).
 
 ## Symptom

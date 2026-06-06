@@ -95,7 +95,7 @@ ledger/
 │       │       │   └── 03-nested.md                       # nested leaf for :nodeId{.+} matcher
 │       │       ├── _schemas/
 │       │       │   └── ignored.md                         # buildDocGraph must skip — appears nowhere in /api/docs (Spec Review S5)
-│       │       └── process/
+│       │       └── _process/
 │       │           └── ignored.md                         # same skip rule (Spec Review S5)
 │       └── escape-project/                                # second fixture — bad docs field test (Spec Review S4)
 │           └── .ledger/project.json                        # contains `"docs": "../escape"` to fail assertContained at server start
@@ -315,7 +315,7 @@ export async function readDocsTree(docsRoot: string): Promise<Record<string, str
 
 Dotfile-prefixed directories skipped (`.git`, `.ledger`, `.vscode`); `node_modules` skipped. Only `.md` files emitted. Keys are `docsRoot`-relative paths (matching what `import.meta.glob` in `app/` produces, so `buildDocGraph` consumes both shapes without translation).
 
-`buildDocGraph` from `@ledger/parser` skips the `process/` and `_schemas/` subtrees internally (logic moved from old `parseDocs.ts`); `readDocsTree` does not need to know about those.
+`buildDocGraph` from `@ledger/parser` skips every `_`-prefixed directory subtree internally (e.g. `_schemas/`, `_process/`, `_investigations/`; logic moved from old `parseDocs.ts`); `readDocsTree` does not need to know about those.
 
 ### Routes
 
@@ -452,13 +452,13 @@ describe("GET /api/docs", () => {
     expect(body.nodes.length).toBeGreaterThan(0);
     expect(body.validation.errorPaths).toContain("02-broken.md"); // the deliberately bad fixture
 
-    // Spec Review S5: _schemas/ and process/ subtrees are skipped by buildDocGraph
+    // Spec Review S5: _schemas/ and _process/ subtrees are skipped by buildDocGraph
     const nodeIds: string[] = body.nodes.map((n: { id: string }) => n.id);
     expect(nodeIds).not.toContain("_schemas/ignored");
-    expect(nodeIds).not.toContain("process/ignored");
+    expect(nodeIds).not.toContain("_process/ignored");
     // The skipped files also do NOT appear as validation errors (skip happens before validation).
     expect(body.validation.errorPaths).not.toContain("_schemas/ignored.md");
-    expect(body.validation.errorPaths).not.toContain("process/ignored.md");
+    expect(body.validation.errorPaths).not.toContain("_process/ignored.md");
   });
 });
 
@@ -594,7 +594,7 @@ None.
 
 `02-broken.md` is identical to `01-leaf.md` minus one required heading (e.g., omit `## Decisions`); validators reject it. `subdir/03-nested.md` is identical to `01-leaf.md` with `**Node ID:** \`subdir/03-nested\``.
 
-The `_schemas/ignored.md` and `process/ignored.md` files (Spec Review S5) exist to verify `buildDocGraph`'s skip logic runs against output from `readDocsTree` (which does not pre-skip these subtrees — that's the parser's concern). Their content is a single `# Ignored` heading; the bulk endpoint test asserts they do **not** appear in `body.nodes` and do **not** appear in `body.validation.errorPaths` (the skip happens before validation, not as a validation failure).
+The `_schemas/ignored.md` and `_process/ignored.md` files (Spec Review S5) exist to verify `buildDocGraph`'s skip logic runs against output from `readDocsTree` (which does not pre-skip these subtrees — that's the parser's concern). Their content is a single `# Ignored` heading; the bulk endpoint test asserts they do **not** appear in `body.nodes` and do **not** appear in `body.validation.errorPaths` (the skip happens before validation, not as a validation failure).
 
 ```jsonc
 // server/__fixtures__/escape-project/.ledger/project.json (Spec Review S4)
@@ -671,7 +671,7 @@ Independent spec review run in a clean Sonnet context against the DRAFT. Verdict
 | S2 | `idForPath` not in `02-parser-extraction`'s public surface; D12's "tiny patch commit" hedging would force this child's implementer to open a sibling-spec patch ahead of their own work. Reviewer flagged as operator-decision. | **Operator chose amend `02-parser-extraction`.** That spec's audit row (cross-cutting) added `idForPath` to `packages/parser/src/index.ts`'s public surface. D12 rewritten: this child consumes `idForPath` from the parser; no conditional, no fallback path. `routes/docs.ts` imports it directly. |
 | S3 | 422-on-non-leaf conflates with 422-on-validation-failure. Root/parent docs are intentionally not schema-validated (`02-schema` S2); returning 422 calls them "schema-invalid" when they're actually "different doc kind." Reviewer flagged as operator-decision: 404 with distinct code vs 422 with distinct body. | **Operator chose 404 + `{ error: "not_a_leaf" }`.** Status semantics: 200 (leaf, valid), 422 (leaf, schema-invalid), 404 (not found OR not-a-leaf, distinguished by `error` field). Updated `routes/docs.ts` snippet, D7 prose, and endpoint summary. Added test case at `docs.test.ts` asserting 404 + `error: "not_a_leaf"` for the fixture's `00-project` root. |
 | S4 | "Bad `docs` field" context test mentioned but no fixture or test setup specified. Implementer would have to invent the approach. Reviewer flagged as operator-decision: second fixture vs tmpdir vs in-place mutation. | **Operator chose second fixture.** Added `server/__fixtures__/escape-project/.ledger/project.json` with `"docs": "../escape"`. No `docs/` directory needed — `assertContained` rejection fires before any docs read. Added test description in `context.test.ts` excerpt asserting the `ContextError` throws with a `path escapes` message. |
-| S5 | `_schemas/` and `process/` skip logic (inside `buildDocGraph`) not exercised by the server's fixture suite. Verifying it runs correctly when called from the server's context (via `readDocsTree`'s output) is a real gap. | Added `_schemas/ignored.md` and `process/ignored.md` to the sample-project fixture. Added bulk-endpoint test assertions: `body.nodes` does NOT contain `_schemas/ignored` or `process/ignored`; `body.validation.errorPaths` does NOT contain them (skip happens before validation, not as a validation failure). |
+| S5 | `_schemas/` and `_process/` skip logic (inside `buildDocGraph`) not exercised by the server's fixture suite. Verifying it runs correctly when called from the server's context (via `readDocsTree`'s output) is a real gap. | Added `_schemas/ignored.md` and `_process/ignored.md` to the sample-project fixture. Added bulk-endpoint test assertions: `body.nodes` does NOT contain `_schemas/ignored` or `_process/ignored`; `body.validation.errorPaths` does NOT contain them (skip happens before validation, not as a validation failure). |
 | N1 | `assertContained` symlink-escape Open Issue tagged LOW; the originating `03-project-metadata` handoff was MEDIUM. Under-tagging. | Bumped priority from LOW to MEDIUM; added a note that the priority matches the originating handoff. |
 | N2 | `validationErrorPaths` key format not explicitly stated (inferred from `readDocsTree`'s key format). | No edit — the type signature and the contract `buildDocGraph(rawDocs: Record<string, string>) → { validationErrorPaths: string[] }` makes it clear. The new fixture-skip assertions exercise this implicitly. |
 | N3 | `health.ts` route reads `c.get("project")` for `startedAt`; if context middleware throws, health fails. Trivial in v1 since ProjectContext is immutable + pre-validated. | No edit — by design; the dependency is intentional. Health endpoint IS dependent on the server having a valid context; without one the server doesn't boot. |
@@ -718,7 +718,7 @@ Nothing punted. S2, S3, S4 were operator-decision; all recorded with rationale. 
 | `server/__fixtures__/sample-project/docs/02-broken.md` | New — missing `## Decisions` |
 | `server/__fixtures__/sample-project/docs/subdir/03-nested.md` | New |
 | `server/__fixtures__/sample-project/docs/_schemas/ignored.md` | New — S5 skip test |
-| `server/__fixtures__/sample-project/docs/process/ignored.md` | New — S5 skip test |
+| `server/__fixtures__/sample-project/docs/_process/ignored.md` | New — S5 skip test |
 | `server/__fixtures__/escape-project/.ledger/project.json` | New — S4 containment test |
 | `docs/04-api-server/03-server-package.md` | Status transitions |
 | `docs/04-api-server/00-api-server.md` | Manifest row status bumps |

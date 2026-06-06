@@ -74,6 +74,15 @@ function parseChildrenManifest(md: string): RawChildRow[] {
 }
 
 /**
+ * Folders whose name begins with `_` are framework-internal (e.g. `_schemas/`,
+ * `_process/`, `_investigations/`) and are skipped from the DocNode walk. Every
+ * directory segment is checked, so nested `_x/` folders are skipped too.
+ */
+function isInternalDocsPath(docsRelPath: string): boolean {
+  return docsRelPath.split("/").slice(0, -1).some((seg) => seg.startsWith("_"));
+}
+
+/**
  * Map a rawDocs key (docs-relative path like "01-ui/01-shell.md") to a NodeId.
  *
  * Keys in the rawDocs Record passed to buildDocGraph are docs-relative paths.
@@ -81,8 +90,7 @@ function parseChildrenManifest(md: string): RawChildRow[] {
  */
 function pathKeyToNodeId(docsRelPath: string): NodeId | null {
   if (!docsRelPath.endsWith(".md")) return null;
-  if (docsRelPath.startsWith("process/")) return null;
-  if (docsRelPath.startsWith("_schemas/")) return null;
+  if (isInternalDocsPath(docsRelPath)) return null;
   if (docsRelPath === "00-project.md") return "root";
   const noExt = docsRelPath.slice(0, -3);
   const parts = noExt.split("/");
@@ -211,7 +219,7 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
   for (const [key, body] of Object.entries(rawDocs)) {
     const sub = toDocsRelPath(key);
 
-    if (sub.startsWith("process/") || sub.startsWith("_schemas/")) continue;
+    if (isInternalDocsPath(sub)) continue;
 
     if (isLeafPath(sub)) {
       const candidate = parseDocNode(sub, body);

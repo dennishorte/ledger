@@ -25,8 +25,9 @@ const malformedManifestRaw = fixture("malformed-manifest.md");
 // ---------------------------------------------------------------------------
 
 describe("parseDocNode — path filtering", () => {
-  it("returns null for process/ paths", () => {
-    expect(parseDocNode("process/leaf-workflow.md", "# Leaf Workflow")).toBeNull();
+  it("returns null for underscore-prefixed folders (_process/, _investigations/)", () => {
+    expect(parseDocNode("_process/leaf-workflow.md", "# Leaf Workflow")).toBeNull();
+    expect(parseDocNode("_investigations/some-finding.md", "# Finding")).toBeNull();
   });
 
   it("returns null for _schemas/ paths", () => {

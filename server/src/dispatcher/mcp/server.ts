@@ -32,7 +32,7 @@ interface Session {
  * sends `initialize` it flips `_initialized = true` and the SDK rejects every
  * subsequent `initialize` with `-32600 "Server already initialized"` (HTTP 400).
  * A single shared transport therefore serves at most ONE agent per server boot —
- * the bug fixed here (see docs/process/dispatcher-hang-issue.md, CONFIRMED ROOT
+ * the bug fixed here (see docs/_investigations/dispatcher-hang-issue.md, CONFIRMED ROOT
  * CAUSE 2026-06-06).
  *
  * The correct stateful pattern (per the SDK) is one transport + one McpServer per

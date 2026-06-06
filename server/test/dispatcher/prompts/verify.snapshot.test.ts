@@ -56,7 +56,7 @@ describe("verify template snapshot", () => {
       Load these files via the Read tool before acting. They establish constraints you must honour:
 
       - CLAUDE.md
-      - docs/process/leaf-workflow.md
+      - docs/_process/leaf-workflow.md
 
       ## Success criteria
 

@@ -521,7 +521,7 @@ describe("createMcpServer (factory)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Per-session transports — regression for docs/process/dispatcher-hang-issue.md
+// Per-session transports — regression for docs/_investigations/dispatcher-hang-issue.md
 // (CONFIRMED ROOT CAUSE 2026-06-06: a single shared transport rejected every
 // agent after the first with -32600 "Server already initialized".)
 // ---------------------------------------------------------------------------

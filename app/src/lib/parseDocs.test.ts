@@ -91,8 +91,9 @@ describe("parseDocs — idForPath", () => {
     expect(idForPath("docs/01-ui/00-ui.md")).toBe("01-ui");
   });
 
-  it("returns null for docs/process/leaf-workflow.md", () => {
-    expect(idForPath("docs/process/leaf-workflow.md")).toBeNull();
+  it("returns null for underscore-prefixed folders (docs/_process/, docs/_investigations/)", () => {
+    expect(idForPath("docs/_process/leaf-workflow.md")).toBeNull();
+    expect(idForPath("docs/_investigations/dispatcher-hang-issue.md")).toBeNull();
   });
 
   it("returns null for unrecognised input", () => {

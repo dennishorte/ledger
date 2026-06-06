@@ -4,8 +4,8 @@
  * Takes a docs/-relative file path and raw markdown string; returns an
  * `unknown` object suitable for passing to validateDocNode, or `null` when
  * the path is outside validation scope:
- *   - paths starting with process/ (operator playbooks)
- *   - paths starting with _schemas/ (machine-readable artifacts)
+ *   - paths under any underscore-prefixed folder (_schemas/, _process/,
+ *     _investigations/, … — framework-internal, not implementation nodes)
  *   - root doc (00-project.md → nodeId "root")
  *   - parent docs (any <dir>/00-<slug>.md)
  *
@@ -20,14 +20,22 @@ import type { NodeId } from "../coreTypes.js";
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Folders whose name begins with `_` are framework-internal (e.g. `_schemas/`,
+ * `_process/`, `_investigations/`) and are skipped from the node walk. Every
+ * directory segment is checked, so nested `_x/` folders are skipped too.
+ */
+function isInternalDocsPath(docsRelPath: string): boolean {
+  return docsRelPath.split("/").slice(0, -1).some((seg) => seg.startsWith("_"));
+}
+
 /** Map a docs-relative path to its nodeId, or null for out-of-scope paths. */
 function pathToNodeId(docsRelPath: string): NodeId | null {
   // Must end in .md
   if (!docsRelPath.endsWith(".md")) return null;
 
-  // Skip process/ and _schemas/
-  if (docsRelPath.startsWith("process/")) return null;
-  if (docsRelPath.startsWith("_schemas/")) return null;
+  // Skip framework-internal folders (underscore-prefixed: _schemas/, _process/, _investigations/, …)
+  if (isInternalDocsPath(docsRelPath)) return null;
 
   // Root doc
   if (docsRelPath === "00-project.md") return "root";
@@ -154,8 +162,8 @@ function parseChildrenSection(body: string): ChildManifestRowRaw[] {
  * Parse a markdown doc at the given docs-relative path into a candidate JSON
  * object for schema validation.
  *
- * Returns `null` for paths outside the validation scope (process/, _schemas/,
- * root doc, parent docs). All schema enforcement is delegated to validateDocNode.
+ * Returns `null` for paths outside the validation scope (underscore-prefixed
+ * folders, root doc, parent docs). All schema enforcement is delegated to validateDocNode.
  *
  * @param docsRelPath - Path relative to the docs/ directory, e.g. "02-schema.md"
  * @param raw         - Raw markdown file contents

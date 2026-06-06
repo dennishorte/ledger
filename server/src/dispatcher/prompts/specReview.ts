@@ -25,7 +25,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     ...(parentPath ? [parentPath] : []),
     "app/src/lib/types.ts",
     "packages/parser/src/runner/types.ts",
-    "docs/process/leaf-workflow.md",
+    "docs/_process/leaf-workflow.md",
   ];
 
   const docRef = docPath ?? `(spec doc for node ${task.id})`;

@@ -349,6 +349,6 @@ The first e2e dispatch test (same day) immediately disabled it via `LEDGER_DAEMO
 - **Finding #2** — The daemon auto-dispatched unreviewed `doc_refactor` write-agents that `git commit`-ted specs on the working branch with no HITL gate. ~24 agents fired concurrently in one working tree; git's index lock is repo-global, so ~18 lost the commit race.
 - **Finding #3** — Daemon-enqueued tasks starved: it used raw `store.createTask` bypassing the runner, so tasks sat PENDING until unrelated operator activity ticked the scheduler.
 
-Full detail: `docs/process/e2e-dispatch-findings.md` §2–§3.
+Full detail: `docs/_investigations/e2e-dispatch-findings.md` §2–§3.
 
 The v1 implementation files (`server/src/daemon/index.ts`, `monitors.ts`; `server/src/routes/daemon.ts`) are deleted as part of the v2 implementation.

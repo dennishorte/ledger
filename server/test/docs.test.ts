@@ -36,14 +36,14 @@ describe("GET /api/docs", () => {
     expect(body.validation.errorPaths).not.toContain("_schemas/ignored.md");
   });
 
-  it("S5: process/ignored.md does not appear in nodes or errorPaths", async () => {
+  it("S5: _process/ignored.md does not appear in nodes or errorPaths", async () => {
     const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
     const app = createServer(project);
     const res = await app.request("/api/docs");
     const body = await res.json() as { nodes: { id: string }[]; validation: { errorPaths: string[] } };
     const nodeIds = body.nodes.map((n) => n.id);
-    expect(nodeIds).not.toContain("process/ignored");
-    expect(body.validation.errorPaths).not.toContain("process/ignored.md");
+    expect(nodeIds).not.toContain("_process/ignored");
+    expect(body.validation.errorPaths).not.toContain("_process/ignored.md");
   });
 });
 

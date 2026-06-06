@@ -58,7 +58,7 @@ describe("specReview template snapshot", () => {
       - CLAUDE.md
       - app/src/lib/types.ts
       - packages/parser/src/runner/types.ts
-      - docs/process/leaf-workflow.md
+      - docs/_process/leaf-workflow.md
 
       ## Success criteria
 

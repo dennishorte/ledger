@@ -23,7 +23,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "CLAUDE.md",
     ...(docPath ? [docPath] : []),
     ...(parentPath ? [parentPath] : []),
-    "docs/process/leaf-workflow.md",
+    "docs/_process/leaf-workflow.md",
   ];
 
   const docRef = docPath ?? `(spec doc for node ${task.id})`;

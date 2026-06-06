@@ -24,7 +24,7 @@ In scope for v1:
    - `index.ts` — the registry: `renderPrompt(task, ctx): string` switches on `task.type`, calls the right template. Also exports `defaultResourceClaims(task): ResourceClaim[]` (item 4 below).
    - `shared.ts` — composition helpers consumed by all eight templates: `personaPreamble(persona: Persona): string`, `mcpToolContractReminder(): string`, `requiredReadingSection(paths: string[]): string`, `taskHeaderBlock(task, ctx): string`.
    - Eight template files, one per task type: `implement.ts`, `specReview.ts`, `verify.ts`, `specDraft.ts`, `reverify.ts`, `docRefactor.ts`, `issueTriage.ts`, `projectStatusReview.ts`. Each exports `default function render(task, ctx): string`.
-2. **Persona definitions** — eight personas, one per task type, defined in `shared.ts`'s `personaPreamble`. Each is three to six sentences setting the agent's role for that task type. The personas mirror the operator's playbook from `docs/process/leaf-workflow.md` — the `implement` persona is a code-writer per leaf-workflow stage 4; `spec_review` and `verify` are reviewers per stages 2 and 6; etc. Personas are *content* decisions captured in this leaf rather than spread across templates; templates compose `personaPreamble("implement")` to build the prompt header.
+2. **Persona definitions** — eight personas, one per task type, defined in `shared.ts`'s `personaPreamble`. Each is three to six sentences setting the agent's role for that task type. The personas mirror the operator's playbook from `docs/_process/leaf-workflow.md` — the `implement` persona is a code-writer per leaf-workflow stage 4; `spec_review` and `verify` are reviewers per stages 2 and 6; etc. Personas are *content* decisions captured in this leaf rather than spread across templates; templates compose `personaPreamble("implement")` to build the prompt header.
 3. **MCP-tool contract reminder** — `shared.ts`'s `mcpToolContractReminder()` returns a fixed three-paragraph block:
    - Paragraph 1: "You are working on task `<task_id>` (shown in the task header at the top of this prompt; also available as the `LEDGER_TASK_ID` env var). The `runner.*` MCP tools require this task_id as their first argument; calls with any other task_id are rejected with `task_not_bound`."
    - Paragraph 2: "Emit `runner.emit_event` for each meaningful step: reasoning summary (kind=`reasoning`), tool_call summary (kind=`tool_call`), artifact written (kind=`artifact`). Do NOT emit `status_change` events — those are managed by the runner."
@@ -43,7 +43,7 @@ In scope for v1:
    - `implement`: `CLAUDE.md`, the task's spec doc, the parent spec doc, dependency-leaf specs (transitive), and the actual source files referenced in the spec's §Design.
    - `spec_review`: `CLAUDE.md`, the spec under review, the parent doc, sibling specs (style benchmark), existing types in `app/src/lib/types.ts` AND `packages/parser/src/runner/types.ts`.
    - `verify`: `CLAUDE.md`, the spec, the parent doc, the worktree's diff (via `git diff main..HEAD` from the worktree path), the source files modified by the implementer.
-   - `spec_draft`: `CLAUDE.md`, the parent doc, sibling specs (gold-standard benchmark), the PRD `docs/00-project.md` §6.1 (schema), `docs/process/leaf-workflow.md` (procedure).
+   - `spec_draft`: `CLAUDE.md`, the parent doc, sibling specs (gold-standard benchmark), the PRD `docs/00-project.md` §6.1 (schema), `docs/_process/leaf-workflow.md` (procedure).
    - `reverify`: same as `verify`.
    - `doc_refactor`: `CLAUDE.md`, the spec being refactored, the parent doc, the §Open Issues section's flagged items.
    - `issue_triage`: `CLAUDE.md`, the spec, the parent doc, the events table for the task (via `runner.get_task`).
@@ -317,7 +317,7 @@ The personas differ in their emphasis. Spot-check across the eight:
 - `issue_triage` — "walk Open Issues," "is each still valid?", "revised table with updated priorities"
 - `project_status_review` — "summarise current focus + blockers + drift," "under 500 words"
 
-Each persona maps to an operator-recognisable activity from `docs/process/leaf-workflow.md` or its analogues. The personas exist to give the agent a coherent role frame; the actual behaviour is constrained by the tool contract.
+Each persona maps to an operator-recognisable activity from `docs/_process/leaf-workflow.md` or its analogues. The personas exist to give the agent a coherent role frame; the actual behaviour is constrained by the tool contract.
 
 ### Acceptance check (manual, end-to-end)
 
@@ -469,7 +469,7 @@ Reviewer's structural observations:
 
 - **`renderers` typed `Record<Persona, ...>`** with `isPersona(type): type is Persona` narrowing function — TypeScript's exhaustiveness check is real. `noUncheckedIndexedAccess` honoured since the lookup happens after type narrowing.
 - **No surprising files** — diff matches the spec's §Repository layout exactly.
-- **Persona content quality**: all 8 personas distinct (programmatically verified), and each accurately mirrors its operator-playbook stage from `docs/process/leaf-workflow.md`. The `reverify` persona's explicit "read the prior audit table" directive is well-grounded.
+- **Persona content quality**: all 8 personas distinct (programmatically verified), and each accurately mirrors its operator-playbook stage from `docs/_process/leaf-workflow.md`. The `reverify` persona's explicit "read the prior audit table" directive is well-grounded.
 - **Persona content vs runtime behaviour**: snapshot tests lock the rendered strings but cannot evaluate whether persona framing produces good agent behaviour live. Operator acceptance check #1 covers this; only fully testable after `05-dispatch-api` lands and a real dispatch happens.
 
 Implementer's decision assessments:

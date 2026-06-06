@@ -24,7 +24,7 @@ export function createHealthScanner(ctx: ScannerContext): HealthScannerHandle {
         continue;
       }
 
-      // parseDocNode returns null for out-of-scope paths (process/, _schemas/, parent docs)
+      // parseDocNode returns null for out-of-scope paths (underscore-prefixed folders, parent docs)
       if (parsed === null) continue;
 
       const result = validateDocNode(parsed);

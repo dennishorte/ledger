@@ -54,7 +54,7 @@ export interface SpawnOpts {
    * `forceKillAfterDelay` (5 s default) so a process that ignores SIGTERM is
    * still killed. The resolved Result carries `timedOut: true`, which the
    * lifecycle reconciler maps to FAILED:subprocess_timeout. Omit / 0 disables it
-   * (no watchdog) — see docs/process/dispatcher-hang-issue.md, defect #1.
+   * (no watchdog) — see docs/_investigations/dispatcher-hang-issue.md, defect #1.
    */
   timeoutMs?: number;
 }

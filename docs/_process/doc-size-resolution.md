@@ -42,5 +42,5 @@ For docs that cover multiple responsibilities, dispatch a `doc_decompose` task f
 ## Notes
 
 - The HITL gate (step 4–5) is mandatory. A `doc_decompose` agent creates new files and rewrites the original; always review before approving.
-- If the doc's `nodeId` is not a dispatchable node (e.g., a `docs/process/` file), the dispatch will return a 409. Handle those manually (Option A).
+- If the doc's `nodeId` is not a dispatchable node (e.g., a `docs/_process/` file), the dispatch will return a 409. Handle those manually (Option A).
 - A re-scan after resolution creates a new snapshot row; old scan rows with the finding are retained verbatim per the append-log design (07-health-daemon D3).

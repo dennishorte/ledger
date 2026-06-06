@@ -11,12 +11,21 @@
 
 import type { NodeId } from "../src/lib/types.js";
 
+/**
+ * Folders whose name begins with `_` are framework-internal (e.g. `_schemas/`,
+ * `_process/`, `_investigations/`) and map to no node. Mirrors the parser's
+ * `isInternalDocsPath`; every directory segment is checked.
+ */
+function isInternalDocsPath(sub: string): boolean {
+  return sub.split("/").slice(0, -1).some((seg) => seg.startsWith("_"));
+}
+
 function pathToNodeId(filePath: string): NodeId | null {
   const idx = filePath.indexOf("/docs/");
   if (idx === -1) return null;
   const sub = filePath.slice(idx + "/docs/".length);
   if (!sub.endsWith(".md")) return null;
-  if (sub.startsWith("process/")) return null;
+  if (isInternalDocsPath(sub)) return null;
   if (sub === "00-project.md") return "root";
   const noExt = sub.slice(0, -3);
   const parts = noExt.split("/");
