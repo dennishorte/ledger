@@ -1,5 +1,12 @@
 # Dispatcher hang — agent subprocess freezes indefinitely with no watchdog (2026-06-06)
 
+> **RESOLVED 2026-06-06 — fixed in `345dfaa`** (per-session MCP transports + session
+> teardown + execa timeout/idle watchdog + stream-json telemetry). Root cause and all
+> four confirmed defects are fixed and live-verified — see **§Resolution** below. This
+> file is retained as an investigation archive: the "Proposed fixes", "Root-cause
+> hypotheses", and "Reproduce in a clean context" sections are pre-fix analysis, kept
+> for the record.
+
 Living reference / issue writeup, not an implementation node. Captures a
 reproducible dispatcher failure found while validating the `doc_decompose` fix
 (`c75cedc`) end-to-end, so it can be fixed in a clean context without re-deriving.
