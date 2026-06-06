@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag/02-layout`
 **Parent:** `01-ui/02-dag`
-**Status:** PLANNED
+**Status:** COMPLETE (extracted from shipped 02-dag v1.4, 2026-06-06)
 **Created:** 2026-06-06
 **Last Updated:** 2026-06-06
 **Dependencies:** `01-ui/02-dag/01-data-source`
@@ -44,11 +44,11 @@ None yet. Governed by parent `01-ui/02-dag` Decisions **D2** (dagre superseded),
 
 ## Implementation Notes
 
-None yet. (Layout was dagre in v1.0–v1.2, migrated to ELK in v1.3, and gained the collapse engine + pack-vs-rank in v1.4; that history is summarized in the parent's Implementation Notes version table and preserved in git.)
+Layout was dagre in v1.0–v1.2, migrated to ELK in v1.3, and gained the collapse engine + pack-vs-rank in v1.4; that shipped history is summarized in the parent's Implementation Notes version table and preserved in git.
 
 ## Verification
 
-How completion will be confirmed:
+Confirmed — this subsystem ships in 02-dag v1.4:
 
 1. `useDagLayout` returns flat, absolute-coordinate React Flow nodes; outer subtree rects fully enclose nested inner rects.
 2. Collapsed subtree parents are pruned from the ELK graph (no descendant layout cost); expanding restores them.

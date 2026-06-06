@@ -109,7 +109,7 @@ The doc's estimated token count exceeded the project health threshold (~31k toke
 | `03-rendering` | The three node forms (`DocDagNode`, `DocSubtreeNode`, `DocCollapsedSubtreeNode`), `DagCanvas`, `StatusChip` + `statusColors`, the status→token mapping, affordance separation. | Presentation (React Flow node components + canvas chrome) is separable from geometry; it is the cream-theme surface and owns the chevron-vs-inspector affordance split. |
 | `04-inspector` | `NodeInspector` content (metadata, deps, children, doc link), hosting `09-workflow-progress`'s section and `06-agent-dispatcher`'s Dispatch button; the click→inspector model. | The inspector is a distinct detail surface that three sibling nodes interact with (`09-workflow-progress` embeds, `05-logs` adds a "View task logs" affordance, `06-agent-dispatcher` added Dispatch); a focused node gives those cross-references a stable target. |
 
-No sibling scope was duplicated: `useDocSource`/`idForPath` remain with `01-ui/03-docs`, and the `WorkflowProgressSection` derivation remains with `01-ui/09-workflow-progress` (the inspector only hosts it). The target's filename, Node ID, and lifecycle status (`COMPLETE` v1.4) are unchanged; children start at `PLANNED`.
+No sibling scope was duplicated: `useDocSource`/`idForPath` remain with `01-ui/03-docs`, and the `WorkflowProgressSection` derivation remains with `01-ui/09-workflow-progress` (the inspector only hosts it). The target's filename, Node ID, and lifecycle status (`COMPLETE` v1.4) are unchanged. Because this decomposed an already-shipped node, the four children are `COMPLETE` — each documents a subsystem that ships in 02-dag v1.4, not new planned work (reconciled 2026-06-06; the decompose agent emitted them at `PLANNED`, which is wrong for a COMPLETE target — see the parent-spec follow-up).
 
 ---
 
@@ -131,7 +131,7 @@ This node is decomposed; per `02-schema` it is validated as a parent and holds t
 
 | Child | Title | Depends on | Status |
 |---|---|---|---|
-| `01-data-source` | Doc-Graph Data Source & Model | `—` | PLANNED |
-| `02-layout` | Compound-Graph Layout & Collapse Engine | `01-data-source` | PLANNED |
-| `03-rendering` | Node Rendering, Status Visualization & Canvas | `01-data-source`, `02-layout` | PLANNED |
-| `04-inspector` | DAG Node Inspector | `01-data-source` | PLANNED |
+| `01-data-source` | Doc-Graph Data Source & Model | `—` | COMPLETE |
+| `02-layout` | Compound-Graph Layout & Collapse Engine | `01-data-source` | COMPLETE |
+| `03-rendering` | Node Rendering, Status Visualization & Canvas | `01-data-source`, `02-layout` | COMPLETE |
+| `04-inspector` | DAG Node Inspector | `01-data-source` | COMPLETE |

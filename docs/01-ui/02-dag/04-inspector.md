@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag/04-inspector`
 **Parent:** `01-ui/02-dag`
-**Status:** PLANNED
+**Status:** COMPLETE (extracted from shipped 02-dag v1.4, 2026-06-06)
 **Created:** 2026-06-06
 **Last Updated:** 2026-06-06
 **Dependencies:** `01-ui/02-dag/01-data-source`
@@ -38,11 +38,11 @@ None yet. Governed by parent `01-ui/02-dag` Decision **D5** (click → inspector
 
 ## Implementation Notes
 
-None yet. (The inspector shipped in v1.0; `09-workflow-progress` embedded its section, `06-agent-dispatcher` added the Dispatch button. This child re-scopes the inspector surface as a standalone node; history is in the parent's Implementation Notes version table and git.)
+The inspector shipped in v1.0; `09-workflow-progress` embedded its section and `06-agent-dispatcher` added the Dispatch button. This child re-scopes the shipped inspector surface as a standalone node; history is in the parent's Implementation Notes version table and git.
 
 ## Verification
 
-How completion will be confirmed:
+Confirmed — this subsystem ships in 02-dag v1.4:
 
 1. Clicking a doc tile opens the inspector with id, parent link, status chip, title, `dependsOn`, children, and a working "View document" link to `/docs/:nodeId`; selecting another node updates the content; `Esc` closes it.
 2. `<WorkflowProgressSection>` renders below the metadata block with the `{ node, allNodes }` contract.

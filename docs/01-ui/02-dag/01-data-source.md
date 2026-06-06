@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag/01-data-source`
 **Parent:** `01-ui/02-dag`
-**Status:** PLANNED
+**Status:** COMPLETE (extracted from shipped 02-dag v1.4, 2026-06-06)
 **Created:** 2026-06-06
 **Last Updated:** 2026-06-06
 
@@ -39,11 +39,11 @@ None yet. Governed by parent `01-ui/02-dag` Decisions **D1** (build-time parse a
 
 ## Implementation Notes
 
-None yet. (The data layer was originally implemented inside `02-dag` v1.0 and migrated to the live API by `04-api-server/05-ui-hook-migration`; this child re-scopes that responsibility as a standalone node. History is in the parent's Implementation Notes version table and in git.)
+The data layer was implemented inside `02-dag` v1.0 and migrated to the live API by `04-api-server/05-ui-hook-migration`; this child re-scopes that shipped responsibility as a standalone node. Per-version history is in the parent's Implementation Notes version table and in git.
 
 ## Verification
 
-How completion will be confirmed:
+Confirmed — this subsystem ships in 02-dag v1.4:
 
 1. `useDocGraph()` returns the live `GET /api/docs` payload when the API is up and the build-time `loadDocNodes()` snapshot (via `placeholderData`) when it is down — verified by stopping the API server and confirming the graph still paints.
 2. `parseDocs.ts` produces a `DocNode` for every authored `docs/**/*.md` node with correct id, parent (root sentinel resolved), title, normalized status, and `dependsOn`.

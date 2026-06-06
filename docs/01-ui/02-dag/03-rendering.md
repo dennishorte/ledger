@@ -2,7 +2,7 @@
 
 **Node ID:** `01-ui/02-dag/03-rendering`
 **Parent:** `01-ui/02-dag`
-**Status:** PLANNED
+**Status:** COMPLETE (extracted from shipped 02-dag v1.4, 2026-06-06)
 **Created:** 2026-06-06
 **Last Updated:** 2026-06-06
 **Dependencies:** `01-ui/02-dag/01-data-source`, `01-ui/02-dag/02-layout`
@@ -40,11 +40,11 @@ None yet. Governed by parent `01-ui/02-dag` Decisions **D3** (manifest-only PLAN
 
 ## Implementation Notes
 
-None yet. (Render forms evolved across v1.0 doc tiles → v1.2 header-IS-parent subtree → v1.4 collapsed rollup tile; see the parent's Implementation Notes version table and git.)
+Render forms evolved across v1.0 doc tiles → v1.2 header-IS-parent subtree → v1.4 collapsed rollup tile; that shipped history is in the parent's Implementation Notes version table and git.
 
 ## Verification
 
-How completion will be confirmed:
+Confirmed — this subsystem ships in 02-dag v1.4:
 
 1. All three node forms render: leaf tile, expanded subtree container (header strip = parent), collapsed rollup tile (stacked card + descendant count + per-status dot tally summing to the count). No subtree rect for a single-child parent.
 2. Each node's status chip matches its doc's `**Status:**`; PLANNED/manifest-only nodes show a dashed border.
