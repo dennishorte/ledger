@@ -35,8 +35,10 @@ export function checkOrphans(
 ): HealthFinding | null {
   if (!ORPHAN_ELIGIBLE_STATUSES.has(doc.status)) return null;
 
-  const openIssuesText: string = doc.sections["Open Issues"] ?? "";
-  const trimmed = openIssuesText.trim();
+  // `doc` is a validateDocNode-validated DocumentNode (scanner/index.ts only calls
+  // this on result.node), and the document-node schema requires the "Open Issues"
+  // section as a string — so it is always present here (no `?? ""` fallback needed).
+  const trimmed = doc.sections["Open Issues"].trim();
   const hasRealIssues =
     trimmed.length > 0 && !EMPTY_PLACEHOLDERS.some((p) => p.test(trimmed));
 
