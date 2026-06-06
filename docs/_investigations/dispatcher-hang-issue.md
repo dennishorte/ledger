@@ -206,10 +206,18 @@ an agent to completion or show why. Two prior `doc_decompose` runs (FAILED, then
 this hung one) both produced zero model output.
 
 **Update (2026-06-06):** the dispatcher blocker is removed (Resolution above) —
-dispatched agents now reliably connect to MCP and can run to a terminal status. A
-full end-to-end `doc_decompose` validation has **not** yet been run: it is a write
-persona that edits docs and commits, so it is left as the operator's next step
-rather than triggered unattended (cf. the 07-health-daemon disable rationale).
+dispatched agents now reliably connect to MCP and can run to a terminal status.
+
+**End-to-end `doc_decompose` validated (2026-06-06).** Dispatched `doc_decompose`
+on COMPLETE `01-ui/02-dag` against a throwaway branch: ran PENDING → RUNNING →
+COMPLETE in ~2 min with **103 streamed events** (vs the original hang's 0). The
+per-session MCP transport bound (`activeSessions` 1 → 0 on exit), the agent issued
+its terminal `runner.complete_task`, and all four extracted children were
+schema-valid and graph-visible via `/api/docs`. The hang is fully resolved. The
+run also surfaced a *semantic* defect independent of the dispatcher — the persona
+emitted the children at PLANNED even though the target is COMPLETE shipped work (a
+COMPLETE parent cannot own PLANNED children). Fixed by status-aware decompose; see
+`06-agent-dispatcher/04-prompt-templates.md` D12.
 
 ## Resolution (2026-06-06)
 
