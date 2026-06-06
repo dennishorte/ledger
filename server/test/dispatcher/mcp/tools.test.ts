@@ -66,9 +66,8 @@ interface TestFixture {
 /**
  * Build a fully-wired test fixture:
  *  - in-memory store + runner
- *  - createMcpServer (pre-connect) → registerRunnerTools → _connect()
+ *  - createMcpServer with a per-session registerTools callback (registerRunnerTools)
  *  - binding registry wired to onSessionInitialized / onSessionClosed
- *  - registerRunnerTools called BEFORE _connect (SDK ordering constraint)
  *  - a RUNNING task created; client session bound to it via X-Ledger-Task-Id
  */
 async function makeFixture(): Promise<TestFixture> {
@@ -97,25 +96,20 @@ async function makeFixture(): Promise<TestFixture> {
   // Suppress unused var (task from noop createTask)
   void task;
 
-  // Pre-connect: register tools BEFORE calling _connect (SDK ordering constraint)
-  const mcpInternal = createMcpServer({ version: "0.1.0" });
+  // Per-session factory: tools are registered per session via the callback.
   const binding = createBindingRegistry();
+  const handle: McpServerHandle = createMcpServer({
+    version: "0.1.0",
+    registerTools: (server) => {
+      registerRunnerTools(server, { store: runner.store, handle: runner.handle, binding });
+    },
+  });
 
-  mcpInternal.onSessionInitialized((sessionId, request) => {
+  handle.onSessionInitialized((sessionId, request) => {
     const tid = request?.headers.get("X-Ledger-Task-Id") ?? undefined;
     binding.bind(sessionId, tid);
   });
-  mcpInternal.onSessionClosed((sessionId) => { binding.unbind(sessionId); });
-
-  registerRunnerTools(mcpInternal.server, {
-    store: runner.store,
-    handle: runner.handle,
-    binding,
-  });
-
-  await mcpInternal._connect();
-
-  const handle: McpServerHandle = mcpInternal;
+  handle.onSessionClosed((sessionId) => { binding.unbind(sessionId); });
 
   const app = new Hono().route("/mcp", handle.mcpRoute);
   const testFetch: typeof fetch = (input, init) => {
@@ -580,23 +574,19 @@ describe("binding hook wiring", () => {
     const pendingTask = runner.store.createTask({ type: "human_review", title: "T", source: "operator_injected" });
     runner.store.updateTaskStatus(pendingTask.id, { from: "PENDING", to: "RUNNING" });
 
-    const mcpInternal = createMcpServer({ version: "0.1.0" });
     const binding = createBindingRegistry();
+    const handle: McpServerHandle = createMcpServer({
+      version: "0.1.0",
+      registerTools: (server) => {
+        registerRunnerTools(server, { store: runner.store, handle: runner.handle, binding });
+      },
+    });
 
-    mcpInternal.onSessionInitialized((sessionId, request) => {
+    handle.onSessionInitialized((sessionId, request) => {
       const tid = request?.headers.get("X-Ledger-Task-Id") ?? undefined;
       binding.bind(sessionId, tid);
     });
-    mcpInternal.onSessionClosed((sessionId) => { binding.unbind(sessionId); });
-
-    registerRunnerTools(mcpInternal.server, {
-      store: runner.store,
-      handle: runner.handle,
-      binding,
-    });
-
-    await mcpInternal._connect();
-    const handle: McpServerHandle = mcpInternal;
+    handle.onSessionClosed((sessionId) => { binding.unbind(sessionId); });
 
     const app = new Hono().route("/mcp", handle.mcpRoute);
     const testFetch: typeof fetch = (input, init) => {

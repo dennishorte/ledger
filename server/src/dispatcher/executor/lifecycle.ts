@@ -4,9 +4,11 @@
  * Isolated from subprocess management so every lifecycle row is unit-testable
  * with synthetic (exit, finalStatus) inputs (D4).
  *
- * Row evaluation order (Spec Review B2 fix):
+ * Row evaluation order (Spec Review B2 fix; watchdog row added 2026-06-06):
  *   0  final === undefined  → task row gone; no-op
  *   4  final === "CANCELLED" → cancel route already wrote CANCELLED; honour it
+ *   I  idle AND final === "RUNNING" → idle watchdog killed it; fail (subprocess_idle)
+ *   T  timedOut AND final === "RUNNING" → watchdog killed it; fail (subprocess_timeout)
  *   1  exitCode === 0 AND final ∈ TERMINAL → success; no-op
  *   2  exitCode === 0 AND final === "RUNNING" → agent forgot terminal call; fail
  *   3+5 catch-all (any other exit with final === "RUNNING") → subprocess failed
@@ -33,6 +35,10 @@ export type ExitResult = {
   signal?: string | undefined;
   stderr?: string | undefined;
   stdout?: string | undefined;
+  /** execa sets this true when the `timeout` option elapsed and it killed the process. */
+  timedOut?: boolean | undefined;
+  /** Executor sets this true when the idle watchdog (forwardClaudeStream) killed the process. */
+  idle?: boolean | undefined;
 };
 
 export function reconcileExit(
@@ -48,6 +54,25 @@ export function reconcileExit(
   // CANCELLED before delivering SIGTERM. Honour it regardless of how the
   // subprocess exited (clean exit, SIGTERM, SIGKILL, non-zero code).
   if (final === "CANCELLED") return;
+
+  // Idle watchdog row: the stream went silent for idleMs and forwardClaudeStream
+  // killed the subprocess. Checked before timedOut (idle fires first, at a lower
+  // threshold) and before the catch-all so the reason is the specific
+  // `subprocess_idle` rather than a generic signal failure.
+  if (result.idle === true && final === "RUNNING") {
+    handle.fail(task.id, reasons.SUBPROCESS_IDLE);
+    return;
+  }
+
+  // Watchdog row: the execa `timeout` elapsed and execa killed the subprocess
+  // (SIGTERM, escalated to SIGKILL after forceKillAfterDelay). The task is still
+  // RUNNING (no terminal MCP call, no cancel). Fail with a distinguishing reason
+  // so a hung agent is reconciled and its resource claim freed. Checked before
+  // the catch-all so the reason is `subprocess_timeout`, not `subprocess_failed`.
+  if (result.timedOut === true && final === "RUNNING") {
+    handle.fail(task.id, reasons.SUBPROCESS_TIMEOUT);
+    return;
+  }
 
   // Row 1: agent called complete_task / fail_task / await_human_review and
   // the subprocess exited cleanly. Nothing more to do.

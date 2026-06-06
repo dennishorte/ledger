@@ -31,6 +31,55 @@ indistinguishable from a finished one (it just stops changing), which reads as
   the agent **connected to MCP and the session never closed**. It also stayed `1`
   *after* the subprocess was killed (see "session leak" below).
 
+## CONFIRMED ROOT CAUSE (2026-06-06) — single shared MCP transport
+
+Proven by direct `/mcp` probing, independent of claude. Hypothesis #1 below is
+**half right**: the `/mcp` surface is implicated, but nothing *stalls* — every
+server response is `200`/`202` in 2–5 ms. The defect is architectural.
+
+`server/src/dispatcher/mcp/server.ts` mounted a **single shared
+`WebStandardStreamableHTTPServerTransport`** for all agents (`app.all("/", …)`).
+That transport is single-session: once the first client sends `initialize` it
+sets `_initialized = true`, and the SDK (`@modelcontextprotocol/sdk@1.29`,
+`webStandardStreamableHttp.js:425`) hard-rejects every later `initialize`:
+
+    HTTP 400  {"error":{"code":-32600,"message":"Invalid Request: Server already initialized"}}
+
+Because the session is also never torn down on agent exit (defect #4), the
+transport stays permanently initialized. Net effect:
+
+- **At most one dispatched agent per server boot can connect to MCP.** The first
+  agent initializes the transport; every subsequent dispatch gets HTTP 400, no
+  `mcp__ledger-runner__*` tools, and `mcp_servers:[{status:"pending"}]` in its
+  `init` event. It then runs blind — 0 telemetry, cannot call `complete_task` /
+  `fail_task` — and with write tools granted + no watchdog, flounders until it
+  blocks indefinitely (the observed hang).
+- This **is** e2e-findings #1's "intermittent" tool loading, now explained: not
+  random — *works once per boot, fails forever after.* Defect #4 (session leak)
+  is the same bug's other face.
+
+### Reproduction (minimal, no claude)
+
+    # FRESH server boot, then:
+    curl -sS -X POST :4180/mcp -H 'Content-Type: application/json' \
+      -H 'Accept: application/json, text/event-stream' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"A","version":"1"}}}'
+    # → 200, assigns mcp-session-id, capabilities.tools.listChanged:true
+
+    # second client, IDENTICAL initialize, same (shared) transport:
+    # → 400  -32600 "Invalid Request: Server already initialized"
+
+Baseline ruled claude itself out: `claude --print --bare --permission-mode
+dontAsk` with **no** `--mcp-config` returns "pong" in ~900 ms.
+
+### Fix (landed 2026-06-06)
+
+Per-session transports — `Map<sessionId, transport>`, a fresh transport +
+`McpServer` per `initialize`, routed by the `mcp-session-id` header, torn down on
+close (the SDK's documented stateful pattern). Resolves the #1 *cause* and #4.
+The execa watchdog (defect #1 *operational*) lands alongside as the safety net
+that bounds any future hang regardless of cause.
+
 ## Ruled out
 
 - **Auth / API key.** The key is valid and funded — a direct
@@ -47,6 +96,10 @@ indistinguishable from a finished one (it just stops changing), which reads as
   the string and **closes stdin**. So the agent is not parked waiting on stdin.
 
 ## Confirmed defects
+
+> Status (2026-06-06): #1, #2, #3, #4 all **fixed**. #1 (hard watchdog) + #2
+> (stream-json telemetry forwarding + idle watchdog) + #3 (forced exit →
+> reconcile) + #4 (per-session transports + session teardown). See Resolution.
 
 1. **No executor timeout / watchdog.** `spawnClaudeCode` (`server/src/dispatcher/
    executor/spawn.ts`) calls `execa(...)` with **no `timeout` option**. A
@@ -144,6 +197,87 @@ resolution, and a prompt→child→`validateDocNode` round-trip). It **cannot be
 validated end-to-end** until this dispatcher hang is fixed — the runtime can't run
 an agent to completion or show why. Two prior `doc_decompose` runs (FAILED, then
 this hung one) both produced zero model output.
+
+**Update (2026-06-06):** the dispatcher blocker is removed (Resolution above) —
+dispatched agents now reliably connect to MCP and can run to a terminal status. A
+full end-to-end `doc_decompose` validation has **not** yet been run: it is a write
+persona that edits docs and commits, so it is left as the operator's next step
+rather than triggered unattended (cf. the 07-health-daemon disable rationale).
+
+## Resolution (2026-06-06)
+
+Landed in the `server` package (all gates green — 364 tests pass + 2 skipped,
+typecheck + lint clean across the package; a pre-existing unrelated
+`no-unnecessary-condition` error in `scanner/monitors.ts` was fixed in passing —
+the `"Open Issues"` section is schema-required so the `?? ""` fallback was dead):
+
+- **Per-session MCP transports** (`dispatcher/mcp/server.ts`). `createMcpServer`
+  now keeps a `Map<sessionId, {transport, server}>`, creates a fresh transport +
+  `McpServer` (tools registered via a new `registerTools` callback) on each
+  `initialize`, routes by the `mcp-session-id` header, and tears the session down
+  on close. The single-instance `.server` / `.transport` / `_connect` surface is
+  gone (`McpServerHandleInternal` removed); `context.ts` passes `registerTools`.
+  → fixes the root cause; defect #4 by design.
+- **Session teardown on subprocess exit** — `closeTaskSessions(taskId)` on the
+  handle, called in the executor's `finally`. claude does not DELETE /mcp on
+  exit, so the executor force-closes the agent's bound session. → defect #4.
+- **Watchdog** — `spawn.ts` gains `timeoutMs` → execa `timeout`; `claudeCode.ts`
+  defaults to 20 min (`LEDGER_DISPATCH_TIMEOUT_MS` override, `0` disables). On
+  elapse execa SIGTERMs then SIGKILLs (`forceKillAfterDelay`); `reconcileExit`
+  maps `result.timedOut` → `FAILED:subprocess_timeout` (new reason), freeing the
+  claim. → defects #1 and #3 (a frozen process is now forced to exit + reconcile).
+- **Stream-json telemetry forwarding + idle watchdog** (defect #2;
+  `dispatcher/executor/streamForward.ts`). The argv gains `--output-format
+  stream-json --verbose`; `forwardClaudeStream` iterates the subprocess stdout
+  line stream, maps each NDJSON event (`mapStreamEvent`, pure) to a runner
+  LogEvent (`reasoning` / `tool_call` / `tool_result` / `error`), and `handle.emit`s
+  it — landing in the events table AND streaming live to the Logs UI via
+  `withPublishing`. A black-box run is now a live transcript. The same line
+  stream re-arms an inactivity timer; silence for `idleMs` (default 5 min,
+  `LEDGER_DISPATCH_IDLE_MS`, 0 disables) kills the subprocess → idle fires before
+  the hard cap, reconciled to `FAILED:subprocess_idle`. → defect #2 + faster
+  hang recovery. (stdout stays buffered — execa tees the buffer and the line
+  iterator — so `result.stdout` and the reconcile failure-tail are unaffected.)
+
+Verified:
+
+- Live, real HTTP stack: two sequential `initialize`s both `200` with distinct
+  session ids (was `400` "already initialized" on the second).
+- Live, real claude agent: connects and successfully calls
+  `mcp__ledger-runner__runner_get_task`, returning real task data.
+- Tests: per-session regression + `closeTaskSessions`; watchdog `timedOut →
+  subprocess_timeout` + idle `subprocess_idle` reconcile rows; the spawn
+  timeout-kill; `mapStreamEvent` over every stream-json shape; a live
+  `forwardClaudeStream` integration (real subprocess → events + idle-kill); the
+  executor integration test asserts `activeSessions` returns to `0` after a run.
+- **Live end-to-end dispatch** (`verify` on `01-ui/02-dag`, read-only persona):
+  the agent connected to MCP and the run produced **77 events** — 28 `tool_call`
+  + 28 `tool_result` + 18 `reasoning` + 3 `status_change` — a fully inspectable
+  transcript (vs the original hang's 0 events). It hit a deliberately-short 240 s
+  test cap (`LEDGER_DISPATCH_TIMEOUT_MS`) → `FAILED:subprocess_timeout` with the
+  claim freed; `activeSessions` returned to `0`. (Production default is 20 min, so
+  a normal verify would not time out — the short cap was the test bound.)
+
+### Residual (claude-side, low severity, NOT addressed)
+
+claude's `--print` `init` event still shows `mcp_servers:[{status:"pending"}]` —
+it constructs turn 0 before the MCP client finishes connecting (~hundreds of ms),
+so a single-shot prompt that quits after one turn can miss the tools. Real
+multi-turn dispatch agents connect within the first turn or two (the probe
+reached the tool by ~turn 3). This is a claude startup race, independent of the
+transport bug. Mitigate at the prompt level if it ever bites.
+
+### Follow-ups still open
+
+- **`mcp__ledger-runner__*` transcript noise.** Forwarding is intentionally
+  stateless, so the agent's own runner tool calls (emit_event / complete_task)
+  appear as `tool_call`/`tool_result` events alongside the events they produce.
+  Mildly redundant; filter by correlating tool_use ids → names if it bothers an
+  operator.
+- **Idle threshold tuning.** Default 5 min idle / 20 min hard cap are guesses; a
+  thorough single model turn with no streamed output for >5 min would trip the
+  idle watchdog. Revisit once real dispatch durations are observed (raise
+  `LEDGER_DISPATCH_IDLE_MS` or set it to 0 to disable while tuning).
 
 ## Pointers
 

@@ -56,25 +56,28 @@ async function buildHarness(): Promise<TestHarness> {
   recoverOrphans(store);
   const runner = createRunner(store, undefined, bus);
 
-  // MCP server
-  const mcpInternal = createMcpServer({ version: "0.0.1-test" });
+  // MCP server (per-session transports; tools registered via callback)
   const binding = createBindingRegistry();
-  mcpInternal.onSessionInitialized((sessionId, request) => {
+  const mcp = createMcpServer({
+    version: "0.0.1-test",
+    registerTools: (server) => {
+      registerRunnerTools(server, { store: runner.store, handle: runner.handle, binding });
+    },
+  });
+  mcp.onSessionInitialized((sessionId, request) => {
     const taskId = request?.headers.get("X-Ledger-Task-Id") ?? undefined;
     binding.bind(sessionId, taskId);
   });
-  mcpInternal.onSessionClosed((sessionId) => {
+  mcp.onSessionClosed((sessionId) => {
     binding.unbind(sessionId);
   });
-  registerRunnerTools(mcpInternal.server, { store: runner.store, handle: runner.handle, binding });
-  await mcpInternal._connect();
 
   // Cancellation registry
   const dispatchCancellation = createCancellationRegistry();
 
   // Hono app with /mcp mounted
   const app = new Hono();
-  app.route("/mcp", mcpInternal.mcpRoute);
+  app.route("/mcp", mcp.mcpRoute);
 
   // Start HTTP server on a random port
   let resolvePort!: (port: number) => void;
@@ -98,7 +101,7 @@ async function buildHarness(): Promise<TestHarness> {
     startedAt: new Date().toISOString(),
     store: runner.store,
     runner,
-    mcp: mcpInternal,
+    mcp,
     binding,
     dispatchCancellation,
     docs: [],
@@ -174,6 +177,11 @@ describe("ClaudeCodeExecutor integration — fake-claude", () => {
 
       // Assert cancellation registry was cleared after completion
       expect(harness.ctx.dispatchCancellation.size()).toBe(0);
+
+      // Assert the agent's MCP session was torn down (defect #4): the executor's
+      // finally block calls ctx.mcp.closeTaskSessions(task.id), so a session the
+      // agent opened (and never DELETEs) does not leak past the run.
+      expect(harness.ctx.mcp.activeSessions()).toBe(0);
     },
   );
 

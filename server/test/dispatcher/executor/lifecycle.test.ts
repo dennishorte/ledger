@@ -154,6 +154,72 @@ describe("reconcileExit row 2 — agent forgot terminal call", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Idle watchdog row: idle === true AND final === "RUNNING" — stream went silent
+// ---------------------------------------------------------------------------
+
+describe("reconcileExit idle row — idle", () => {
+  it("calls handle.fail with SUBPROCESS_IDLE when idle and final=RUNNING", () => {
+    const task = makeTask();
+    const result = makeResult({ exitCode: undefined, signal: "SIGTERM", idle: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "RUNNING", handle);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: "fail", args: [task.id, reasons.SUBPROCESS_IDLE] });
+  });
+
+  it("idle takes precedence over timedOut (idle fires first, lower threshold)", () => {
+    const task = makeTask();
+    const result = makeResult({ exitCode: undefined, signal: "SIGKILL", idle: true, timedOut: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "RUNNING", handle);
+    expect(calls[0]).toMatchObject({ method: "fail", args: [task.id, reasons.SUBPROCESS_IDLE] });
+  });
+
+  it("CANCELLED takes precedence over idle", () => {
+    const task = makeTask();
+    const result = makeResult({ exitCode: undefined, signal: "SIGTERM", idle: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "CANCELLED", handle);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Watchdog row: timedOut === true AND final === "RUNNING" — execa killed a hang
+// ---------------------------------------------------------------------------
+
+describe("reconcileExit watchdog row — timedOut", () => {
+  it("calls handle.fail with SUBPROCESS_TIMEOUT when timedOut and final=RUNNING", () => {
+    const task = makeTask();
+    // execa timeout kill: no exitCode, SIGTERM, timedOut flag set.
+    const result = makeResult({ exitCode: undefined, signal: "SIGTERM", timedOut: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "RUNNING", handle);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: "fail",
+      args: [task.id, reasons.SUBPROCESS_TIMEOUT],
+    });
+  });
+
+  it("CANCELLED takes precedence over timedOut (cancel-then-timeout race)", () => {
+    const task = makeTask();
+    const result = makeResult({ exitCode: undefined, signal: "SIGKILL", timedOut: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "CANCELLED", handle);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("timedOut ignored when the agent already reached a terminal status", () => {
+    const task = makeTask();
+    const result = makeResult({ exitCode: 0, timedOut: true });
+    const { handle, calls } = makeHandle();
+    reconcileExit(task, result, "COMPLETE", handle);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Rows 3+5 catch-all: non-zero exit OR signal-kill, final === "RUNNING"
 // ---------------------------------------------------------------------------
 
@@ -253,6 +319,14 @@ describe("reasons const — new additions", () => {
 
   it("CANCELLED_BY_OPERATOR is the right string", () => {
     expect(reasons.CANCELLED_BY_OPERATOR).toBe("cancelled_by_operator");
+  });
+
+  it("SUBPROCESS_TIMEOUT is the right string", () => {
+    expect(reasons.SUBPROCESS_TIMEOUT).toBe("subprocess_timeout");
+  });
+
+  it("SUBPROCESS_IDLE is the right string", () => {
+    expect(reasons.SUBPROCESS_IDLE).toBe("subprocess_idle");
   });
 
   it("executorInternalError builder truncates to 80 chars", () => {

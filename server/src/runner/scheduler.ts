@@ -39,6 +39,14 @@ export const reasons = {
   // 03-claude-code-executor: dispatcher subprocess lifecycle reasons
   SUBPROCESS_EXIT_WITHOUT_TERMINAL_STATUS: "subprocess_exit_without_terminal_status",
   subprocessFailed: (tail: string) => `subprocess_failed:${tail.slice(0, 80)}`,
+  // Watchdog (dispatcher-hang-issue.md): execa `timeout` elapsed → SIGTERM/SIGKILL.
+  // The reconciler maps result.timedOut to this distinguishing reason so a hung
+  // agent is no longer indistinguishable from a slow one, and its claim is freed.
+  SUBPROCESS_TIMEOUT: "subprocess_timeout",
+  // Idle watchdog (defect #2 companion): no stream-json output for `idleMs` →
+  // killed. Distinct from subprocess_timeout (hard wall-clock cap) — idle fires
+  // first and means "frozen", not "still working but slow".
+  SUBPROCESS_IDLE: "subprocess_idle",
   CANCELLED_BY_OPERATOR: "cancelled_by_operator",
   // Defensive: pre-spawn failures (renderPrompt throw, writeMcpConfig fail,
   // claude binary not found). Distinct from subprocessFailed because no

@@ -500,26 +500,96 @@ describe("Health snapshot — activeSessions()", () => {
 // createMcpServer (sync factory) — internal tests
 // ---------------------------------------------------------------------------
 
-describe("createMcpServer (sync factory)", () => {
-  it("returns a valid handle shape without calling _connect", () => {
+describe("createMcpServer (factory)", () => {
+  it("returns a valid handle shape", () => {
     const handle = createMcpServer({ version: "0.1.0" });
-    // These should all be present without needing connect()
     expect(typeof handle.activeSessions).toBe("function");
     expect(handle.activeSessions()).toBe(0);
     expect(typeof handle.onSessionInitialized).toBe("function");
     expect(typeof handle.onSessionClosed).toBe("function");
+    expect(typeof handle.closeTaskSessions).toBe("function");
     expect(typeof handle.close).toBe("function");
-    expect(typeof handle._connect).toBe("function");
     expect(handle.mcpRoute).toBeDefined();
-    expect(handle.server).toBeDefined();
-    expect(handle.transport).toBeDefined();
   });
 
-  it("createMcpServerAsync connects the server and returns a working handle", async () => {
+  it("createMcpServerAsync returns a working handle", async () => {
     const pub = await createMcpServerAsync({ version: "0.1.0" });
     teardowns.push(() => pub.close());
-    // Should be fully functional — activeSessions, mcpRoute, listeners all present
     expect(pub.activeSessions()).toBe(0);
     expect(pub.mcpRoute).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-session transports — regression for docs/process/dispatcher-hang-issue.md
+// (CONFIRMED ROOT CAUSE 2026-06-06: a single shared transport rejected every
+// agent after the first with -32600 "Server already initialized".)
+// ---------------------------------------------------------------------------
+
+describe("Per-session transports (dispatcher-hang regression)", () => {
+  function rawInitialize(
+    app: Hono,
+    clientName: string,
+    taskId?: string,
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+    };
+    if (taskId !== undefined) headers["X-Ledger-Task-Id"] = taskId;
+    return app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-03-26",
+            capabilities: {},
+            clientInfo: { name: clientName, version: "0.0.1" },
+          },
+        }),
+      }),
+    );
+  }
+
+  it("a second initialize on the same server returns 200 with a distinct session id", async () => {
+    const handle = await makeHandle();
+    teardowns.push(() => handle.close());
+    const app = new Hono().route("/mcp", handle.mcpRoute);
+
+    const res1 = await rawInitialize(app, "agent-A");
+    expect(res1.status).toBe(200); // first agent
+    const sid1 = res1.headers.get(MCP_SESSION_ID_HEADER);
+
+    const res2 = await rawInitialize(app, "agent-B");
+    // Before the fix this was 400 "Server already initialized".
+    expect(res2.status).toBe(200);
+    const sid2 = res2.headers.get(MCP_SESSION_ID_HEADER);
+
+    expect(typeof sid1).toBe("string");
+    expect(typeof sid2).toBe("string");
+    expect(sid1).not.toBe(sid2);
+    expect(handle.activeSessions()).toBe(2);
+  });
+
+  it("closeTaskSessions(taskId) closes only sessions bound to that task", async () => {
+    const handle = await makeHandle();
+    teardowns.push(() => handle.close());
+    const app = new Hono().route("/mcp", handle.mcpRoute);
+
+    await rawInitialize(app, "a", "task-1");
+    await rawInitialize(app, "b", "task-2");
+    expect(handle.activeSessions()).toBe(2);
+
+    const closed = handle.closeTaskSessions("task-1");
+    expect(closed).toBe(1);
+    expect(handle.activeSessions()).toBe(1);
+
+    // Unknown task → no-op, idempotent.
+    expect(handle.closeTaskSessions("task-unknown")).toBe(0);
+    expect(handle.activeSessions()).toBe(1);
   });
 });

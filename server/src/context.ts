@@ -7,7 +7,7 @@ import { readDocsTree } from "./readDocs.js";
 import { createRunnerForProject } from "./runner/index.js";
 import type { Store, Runner } from "./runner/index.js";
 import { createMcpServer, createBindingRegistry, registerRunnerTools } from "./dispatcher/index.js";
-import type { McpServerHandle, McpServerHandleInternal, BindingRegistry } from "./dispatcher/index.js";
+import type { McpServerHandle, BindingRegistry } from "./dispatcher/index.js";
 import { createCancellationRegistry } from "./dispatcher/executor/cancellation.js";
 import { createClaudeCodeExecutor } from "./dispatcher/executor/claudeCode.js";
 import type { CancellationRegistry } from "./dispatcher/executor/cancellation.js";
@@ -105,28 +105,25 @@ export async function loadProjectContext(opts: {
 
   const runner = createRunnerForProject({ projectRoot });
 
-  // createMcpServer returns the internal handle (pre-connect) so we can register tools
-  // BEFORE calling _connect(). The SDK throws if registerTool is called after connect.
-  const mcpInternal: McpServerHandleInternal = createMcpServer({ version: SERVER_VERSION });
-
-  // Wire binding registry — subscribe before any inbound request can arrive
+  // Wire binding registry — subscribe before any inbound request can arrive.
   const binding = createBindingRegistry();
-  mcpInternal.onSessionInitialized((sessionId, request) => {
+
+  // Per-session MCP server: the factory creates a fresh transport + McpServer on
+  // each `initialize`, so the five runner tools are registered per session via
+  // this callback (replaces the old single-server pre-connect registration).
+  const mcp: McpServerHandle = createMcpServer({
+    version: SERVER_VERSION,
+    registerTools: (server) => {
+      registerRunnerTools(server, { store: runner.store, handle: runner.handle, binding });
+    },
+  });
+  mcp.onSessionInitialized((sessionId, request) => {
     const taskId = request?.headers.get("X-Ledger-Task-Id") ?? undefined;
     binding.bind(sessionId, taskId);
   });
-  mcpInternal.onSessionClosed((sessionId) => {
+  mcp.onSessionClosed((sessionId) => {
     binding.unbind(sessionId);
   });
-
-  // Register the five runner tools BEFORE connecting the transport (SDK ordering constraint)
-  registerRunnerTools(mcpInternal.server, { store: runner.store, handle: runner.handle, binding });
-
-  // Now connect — transport starts accepting requests
-  await mcpInternal._connect();
-
-  // Narrow to the public handle type for ProjectContext
-  const mcp: McpServerHandle = mcpInternal;
 
   // Wire cancellation registry BEFORE creating the executor (factory reads it).
   const dispatchCancellation = createCancellationRegistry();

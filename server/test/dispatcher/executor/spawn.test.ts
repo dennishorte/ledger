@@ -69,6 +69,12 @@ describe("spawnClaudeCode", () => {
     expect(argv).toContain("--permission-mode");
     const permIdx = argv.indexOf("--permission-mode");
     expect(argv[permIdx + 1]).toBe("dontAsk");
+    // stream-json output + --verbose: one NDJSON event per line for telemetry
+    // forwarding + the idle watchdog (dispatcher-hang-issue.md defect #2).
+    expect(argv).toContain("--output-format");
+    const ofIdx = argv.indexOf("--output-format");
+    expect(argv[ofIdx + 1]).toBe("stream-json");
+    expect(argv).toContain("--verbose");
   });
 
   it("sets LEDGER_TASK_ID in env", async () => {
@@ -149,6 +155,24 @@ describe("spawnClaudeCode", () => {
     // Should not throw
     const result = await subprocess;
     expect(result.exitCode).toBe(42);
+  });
+
+  it("timeoutMs kills a hanging subprocess and resolves with timedOut:true", async () => {
+    // Fake claude that hangs far longer than the watchdog timeout.
+    const scriptPath = await writeHelperScript(`setTimeout(() => process.exit(0), 60000);`);
+
+    const subprocess = spawnClaudeCode({
+      cwd: process.cwd(),
+      env: {},
+      mcpConfigPath: "/tmp/ignored.json",
+      stdin: "",
+      claudeBin: `${process.execPath} ${scriptPath}`,
+      timeoutMs: 300,
+    });
+
+    // reject:false → the timeout kill resolves (not throws) with timedOut set.
+    const result = await subprocess;
+    expect(result.timedOut).toBe(true);
   });
 
   it("subprocess handle has kill method (for cancellation registry)", () => {

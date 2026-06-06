@@ -3,7 +3,14 @@
  *   claude --print --bare --mcp-config <path>
  *         --allowedTools "mcp__ledger-runner__*"
  *         --permission-mode dontAsk
+ *         --output-format stream-json --verbose
  * with the rendered prompt piped via stdin (no --prompt-file flag exists — D16),
+ *
+ * --output-format stream-json --verbose makes claude emit one NDJSON event per
+ * stdout line (instead of buffering a single blob at exit). The executor streams
+ * those lines via forwardClaudeStream → events table (defect #2 observability)
+ * and uses them as the idle watchdog's liveness signal. stdout stays buffered
+ * (execa tees the buffer and the line iterator), so result.stdout is unaffected.
  * LEDGER_TASK_ID env set, and cwd set to the project root.
  *
  * --allowedTools grants all five runner.* MCP tools (wildcard on server key).
@@ -41,6 +48,15 @@ export interface SpawnOpts {
    * are prefix arguments prepended before the --print argv.
    */
   claudeBin?: string;
+  /**
+   * Watchdog wall-clock timeout in milliseconds. Passed straight to execa's
+   * `timeout` option: on elapse execa sends SIGTERM, escalating to SIGKILL after
+   * `forceKillAfterDelay` (5 s default) so a process that ignores SIGTERM is
+   * still killed. The resolved Result carries `timedOut: true`, which the
+   * lifecycle reconciler maps to FAILED:subprocess_timeout. Omit / 0 disables it
+   * (no watchdog) — see docs/process/dispatcher-hang-issue.md, defect #1.
+   */
+  timeoutMs?: number;
 }
 
 export function spawnClaudeCode(opts: SpawnOpts): ResultPromise {
@@ -63,6 +79,7 @@ export function spawnClaudeCode(opts: SpawnOpts): ResultPromise {
       "--mcp-config", opts.mcpConfigPath,
       "--allowedTools", allowedTools,
       "--permission-mode", "dontAsk",
+      "--output-format", "stream-json", "--verbose",
     ],
     {
       cwd: opts.cwd,
@@ -70,6 +87,10 @@ export function spawnClaudeCode(opts: SpawnOpts): ResultPromise {
       input: opts.stdin, // execa@9 pipes string → stdin automatically
       all: false, // stderr captured separately; stdout captured by default
       reject: false, // don't throw on non-zero exit; lifecycle reconciler reads result.exitCode
+      // Watchdog: undefined leaves execa's default (no timeout). A positive value
+      // bounds the run; on elapse execa kills the process and resolves with
+      // timedOut:true (reject:false keeps it a resolve, not a throw).
+      ...(opts.timeoutMs && opts.timeoutMs > 0 ? { timeout: opts.timeoutMs } : {}),
     },
   );
 }
