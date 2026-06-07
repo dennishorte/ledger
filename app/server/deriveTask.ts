@@ -243,3 +243,87 @@ export function deriveTask(entry: TranscriptEntry): Task {
 
   return task;
 }
+
+// ---------------------------------------------------------------------------
+// Parent status rollup (10-orchestration Open Issue, HIGH)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Incompleteness" rank — higher means less complete. A parent's rolled-up
+ * status is the status with the highest rank across {itself} ∪ {transitive
+ * children}, so a parent never reads more-complete than its least-complete
+ * descendant. Ordering per the originating Open Issue:
+ *   RUNNING > AWAITING_HUMAN_REVIEW > BLOCKED > PENDING > FAILED > COMPLETE.
+ * CANCELLED slots between FAILED and COMPLETE (terminal, but did not complete).
+ * Transcript derivation only emits RUNNING/AWAITING_HUMAN_REVIEW/COMPLETE today;
+ * the full table keeps the function total and correct if reused over runner tasks.
+ */
+const STATUS_INCOMPLETENESS: Record<TaskStatus, number> = {
+  RUNNING: 6,
+  AWAITING_HUMAN_REVIEW: 5,
+  BLOCKED: 4,
+  PENDING: 3,
+  FAILED: 2,
+  CANCELLED: 1,
+  COMPLETE: 0,
+};
+
+/**
+ * Downgrade each parent task's status to the least-complete status across its
+ * own status and all transitive children. Pure: returns a new array; tasks with
+ * no children (or already at the worst status) are returned unchanged. When a
+ * parent is downgraded off COMPLETE, its `completedAt` is cleared so the two
+ * fields stay consistent.
+ *
+ * Fixes the "parent COMPLETE while children still RUNNING/AWAITING_REVIEW"
+ * inconsistency: `deriveStatus` derives each transcript in isolation, so a quiet
+ * operator_session flips COMPLETE even while its sub-agents are mid-flight.
+ */
+export function applyParentStatusRollup(tasks: Task[]): Task[] {
+  const byId = new Map<TaskId, Task>(tasks.map((t) => [t.id, t]));
+  const childrenOf = new Map<TaskId, TaskId[]>();
+  for (const t of tasks) {
+    const parent = t.parentTaskId;
+    if (parent !== undefined && byId.has(parent)) {
+      const siblings = childrenOf.get(parent) ?? [];
+      siblings.push(t.id);
+      childrenOf.set(parent, siblings);
+    }
+  }
+
+  const memo = new Map<TaskId, TaskStatus>();
+  const visiting = new Set<TaskId>();
+
+  function effectiveStatus(id: TaskId): TaskStatus {
+    const cached = memo.get(id);
+    if (cached !== undefined) return cached;
+    const self = byId.get(id);
+    if (self === undefined) return "COMPLETE"; // unreachable: ids come from `tasks`
+    // Cycle guard. `parentTaskId` forms a forest so cycles are impossible; this is
+    // purely defensive against corrupt data. Return the max-rank status so a cycle
+    // can never *suppress* a downgrade (fail toward surfacing, never hiding).
+    if (visiting.has(id)) return "RUNNING";
+
+    visiting.add(id);
+    let worst = self.status;
+    for (const childId of childrenOf.get(id) ?? []) {
+      const childStatus = effectiveStatus(childId);
+      if (STATUS_INCOMPLETENESS[childStatus] > STATUS_INCOMPLETENESS[worst]) {
+        worst = childStatus;
+      }
+    }
+    visiting.delete(id);
+    memo.set(id, worst);
+    return worst;
+  }
+
+  return tasks.map((t) => {
+    const rolled = effectiveStatus(t.id);
+    if (rolled === t.status) return t;
+    return {
+      ...t,
+      status: rolled,
+      completedAt: rolled === "COMPLETE" ? t.completedAt : undefined,
+    };
+  });
+}

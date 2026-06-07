@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/10-orchestration`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1, 2026-05-24)
+**Status:** COMPLETE (v1, 2026-05-24; v1.1 patch 2026-06-07 — parent status rollup, leaf-workflow §8b)
 **Created:** 2026-05-24
-**Last Updated:** 2026-05-24 (promotion)
+**Last Updated:** 2026-06-07 (§8b patch: HIGH parent/child status-rollup issue fixed — see Implementation Notes)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/03-docs` (consumes `idForPath` from `parseDocs.ts` for artifact → docNodeId mapping)
@@ -391,7 +391,7 @@ Operator runs `pnpm -C app dev`. Once `04-tasks` and `05-logs` ship, all of thes
 - **`MultiEdit` artifact granularity.** Each `MultiEdit` against N hunks of one file emits one artifact event. Hunk-level detail is lost. Acceptable for Phase-1; revisit when the API server defines the artifact contract. *(Priority: LOW.)*
 - **Resource-claim derivation gaps.** Tools like `Bash` and `WebFetch` can read/write arbitrary paths the parser can't reliably attribute. Those tool calls become opaque events with no claim derived. *(Priority: LOW.)*
 - **"Soft COMPLETE."** The 30-min quiet threshold can flip a session COMPLETE that the operator later resumes. UI consumers should treat COMPLETE as informational, not terminal. `useTaskList` re-derives on each refetch. *(Priority: LOW.)*
-- **Parent status doesn't roll up child status.** `deriveStatus()` (`app/server/transcriptStatus.ts`) derives each task's status from its own JSONL file in isolation; `deriveTask.ts` records `parentTaskId` but applies no post-processing rollup. Result: an operator_session whose file has been quiet ≥30 min flips to COMPLETE even while its spawned sub-agents are still RUNNING or AWAITING_HUMAN_REVIEW. The 04-tasks panel renders the inconsistency directly (parent COMPLETE row above AWAITING_REVIEW child rows; observed 2026-05-25 mid-`02-schema` dispatch). Suggested fix: a single post-derivation pass in `deriveTask.ts` that walks the parent → children map and downgrades any parent's status to the "least-complete" status across `{itself} ∪ {transitive children}` using a precedence like `RUNNING > AWAITING_HUMAN_REVIEW > BLOCKED > PENDING > FAILED > COMPLETE`. Adjacent to "Soft COMPLETE" above but distinct: that one is about resumability of a single session; this one is about parent/child consistency at any one render. *(Priority: HIGH — confusing in the UI today; fix is a contained ~30-line addition to `deriveTask.ts` with a test fixture pair.)*
+- ~~**Parent status doesn't roll up child status.** `deriveStatus()` (`app/server/transcriptStatus.ts`) derives each task's status from its own JSONL file in isolation; `deriveTask.ts` records `parentTaskId` but applies no post-processing rollup. Result: an operator_session whose file has been quiet ≥30 min flips to COMPLETE even while its spawned sub-agents are still RUNNING or AWAITING_HUMAN_REVIEW. The 04-tasks panel renders the inconsistency directly (parent COMPLETE row above AWAITING_REVIEW child rows; observed 2026-05-25 mid-`02-schema` dispatch). Suggested fix: a single post-derivation pass in `deriveTask.ts` that walks the parent → children map and downgrades any parent's status to the "least-complete" status across `{itself} ∪ {transitive children}` using a precedence like `RUNNING > AWAITING_HUMAN_REVIEW > BLOCKED > PENDING > FAILED > COMPLETE`. Adjacent to "Soft COMPLETE" above but distinct: that one is about resumability of a single session; this one is about parent/child consistency at any one render. *(Priority: HIGH — confusing in the UI today; fix is a contained ~30-line addition to `deriveTask.ts` with a test fixture pair.)*~~ → **Fixed 2026-06-07 (§8b, v1.1)** by `applyParentStatusRollup` in `deriveTask.ts`, wired into `middleware.ts` `buildTaskMap`. Implemented the suggested fix exactly (precedence table + transitive rollup); see Implementation Notes > §8b patch.
 
 ---
 
@@ -501,6 +501,16 @@ Acceptance check after the fix (live HTTP probes against `http://localhost:4179`
 | + | No regressions on existing SPA routes | GET `/`, `/dag`, `/docs`, `/health`, `/tasks`, `/logs/foo` all returned `200` from the Vite dev server. |
 
 **D2 keyword-table observation (informational only — not a finding):** Five sub-agents fell to the `agent_task` fallback because their descriptions ("Review 03-docs spec", "Review 06-health spec", "Review 03-docs implementation", "Review 06-health implementation", "Review 08-markdown implementation", "Build UI shell per spec") don't match the current D2 patterns. The spec's existing Open Issue "Sub-agent task-type inference miss rate" (LOW priority) already documents this as expected fuzziness. Operator opted not to extend the keyword table in this pass; later iteration on the table is welcome but not a v1 blocker.
+
+### §8b patch — parent status rollup (v1.1, 2026-06-07)
+
+COMPLETE → ISSUE_OPEN → fix → VERIFY → COMPLETE on this leaf for the HIGH "parent status doesn't roll up child status" issue (post-COMPLETE HIGH → leaf-workflow §8b, not a maintenance round, per `_process/maintenance-round.md`).
+
+**Change.** New pure `applyParentStatusRollup(tasks: Task[]): Task[]` in `app/server/deriveTask.ts`, wired into `app/server/middleware.ts` `buildTaskMap` (the list-assembly site — per-entry `deriveTask`/`deriveStatus` has no cross-task view, so the rollup must run over the full derived set). Each parent's status is downgraded to the least-complete status across `{itself} ∪ {transitive children}` via a `STATUS_INCOMPLETENESS` rank table matching the issue's prescribed precedence (`RUNNING > AWAITING_HUMAN_REVIEW > BLOCKED > PENDING > FAILED > COMPLETE`; CANCELLED slotted between FAILED and COMPLETE). Memoized DFS with a defensive cycle guard; `completedAt` cleared when a parent is downgraded off COMPLETE. Pure — unchanged tasks returned by reference. Tests: `app/server/deriveTask.test.ts` (13 cases — rank ordering, transitive/3-level rollup, completedAt consistency, orphan parentTaskId, childless-by-reference). App suite 147 → 168 (with the sibling `06-health` regex fix).
+
+**Implementation Review (2026-06-07).** Independent clean-context review — verdict READY. One should-fix applied: the cycle guard returned the node's own status, which could under-report on a (data-impossible) cycle; changed to return the max-rank sentinel so a cycle can never suppress a downgrade. Test-coverage nits applied (BLOCKED/PENDING ranks, 3-level chain). Gates: app typecheck/lint/build green; full suite green.
+
+*Not browser-verified this pass — the 04-tasks panel rendering of a rolled-up parent row is the operator's COMPLETE sign-off (leaf-workflow stage 8). The fix is unit-proven; recommend a glance at `/tasks` during the next live dispatch with active sub-agents.*
 
 ---
 

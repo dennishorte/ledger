@@ -16,7 +16,7 @@
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { scanTranscripts } from "./transcriptScan.js";
-import { deriveTask } from "./deriveTask.js";
+import { deriveTask, applyParentStatusRollup } from "./deriveTask.js";
 import { parseTranscriptFile } from "./transcriptParse.js";
 import { deriveStatus } from "./transcriptStatus.js";
 import type { Task, LogEvent, TaskId } from "../src/lib/types.js";
@@ -60,14 +60,20 @@ function forbidden(res: ServerResponse): void {
 
 function buildTaskMap(): Map<TaskId, Task> {
   const entries = scanTranscripts();
-  const map = new Map<TaskId, Task>();
+  const derived: Task[] = [];
   for (const entry of entries) {
     try {
-      const task = deriveTask(entry);
-      map.set(task.id, task);
+      derived.push(deriveTask(entry));
     } catch {
       // Skip transcripts that fail to derive
     }
+  }
+  // Roll up parent status from children — a quiet operator_session must not read
+  // COMPLETE while its sub-agents are still RUNNING/AWAITING_REVIEW. Per-entry
+  // deriveStatus has no cross-task view, so this pass runs over the full set.
+  const map = new Map<TaskId, Task>();
+  for (const task of applyParentStatusRollup(derived)) {
+    map.set(task.id, task);
   }
   return map;
 }
