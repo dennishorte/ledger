@@ -20,7 +20,6 @@ interface ProjectMetadataRaw {
   agent: string;
   health?: {
     sizeThresholdTokens?: number;
-    orphanThresholdDays?: number;
   };
 }
 
@@ -38,8 +37,6 @@ export function validateProjectMetadata(input: unknown): ProjectMetadataResult {
     health: {
       sizeThresholdTokens:
         input.health?.sizeThresholdTokens ?? HEALTH_DEFAULTS.sizeThresholdTokens,
-      orphanThresholdDays:
-        input.health?.orphanThresholdDays ?? HEALTH_DEFAULTS.orphanThresholdDays,
     },
   };
   return { ok: true, metadata };

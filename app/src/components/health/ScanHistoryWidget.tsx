@@ -6,7 +6,7 @@ import { MutationErrorBody } from "@/lib/useApproveTask";
 
 const MONITOR_LABEL: Record<HealthFinding["monitor"], string> = {
   size: "size",
-  orphan: "orphan",
+  open_issue: "open issue",
   schema_invalid: "schema",
 };
 

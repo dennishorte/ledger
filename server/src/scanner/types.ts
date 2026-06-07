@@ -2,7 +2,7 @@ import type { Store } from "../runner/store.js";
 import type { HealthConfig } from "@ledger/parser";
 
 export interface HealthFinding {
-  monitor: "size" | "orphan" | "schema_invalid";
+  monitor: "size" | "open_issue" | "schema_invalid";
   nodeId: string;
   detail: string;
 }

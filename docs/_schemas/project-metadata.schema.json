@@ -36,11 +36,6 @@
           "type": "integer",
           "minimum": 1,
           "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
-        },
-        "orphanThresholdDays": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Days with non-empty Open Issues before an orphan finding. Default: 14."
         }
       }
     }

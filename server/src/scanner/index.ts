@@ -1,6 +1,6 @@
 import { parseDocNode, validateDocNode } from "@ledger/parser";
 import { readDocsTree } from "../readDocs.js";
-import { checkSize, checkOrphans } from "./monitors.js";
+import { checkSize, checkOpenIssues } from "./monitors.js";
 import type { HealthScan, HealthFinding, HealthScannerHandle, ScannerContext } from "./types.js";
 
 export type { HealthScan, HealthFinding, HealthScannerHandle, ScannerContext } from "./types.js";
@@ -38,8 +38,8 @@ export function createHealthScanner(ctx: ScannerContext): HealthScannerHandle {
         const sizeFinding = checkSize(doc, content, ctx.config.sizeThresholdTokens);
         if (sizeFinding !== null) findings.push(sizeFinding);
 
-        const orphanFinding = checkOrphans(doc, ctx.config.orphanThresholdDays);
-        if (orphanFinding !== null) findings.push(orphanFinding);
+        const openIssueFinding = checkOpenIssues(doc);
+        if (openIssueFinding !== null) findings.push(openIssueFinding);
       } catch (err) {
         console.warn(`[scanner] monitor error for ${relKey}; skipping:`, (err as Error).message);
         continue;

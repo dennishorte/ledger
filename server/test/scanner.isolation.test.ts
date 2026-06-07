@@ -17,12 +17,12 @@ import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 vi.mock("../src/scanner/monitors.js", () => ({
-  // checkSize throws for every doc the orchestrator reaches; checkOrphans is a
+  // checkSize throws for every doc the orchestrator reaches; checkOpenIssues is a
   // never-reached stub (index.ts calls checkSize first, so the catch fires before it).
   checkSize: () => {
     throw new Error("boom: monitor blew up");
   },
-  checkOrphans: () => null,
+  checkOpenIssues: () => null,
 }));
 
 import { applyMigrations } from "../src/runner/migrations/runner.js";
@@ -47,7 +47,7 @@ describe("runScan error isolation (S1)", () => {
       projectRoot: sampleProject,
       docsRoot: join(sampleProject, "docs"),
       store,
-      config: { sizeThresholdTokens: 12000, orphanThresholdDays: 14 },
+      config: { sizeThresholdTokens: 12000 },
     };
 
     // checkSize throws for every conformant doc; the scan must still resolve and

@@ -7,12 +7,10 @@
 
 export interface HealthConfig {
   sizeThresholdTokens: number;
-  orphanThresholdDays: number;
 }
 
 export const HEALTH_DEFAULTS: HealthConfig = {
   sizeThresholdTokens: 12000,
-  orphanThresholdDays: 14,
 };
 
 export interface ProjectMetadata {

@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { applyMigrations } from "../src/runner/migrations/runner.js";
 import { createStore, type Store } from "../src/runner/store.js";
 import { createHealthScanner } from "../src/scanner/index.js";
-import { checkSize, checkOrphans } from "../src/scanner/monitors.js";
+import { checkSize, checkOpenIssues } from "../src/scanner/monitors.js";
 import type { HealthScan, ScannerContext } from "../src/scanner/types.js";
 import type { DocumentNode, HealthConfig } from "@ledger/parser";
 
@@ -30,7 +30,7 @@ const sampleProject = resolve(
 );
 const docsRoot = join(sampleProject, "docs");
 
-const DEFAULT_CONFIG: HealthConfig = { sizeThresholdTokens: 12000, orphanThresholdDays: 14 };
+const DEFAULT_CONFIG: HealthConfig = { sizeThresholdTokens: 12000 };
 
 function makeStore(): Store {
   const db = new Database(":memory:");
@@ -87,35 +87,59 @@ describe("checkSize", () => {
   });
 });
 
-describe("checkOrphans", () => {
-  it("flags a stable-state doc with real open issues and an old lastUpdated", () => {
-    const doc = withOpenIssues("- A lingering issue. (Priority: LOW)", {
+describe("checkOpenIssues", () => {
+  it("fires on a stable-state doc with an unstruck HIGH issue", () => {
+    const doc = withOpenIssues("- **Bug.** Something broken. *(Priority: HIGH — visible today)*", {
       status: "COMPLETE",
-      lastUpdated: "2020-01-01",
     });
-    const finding = checkOrphans(doc, 14);
-    expect(finding?.monitor).toBe("orphan");
-    expect(finding?.detail).toContain("2020-01-01");
+    const finding = checkOpenIssues(doc);
+    expect(finding?.monitor).toBe("open_issue");
+    expect(finding?.detail).toContain("1 HIGH");
   });
 
-  it("ignores non-stable states (DRAFT) even with real issues", () => {
-    const doc = withOpenIssues("- A real issue", { status: "DRAFT", lastUpdated: "2020-01-01" });
-    expect(checkOrphans(doc, 14)).toBeNull();
+  it("fires on MEDIUM with em-dash continuation tags, in any stable state", () => {
+    const doc = withOpenIssues("- **Drift.** schema. *(Priority: MEDIUM — revisit later)*", {
+      status: "DEFERRED",
+    });
+    expect(checkOpenIssues(doc)?.monitor).toBe("open_issue");
   });
 
-  it("treats placeholder Open Issues as empty", () => {
-    expect(
-      checkOrphans(withOpenIssues("None.", { status: "COMPLETE", lastUpdated: "2020-01-01" }), 14),
-    ).toBeNull();
-    expect(
-      checkOrphans(withOpenIssues("*(none yet)*", { status: "COMPLETE", lastUpdated: "2020-01-01" }), 14),
-    ).toBeNull();
+  it("ignores LOW / TRIVIAL / untagged / deferred items", () => {
+    const stable = { status: "COMPLETE" as const };
+    expect(checkOpenIssues(withOpenIssues("- A nit. *(Priority: LOW)*", stable))).toBeNull();
+    expect(checkOpenIssues(withOpenIssues("- A nit. *(Priority: TRIVIAL)*", stable))).toBeNull();
+    expect(checkOpenIssues(withOpenIssues("- Untagged note, no priority.", stable))).toBeNull();
+    expect(checkOpenIssues(withOpenIssues("- Deferred thing. *(Defer.)*", stable))).toBeNull();
   });
 
-  it("ignores recently-updated docs even with real issues", () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const doc = withOpenIssues("- A real issue", { status: "COMPLETE", lastUpdated: today });
-    expect(checkOrphans(doc, 14)).toBeNull();
+  it("ignores struck-through (resolved) issues even when HIGH", () => {
+    const doc = withOpenIssues("- ~~**Was broken.**~~ Closed by xyz. *(Priority: HIGH)*", {
+      status: "COMPLETE",
+    });
+    expect(checkOpenIssues(doc)).toBeNull();
+  });
+
+  it("ignores non-stable states (DRAFT) even with a HIGH issue", () => {
+    expect(checkOpenIssues(withOpenIssues("- **Bug.** *(Priority: HIGH)*", { status: "DRAFT" }))).toBeNull();
+  });
+
+  it("treats placeholder / None sections as no issues", () => {
+    const stable = { status: "COMPLETE" as const };
+    expect(checkOpenIssues(withOpenIssues("None.", stable))).toBeNull();
+    expect(checkOpenIssues(withOpenIssues("*(none yet — pre-implementation)*", stable))).toBeNull();
+  });
+
+  it("counts multiple live issues and surfaces the highest-priority snippet", () => {
+    const section = [
+      "- **Critical bug.** Big problem. *(Priority: HIGH — confusing today)*",
+      "- **Schema drift.** *(Priority: MEDIUM)*",
+      "- A nit. *(Priority: LOW)*",
+    ].join("\n");
+    const finding = checkOpenIssues(withOpenIssues(section, { status: "COMPLETE" }));
+    expect(finding?.detail).toContain("2 unresolved issue(s)");
+    expect(finding?.detail).toContain("1 HIGH, 1 MEDIUM");
+    expect(finding?.detail).toContain("Critical bug.");
+    expect(finding?.detail).not.toContain("Priority:"); // priority tag stripped from snippet
   });
 });
 
@@ -154,9 +178,10 @@ describe("runScan over the sample-project fixture", () => {
     expect(schemaInvalid[0]?.nodeId).toBe("02-broken");
     expect(schemaInvalid[0]?.detail.length).toBeGreaterThan(0);
 
-    // conformant DRAFT leaves produce nothing at default thresholds
+    // conformant DRAFT leaves produce nothing at default thresholds (open_issue
+    // only fires on stable states; the fixture leaves are DRAFT)
     expect(scan.findings.some((f) => f.monitor === "size")).toBe(false);
-    expect(scan.findings.some((f) => f.monitor === "orphan")).toBe(false);
+    expect(scan.findings.some((f) => f.monitor === "open_issue")).toBe(false);
 
     // the scan was persisted via the scanner's only write path
     const persisted = ctx.store.listScans();
@@ -165,7 +190,7 @@ describe("runScan over the sample-project fixture", () => {
   });
 
   it("emits size findings for conformant docs when the threshold is low", async () => {
-    const ctx = makeScannerCtx({ config: { sizeThresholdTokens: 1, orphanThresholdDays: 14 } });
+    const ctx = makeScannerCtx({ config: { sizeThresholdTokens: 1 } });
     const scan = await createHealthScanner(ctx).runScan();
     const sized = scan.findings
       .filter((f) => f.monitor === "size")
