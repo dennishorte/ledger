@@ -64,6 +64,51 @@ describe("createEventBus", () => {
     bus.close();
   });
 
+  // -- subscribeAll (08-alerts) --------------------------------------------
+
+  it("subscribeAll fires on every publish, regardless of taskId", () => {
+    const bus = createEventBus();
+    const cb = vi.fn();
+    bus.subscribeAll(cb);
+    bus.publish("task-A");
+    bus.publish("task-B");
+    expect(cb).toHaveBeenCalledTimes(2);
+    expect(cb).toHaveBeenNthCalledWith(1, "task-A");
+    expect(cb).toHaveBeenNthCalledWith(2, "task-B");
+    bus.close();
+  });
+
+  it("subscribeAll fires alongside a matching per-taskId subscriber", () => {
+    const bus = createEventBus();
+    const perTask = vi.fn();
+    const global = vi.fn();
+    bus.subscribe("task-1", perTask);
+    bus.subscribeAll(global);
+    bus.publish("task-1");
+    expect(perTask).toHaveBeenCalledTimes(1);
+    expect(global).toHaveBeenCalledTimes(1);
+    bus.close();
+  });
+
+  it("subscribeAll unsubscribe removes the global subscriber", () => {
+    const bus = createEventBus();
+    const cb = vi.fn();
+    const unsub = bus.subscribeAll(cb);
+    unsub();
+    bus.publish("task-X");
+    expect(cb).not.toHaveBeenCalled();
+    bus.close();
+  });
+
+  it("close() drops global subscribers too", () => {
+    const bus = createEventBus();
+    const cb = vi.fn();
+    bus.subscribeAll(cb);
+    bus.close();
+    bus.publish("task-X");
+    expect(cb).not.toHaveBeenCalled();
+  });
+
   it("calling unsubscribe twice is idempotent", () => {
     const bus = createEventBus();
     const cb = vi.fn();

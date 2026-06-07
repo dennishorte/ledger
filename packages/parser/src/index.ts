@@ -49,3 +49,6 @@ export type {
   HitlRejectBody,
   HitlRejectValidationResult,
 } from "./runner/validateHitlReject.js";
+
+// Alert types (08-alerts — algedonic channel)
+export type { Alert } from "./alerts/types.js";

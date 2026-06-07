@@ -4,6 +4,7 @@ import { Topbar } from "./Topbar";
 import { Sidebar } from "./Sidebar";
 import { Inspector } from "./Inspector";
 import { StatusBar } from "./StatusBar";
+import { AlertBanner } from "./AlertBanner";
 import { useShellStore } from "@/stores/shell";
 
 /**
@@ -30,6 +31,7 @@ export function AppShell(): JSX.Element {
 
   return (
     <div className="flex h-full w-full flex-col bg-[color:var(--color-surface)] text-[color:var(--color-fg)]">
+      <AlertBanner />
       <Topbar />
       <div className="flex flex-1 min-h-0">
         <Sidebar />

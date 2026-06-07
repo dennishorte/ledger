@@ -13,6 +13,8 @@ import { createClaudeCodeExecutor } from "./dispatcher/executor/claudeCode.js";
 import type { CancellationRegistry } from "./dispatcher/executor/cancellation.js";
 import { createHealthScanner } from "./scanner/index.js";
 import type { HealthScannerHandle } from "./scanner/index.js";
+import { createAlertChannel } from "./alerts/channel.js";
+import type { AlertChannel } from "./alerts/channel.js";
 import pkg from "../package.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
@@ -49,6 +51,7 @@ export interface ProjectContext {
   /** Resolve a NodeId to its source docs/ path. Wraps pathForNodeId over ctx.docs. */
   resolveDocPath: (nodeId: string) => string | undefined;
   healthScanner: HealthScannerHandle; // wired in 07-health-daemon v2
+  alerts: AlertChannel; // wired in 08-alerts — algedonic push channel
 }
 
 export class ContextError extends Error {
@@ -135,6 +138,15 @@ export async function loadProjectContext(opts: {
     config: result.metadata.health,
   });
 
+  // Algedonic alert channel (08-alerts). Created AFTER createRunnerForProject so
+  // boot-time orphan recovery (RUNNING → FAILED) predates the attach — a restart
+  // does not replay a burst of historical-failure alerts (Req 6). Report-only.
+  const alerts = createAlertChannel({
+    store: runner.store,
+    webhookUrl: process.env["LEDGER_ALERT_WEBHOOK"],
+  });
+  alerts.attach(runner.events);
+
   const ctx: ProjectContext = {
     projectRoot,
     docsRoot,
@@ -149,6 +161,7 @@ export async function loadProjectContext(opts: {
     docs,
     resolveDocPath,
     healthScanner,
+    alerts,
   };
 
   // Register ClaudeCodeExecutor for all eight dispatcher task types (D3).

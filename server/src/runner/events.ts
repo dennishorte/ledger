@@ -21,7 +21,14 @@ export type TaskChangedCallback = (taskId: TaskId) => void;
 export interface EventBus {
   /** Subscribe to publish events for one taskId. Returns an unsubscribe fn. */
   subscribe(taskId: TaskId, cb: TaskChangedCallback): () => void;
-  /** Notify all subscribers for a taskId. No-op if no subscribers. */
+  /**
+   * Subscribe to publish events for EVERY taskId. Returns an unsubscribe fn.
+   * Added in 08-alerts so the algedonic channel can observe tasks it has not
+   * seen before (the per-taskId subscribe can't watch unknown ids). The callback
+   * receives the changed taskId on every publish.
+   */
+  subscribeAll(cb: TaskChangedCallback): () => void;
+  /** Notify all subscribers (per-taskId and global) for a taskId. No-op if none. */
   publish(taskId: TaskId): void;
   /** Drop all subscriptions. */
   close(): void;
@@ -29,6 +36,7 @@ export interface EventBus {
 
 export function createEventBus(): EventBus {
   const subs = new Map<TaskId, Set<TaskChangedCallback>>();
+  const globalSubs = new Set<TaskChangedCallback>();
 
   return {
     subscribe(taskId, cb) {
@@ -45,15 +53,26 @@ export function createEventBus(): EventBus {
         if (s.size === 0) subs.delete(taskId);
       };
     },
+    subscribeAll(cb) {
+      globalSubs.add(cb);
+      return () => {
+        globalSubs.delete(cb);
+      };
+    },
     publish(taskId) {
+      // D5: snapshot each set — a callback can unsubscribe itself mid-iteration
+      // without skipping siblings (live-Set iteration would skip the next element).
       const set = subs.get(taskId);
-      if (set === undefined) return;
-      // D5: snapshot — a callback can unsubscribe itself mid-iteration without
-      // skipping siblings (live-Set iteration would skip the next element).
-      for (const cb of Array.from(set)) cb(taskId);
+      if (set !== undefined) {
+        for (const cb of Array.from(set)) cb(taskId);
+      }
+      if (globalSubs.size > 0) {
+        for (const cb of Array.from(globalSubs)) cb(taskId);
+      }
     },
     close() {
       subs.clear();
+      globalSubs.clear();
     },
   };
 }

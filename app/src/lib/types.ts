@@ -13,6 +13,9 @@
  */
 
 export type { NodeId, NodeStatus, DocNode } from "@ledger/parser";
+// Algedonic alert payload (08-alerts) — canonical in @ledger/parser, consumed by
+// the always-mounted AlertBanner via the /api/alerts SSE stream.
+export type { Alert } from "@ledger/parser";
 import type { NodeId, NodeStatus } from "@ledger/parser";
 
 /**
