@@ -21,6 +21,7 @@ function badgeBg(type: TaskType): string {
     case "verify":
     case "reverify":
     case "doc_refactor":
+    case "doc_decompose":
     case "issue_triage":
       return "var(--color-accent-soft)";
     case "human_review":
