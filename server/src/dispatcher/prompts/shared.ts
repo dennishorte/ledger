@@ -89,6 +89,30 @@ End with exactly one terminal call:
 }
 
 /**
+ * Returns the per-requirement sign-off matrix block for the three reviewer personas
+ * (spec_review / verify / reverify). Forces the review into a row-per-requirement shape
+ * with evidence discipline, rather than a freeform verdict — the rigor half of the
+ * self-audit mitigation (PRD §11; canonical format docs/_process/verification-signoff.md).
+ *
+ * `items` names what gets a row for this persona (e.g. "every Requirements bullet and
+ * every Acceptance-check item"). The independence half (clean context) is the dispatch
+ * model itself, not this block.
+ */
+export function signOffMatrixReminder(items: string): string {
+  return `## Sign-off matrix (primary artifact)
+
+Produce a Markdown table with exactly one row per ${items}. Format and rules: docs/_process/verification-signoff.md.
+
+| # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
+|---|-------------------------------------|---------|----------|
+
+- Verdicts: PASS (met AND backed by concrete evidence) / FAIL (not met, or met but unverifiable) / PARTIAL (partly met — file a follow-up Open Issue) / N/A (genuinely out of scope — say why).
+- Evidence discipline: a PASS MUST cite something checkable — file:line, a gate exit (e.g. "pnpm typecheck exit 0"), a named test, or a quoted spec clause. "Looks correct" is not evidence; a PASS with no concrete evidence is recorded as FAIL.
+- The headline verdict must be DERIVABLE from the matrix: any FAIL → NEEDS_REVISIONS (NEEDS_MAJOR if on a core requirement); ≥1 PARTIAL with follow-ups → READY_WITH_FOLLOWUPS / NEEDS_MINOR_REVISIONS; all PASS/N/A → READY_FOR_COMPLETE / LGTM. If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
+- Keep severity-grouped findings (Blocking / Should-fix / Nit) as a secondary section for the non-PASS rows. Lead with the matrix.`;
+}
+
+/**
  * Returns a formatted required-reading section with a bullet list of paths.
  * An empty paths array returns a placeholder line.
  */

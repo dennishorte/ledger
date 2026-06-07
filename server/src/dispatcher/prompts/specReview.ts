@@ -12,6 +12,7 @@ import {
   personaPreamble,
   mcpToolContractReminder,
   requiredReadingSection,
+  signOffMatrixReminder,
   primaryNodeId,
 } from "./shared.js";
 
@@ -26,6 +27,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "app/src/lib/types.ts",
     "packages/parser/src/runner/types.ts",
     "docs/_process/leaf-workflow.md",
+    "docs/_process/verification-signoff.md",
   ];
 
   const docRef = docPath ?? `(spec doc for node ${task.id})`;
@@ -42,11 +44,15 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "## Success criteria",
     "",
     `1. Read the spec at ${docRef} and its parent/sibling specs as house-style benchmarks.`,
-    "2. Produce a PRD coverage matrix (Requirements §N → addressed / partial / missing).",
-    "3. Group findings by severity: Blocking (B), Should-fix (S), Nit (N). Each finding must cite the specific section and include a concrete suggested fix.",
-    "4. Emit a verdict: LGTM / NEEDS_MINOR_REVISIONS / NEEDS_MAJOR_REVISIONS.",
+    "2. Produce the sign-off matrix below — it doubles as the PRD coverage matrix.",
+    "3. For non-PASS rows, group the findings by severity: Blocking (B), Should-fix (S), Nit (N). Each must cite the specific section and include a concrete suggested fix.",
+    "4. The headline verdict (LGTM / NEEDS_MINOR_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from the matrix.",
     "5. Record Confidence notes for the stage-4 implementer on any claims you could not mechanically verify (e.g., external API surface, type signatures).",
     "6. Complete with runner.complete_task if you deliver the review; runner.fail_task if a blocking prerequisite is missing.",
+    "",
+    signOffMatrixReminder(
+      "PRD §-coverage item the spec must address and every Requirements bullet the spec declares",
+    ),
     "",
     mcpToolContractReminder(),
   ].join("\n");

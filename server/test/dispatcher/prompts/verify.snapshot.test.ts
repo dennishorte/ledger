@@ -57,15 +57,29 @@ describe("verify template snapshot", () => {
 
       - CLAUDE.md
       - docs/_process/leaf-workflow.md
+      - docs/_process/verification-signoff.md
 
       ## Success criteria
 
       1. Read the spec at (spec doc for node 00000000-0000-0000-0000-000000000001) and the worktree diff (git diff main..HEAD from the project root).
       2. Run all gates: pnpm -C packages/parser build (if relevant), pnpm -C server build, pnpm -C server typecheck, pnpm -C server lint, pnpm test. All must exit zero.
       3. Spot-check the implementer's Implementation Notes claims against the actual code — types, bundle delta, deviation rationale.
-      4. Emit a verdict: READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS.
-      5. Group findings by severity. READY_WITH_FOLLOWUPS means the code ships but follow-up items are filed in Open Issues.
-      6. Complete with runner.complete_task on any passing verdict; runner.await_human_review with a summary if you need operator confirmation on a borderline finding.
+      4. Produce the sign-off matrix below; the verdict (READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from it.
+      5. For non-PASS rows, group findings by severity. READY_WITH_FOLLOWUPS means the code ships but follow-up items are filed in Open Issues (the PARTIAL rows).
+      6. Acceptance items that need a human browser walk are N/A for you (reason: operator gate) — route those to runner.await_human_review rather than asserting PASS.
+      7. Complete with runner.complete_task on any passing verdict; runner.await_human_review with a summary if you need operator confirmation on a borderline finding.
+
+      ## Sign-off matrix (primary artifact)
+
+      Produce a Markdown table with exactly one row per every Requirements bullet and every Acceptance-check item in the spec. Format and rules: docs/_process/verification-signoff.md.
+
+      | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
+      |---|-------------------------------------|---------|----------|
+
+      - Verdicts: PASS (met AND backed by concrete evidence) / FAIL (not met, or met but unverifiable) / PARTIAL (partly met — file a follow-up Open Issue) / N/A (genuinely out of scope — say why).
+      - Evidence discipline: a PASS MUST cite something checkable — file:line, a gate exit (e.g. "pnpm typecheck exit 0"), a named test, or a quoted spec clause. "Looks correct" is not evidence; a PASS with no concrete evidence is recorded as FAIL.
+      - The headline verdict must be DERIVABLE from the matrix: any FAIL → NEEDS_REVISIONS (NEEDS_MAJOR if on a core requirement); ≥1 PARTIAL with follow-ups → READY_WITH_FOLLOWUPS / NEEDS_MINOR_REVISIONS; all PASS/N/A → READY_FOR_COMPLETE / LGTM. If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
+      - Keep severity-grouped findings (Blocking / Should-fix / Nit) as a secondary section for the non-PASS rows. Lead with the matrix.
 
       ## MCP tool contract
 

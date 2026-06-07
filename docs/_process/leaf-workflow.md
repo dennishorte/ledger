@@ -53,7 +53,7 @@ Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) an
 - Pointer to the spec doc.
 - Required reading: relevant PRD sections, parent doc, sibling specs as house-style benchmarks, existing types in `app/src/lib/types.ts`.
 - Evaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment.
-- Output shape: structured review with **Verdict** (`READY_FOR_APPROVAL` / `NEEDS_MINOR_REVISIONS` / `NEEDS_MAJOR_REVISIONS`), coverage matrix per the relevant PRD section, findings grouped by severity (Blocking / Should-fix / Nit) with concrete suggested fixes.
+- Output shape: the **per-requirement sign-off matrix** (`docs/_process/verification-signoff.md`) — one row per PRD-coverage item and per Requirements bullet, each with a PASS/FAIL/PARTIAL/N/A verdict and concrete evidence. The matrix *is* the coverage matrix. Severity-grouped findings (Blocking / Should-fix / Nit) with concrete fixes are a secondary section for the non-PASS rows; the headline **Verdict** (`READY_FOR_APPROVAL` / `NEEDS_MINOR_REVISIONS` / `NEEDS_MAJOR_REVISIONS`) must be derivable from the matrix.
 
 The reviewer runs in clean context so it can give independent judgment — the framework's mitigation for the self-audit problem (PRD §11). The agent that wrote the spec cannot reliably check its own work.
 
@@ -109,6 +109,8 @@ This stage also tests the **multi-worktree shared-file gap** (see Known Limitati
 ### 6. Implementation review — reviewer against the rebased worktree diff
 
 Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the (now-rebased) worktree branch. Because the diff is clean post-rebase, the reviewer can use `git diff main..HEAD` directly without artifact confusion.
+
+Output shape: the **per-requirement sign-off matrix** (`docs/_process/verification-signoff.md`) — one row per Requirements bullet *and* per Acceptance-check item, each PASS/FAIL/PARTIAL/N/A with concrete evidence (a `file:line`, a gate exit, or a named test; a PASS with no evidence is recorded as FAIL). Acceptance items that need a browser walk are `N/A — operator gate` for a headless reviewer; the operator's stage-8 pass is their real sign-off.
 
 Evaluation criteria expand to include:
 
@@ -198,7 +200,7 @@ Once merged:
 
 - **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. Stages whose only output is a transition (stages 2, 4a, 8b) commit just the status bump; stages that bundle a transition with substantive work (stages 1, 3, 4c, 7, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
-- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it.
+- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`docs/_process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps.
 
 - **Rebase before review** (stage 5). Eliminates the branch-divergence "deletion" artifact and surfaces merge conflicts early. Reviewer sees a clean diff; the merge in stage 10 is mechanical.
 

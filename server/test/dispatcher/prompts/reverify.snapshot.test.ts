@@ -57,14 +57,27 @@ describe("reverify template snapshot", () => {
 
       - CLAUDE.md
       - docs/_process/leaf-workflow.md
+      - docs/_process/verification-signoff.md
 
       ## Success criteria
 
       1. Read the spec at (spec doc for node 00000000-0000-0000-0000-000000000001) and the Implementation Review audit table from the previous VERIFY cycle — those are the issues you are checking are resolved.
       2. Run all gates: pnpm -C packages/parser build (if relevant), pnpm -C server build, pnpm -C server typecheck, pnpm -C server lint, pnpm test. All must exit zero.
       3. For each issue from the prior audit: confirm resolved or escalate.
-      4. Emit a verdict using the same ladder as a fresh verifier: READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS.
+      4. Produce the sign-off matrix below, scoped to the previously-failed items plus any Requirements/Acceptance rows the fix touched; the verdict (READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from it.
       5. Complete with runner.complete_task on any passing verdict; runner.fail_task if the fix introduced a regression.
+
+      ## Sign-off matrix (primary artifact)
+
+      Produce a Markdown table with exactly one row per previously-failed item plus every Requirements/Acceptance row the fix touched. Format and rules: docs/_process/verification-signoff.md.
+
+      | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
+      |---|-------------------------------------|---------|----------|
+
+      - Verdicts: PASS (met AND backed by concrete evidence) / FAIL (not met, or met but unverifiable) / PARTIAL (partly met — file a follow-up Open Issue) / N/A (genuinely out of scope — say why).
+      - Evidence discipline: a PASS MUST cite something checkable — file:line, a gate exit (e.g. "pnpm typecheck exit 0"), a named test, or a quoted spec clause. "Looks correct" is not evidence; a PASS with no concrete evidence is recorded as FAIL.
+      - The headline verdict must be DERIVABLE from the matrix: any FAIL → NEEDS_REVISIONS (NEEDS_MAJOR if on a core requirement); ≥1 PARTIAL with follow-ups → READY_WITH_FOLLOWUPS / NEEDS_MINOR_REVISIONS; all PASS/N/A → READY_FOR_COMPLETE / LGTM. If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
+      - Keep severity-grouped findings (Blocking / Should-fix / Nit) as a secondary section for the non-PASS rows. Lead with the matrix.
 
       ## MCP tool contract
 

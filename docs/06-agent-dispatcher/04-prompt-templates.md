@@ -492,6 +492,15 @@ Nothing punted on correctness; S1 applied (with snapshot regeneration); N1 + N2 
 
 Tests: `docDecompose.test.ts` gains a Mode-A-default case, a Mode-B case (COMPLETE → inherited status + human_review routing + schema-valid skeleton), and an IN_PROGRESS-refusal case. Gates green: server typecheck + lint clean, 367 pass / 2 skip (env-gated smoke). No snapshot churn — `doc_decompose` has no snapshot test (its round-trip validates the rendered skeleton against the real `@ledger/parser` schema instead). The open question on Mode-A parent status is logged as a MEDIUM Open Issue.
 
+### v1.2 — 2026-06-07 — per-requirement sign-off matrix (self-audit, PRD §11)
+
+Closing the **rigor** half of the PRD §11 "Self-audit problem": the three reviewer personas (`spec_review` / `verify` / `reverify`) previously emitted a freeform "verdict + findings by severity". They now lead with a **per-requirement sign-off matrix** — one row per Requirements bullet / Acceptance item / PRD-coverage item, each with a PASS/FAIL/PARTIAL/N/A verdict and concrete evidence; a PASS with no evidence is recorded as FAIL, and the headline verdict must be derivable from the matrix. The independence half (clean-context dispatch as a separate persona) was already shipped at the parent's COMPLETE.
+
+- New `shared.ts` helper `signOffMatrixReminder(items)` emits the matrix block; the `items` argument names what gets a row per persona.
+- `specReview.ts` / `verify.ts` / `reverify.ts` import it, add `docs/_process/verification-signoff.md` to required reading, and reference the matrix in their success criteria. The other six templates are untouched (non-reviewer personas).
+- Canonical format: `docs/_process/verification-signoff.md` (new); leaf-workflow stages 2 & 6 updated to reference it.
+- Tests: the three reviewer snapshot tests regenerated (`-u`); `shared.test.ts` unchanged (helper untested-by-snapshot, exercised via the template snapshots). Gates green: server typecheck + lint clean, 381 pass / 2 skip. No app-bundle impact (server-only).
+
 ---
 
 ## Verification
