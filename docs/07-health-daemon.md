@@ -2,20 +2,20 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT (v2 redesign)
+**Status:** COMPLETE (v2, 2026-06-07)
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-03 (v2 redesign — on-demand scanner, append log, report-only; staleness monitor dropped; size threshold raised to 12000)
+**Last Updated:** 2026-06-07 (DRAFT → COMPLETE reconciliation: v2 code had shipped to main 2026-06-06 while the header still read DRAFT; this transition records the missing independent implementation review + live verification and lands the review-driven fixes)
 
 **Dependencies:** `06-agent-dispatcher`
 
 ---
 
-> **v1 is DISABLED.** The v1 implementation (poll-based daemon → enqueue write-agents) was
-> completed on 2026-06-01 but immediately disabled after the first e2e test exposed two HIGH
-> defects: uncontrolled write-agent dispatch racing the git index, and starved enqueues.
-> The full redesign rationale is in the v1 history section at the bottom of this doc.
-> v2 replaces the daemon model entirely. The `LEDGER_DAEMON_ENABLED=1` gate in
-> `server/src/context.ts` is removed as part of this work.
+> **v2 shipped and is COMPLETE (2026-06-07).** The on-demand scanner replaced the v1
+> daemon model entirely; the `LEDGER_DAEMON_ENABLED=1` gate is removed and the v1 daemon
+> files are deleted. v1 (poll-based daemon → enqueue write-agents) was completed 2026-06-01
+> but immediately disabled after the first e2e test exposed two HIGH defects: uncontrolled
+> write-agent dispatch racing the git index, and starved enqueues. The full redesign
+> rationale is in the v1 history section at the bottom of this doc.
 
 ## Requirements
 
@@ -318,6 +318,24 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 - `pnpm -C server test`: 334 passed, 2 skipped
 - `pnpm -C app build`: success
 
+### Implementation Review (2026-06-07)
+
+The v2 code shipped to main on 2026-06-06 (`c27b050` + follow-ups) but the Status
+header was never advanced past DRAFT and **no independent review was run** — the
+self-audit mitigation (leaf-workflow stages 2/6, PRD §11) was skipped. This review
+was run in clean context against the merged code as part of the DRAFT → COMPLETE
+reconciliation. Hard-constraint check **PASS**: the scanner's only persistent write
+is `store.insertScan`; no `createTask`, enqueue, or dispatch anywhere in `scanner/`
+— the entire reason for the v2 redesign holds.
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| R1 | Should-fix | `scanner/index.ts` wrapped only `parseDocNode` in try/catch; `validateDocNode` + both monitor calls sat outside it, so a monitor throw on one doc aborted the whole scan — violating the "a single bad file never aborts a scan" hard constraint. | Fixed — the entire per-doc block (parse → validate → monitors) is now inside one try/catch that logs and continues. Locked by `server/test/scanner.isolation.test.ts` (mocks `checkSize` to throw; asserts the scan still resolves + persists + surfaces the schema_invalid finding). |
+| R2 | Should-fix | `docs/_schemas/project-metadata.schema.json` described `sizeThresholdTokens` default as 3000; actual `HEALTH_DEFAULTS` default is 12000 (stale after the 2026-06-03 threshold raise). | Fixed — description corrected to 12000. |
+| R3 | Nit | Empty `server/src/daemon/` directory lingered after the v1 file deletions. | Removed. |
+| R4 | Gap (verification) | The node shipped with **zero scanner test coverage** — `health.test.ts` covers only `GET /api/_health`. The spec's Verification item 4 explicitly requires `insertScan`/`listScans` covered. | Closed — added `server/test/scanner.test.ts` (11 tests: `checkSize`/`checkOrphans` units, store round-trip + newest-first ordering, runScan over the `sample-project` fixture incl. schema_invalid + low-threshold size) and the isolation test from R1. Server suite 367 → 378. |
+| R5 | Cross-cutting (found during verification) | `pnpm -C app build` was **already broken on main** (TS2366) — `doc_decompose` was added to `TaskType` (`3d2fda2`) without updating `TaskTypeBadge.badgeBg`'s exhaustive switch. Not a scanner defect, but it blocked the build gate. | Fixed — `doc_decompose` added to the accent-soft group. Switch kept exhaustive (no `default`) so the next new `TaskType` still fails the build until handled. |
+
 ---
 
 ## Verification
@@ -331,6 +349,27 @@ Before promoting to COMPLETE, verify:
 5. `pnpm -C app build` passes.
 6. Confirm v1 daemon code (`server/src/daemon/`) is fully deleted and no remaining imports reference it.
 7. Confirm `LEDGER_DAEMON_ENABLED` env var check is removed from `server/src/context.ts`.
+
+### Verified 2026-06-07
+
+Live against the API server booted on the real `ledger` project + the new test suite:
+
+| Acceptance item | Result |
+|---|---|
+| 1 — `POST /api/health/scan` → 201 + valid `HealthScan` | ✅ live (`id` UUID, ISO `scannedAt`, `findings[]`) |
+| 2 — `GET /api/health/scans` returns the scan | ✅ live |
+| 3 — 2nd POST → 2 rows, newest-first | ✅ live (4 scans returned, ordered by `scannedAt DESC`) |
+| 4 — restart durability | ✅ live (two scans from a prior 2026-06-03 session persisted across restarts) |
+| 5 — size finding for oversized doc | ✅ live (11 real size findings, e.g. `05-task-runner/05-ui-hook-migration` ~17232 tokens) + `scanner.test.ts` |
+| 6 — schema_invalid finding | ✅ `scanner.test.ts` over `02-broken` fixture (non-empty detail, path-derived nodeId) |
+| 7 — `GET /api/daemon/status` → 404 | ✅ live |
+| 8 — `/health` panel Run-Scan + history | ⚠️ code present + `pnpm -C app build` passes; not browser-walked this pass |
+| 9 — gates | ✅ parser 127, app 147, server 378, app build success, lint clean |
+
+Gates 2–5, 6 (daemon deleted), 7 (`LEDGER_DAEMON_ENABLED` gone) all confirmed. The
+live scan also surfaced real doc-health debt (6 orphan + 11 oversized nodes) — see PRD
+§11 follow-up. Item 8 is the only acceptance item not visually verified; the widget
+renders in a passing build and the reviewer confirmed it statically.
 
 ---
 
