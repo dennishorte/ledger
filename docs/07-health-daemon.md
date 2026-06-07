@@ -273,7 +273,7 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 ## Open Issues
 
 - **Scan log grows without bound.** All scans are retained. This is fine initially but will need a retention policy (e.g. keep last N scans) once the log becomes large. *(Priority: LOW)*
-- **`app/src/lib/parseIssues.ts` priority regex under-tags the em-dash form.** Its `PRIORITY_RE` requires a closing `)` right after the priority word, so `(Priority: HIGH — …)` / `(Priority: MEDIUM, …)` get tagged `UNKNOWN` in `06-health`'s IssueRollupWidget. The scanner's `open_issue` monitor (v2.1) uses a tolerant regex and is unaffected; the real fix belongs in `06-health`. Filed here as the discovery site. *(Priority: LOW — owner: `01-ui/06-health`.)*
+- ~~**`app/src/lib/parseIssues.ts` priority regex under-tags the em-dash form.** Its `PRIORITY_RE` requires a closing `)` right after the priority word, so `(Priority: HIGH — …)` / `(Priority: MEDIUM, …)` get tagged `UNKNOWN` in `06-health`'s IssueRollupWidget. The scanner's `open_issue` monitor (v2.1) uses a tolerant regex and is unaffected; the real fix belongs in `06-health`. Filed here as the discovery site. *(Priority: LOW — owner: `01-ui/06-health`.)*~~ → **Fixed 2026-06-07** by `01-ui/06-health` §8b patch (regex loosened + `parseIssues.test.ts`).
 - **`open_issue` signal quality depends on strike-through hygiene.** The monitor excludes struck (`~~…~~`) issues, so resolved-but-not-struck items show up as findings. The 2026-06-07 live scan suggests several MEDIUM hits are this. Mitigation is process (strike issues on resolution); if the MEDIUM backlog stays noisy, tighten the monitor to HIGH-only (D12). *(Priority: LOW)*
 
 ---

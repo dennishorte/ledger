@@ -7,7 +7,12 @@
 
 import type { IssueItem, IssuePriority, NodeId } from "@/lib/types";
 
-const PRIORITY_RE = /\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)\)/i;
+// Tolerant of the continuation forms used across the docs — the priority word
+// is not always immediately followed by `)`:
+//   "(Priority: LOW)"  "(Priority: HIGH — confusing today)"  "(Priority: MEDIUM, blocks X)"  "(Priority: LOW.)"
+// Requiring a closing paren right after the word (the original) silently
+// downgraded every em-dash/comma form to UNKNOWN. (07-health-daemon discovery.)
+const PRIORITY_RE = /\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)/i;
 
 function extractPriority(text: string): IssuePriority {
   const m = text.match(PRIORITY_RE);

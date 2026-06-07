@@ -2,9 +2,9 @@
 
 **Node ID:** `01-ui/06-health`
 **Parent:** `01-ui`
-**Status:** COMPLETE (v1, 2026-05-23)
+**Status:** COMPLETE (v1, 2026-05-23; v1.1 patch 2026-06-07 — priority-regex em-dash fix, leaf-workflow §8b)
 **Created:** 2026-05-22
-**Last Updated:** 2026-05-23 (promotion)
+**Last Updated:** 2026-06-07 (§8b patch: `parseIssues` priority regex under-tagged the em-dash form — see Implementation Notes)
 
 **Dependencies:** `01-ui/01-shell`
 **Optional reference:** `01-ui/02-dag` (dep-impact preview reuses `DocNode`/`NodeId` types), `01-ui/08-markdown` (declared as a planned consumer per D9 — `<MarkdownBody>` is not invoked in v1; issue items render as plain text)
@@ -262,7 +262,7 @@ A reviewer running `pnpm dev` and visiting `/health` must see:
 ## Open Issues
 
 - **`useDocSource` availability.** This panel needs `useDocSource(id)` from `03-docs`. If `06-health` ships before `03-docs`, a minimal local copy must be added and cleaned up on merge. The mitigation is pre-authorized — coordination overhead only, not a blocking unknown. *(Priority: LOW.)*
-- **Issue-extraction regex fragility.** The `(Priority: X)` pattern covers the current doc schema but is sensitive to formatting changes (spacing, capitalization). If future docs use a different tag format, items silently downgrade to `UNKNOWN`. Consider enforcing the tag format in a schema doc or linting rule. *(Priority: LOW.)*
+- **Issue-extraction regex fragility.** The `(Priority: X)` pattern ~~covers the current doc schema but~~ is sensitive to formatting changes. If future docs use a different tag format, items silently downgrade to `UNKNOWN`. Consider enforcing the tag format in a schema doc or linting rule. *(Priority: LOW.)* → **Partially fixed 2026-06-07 (§8b, v1.1):** `parseIssues.ts`'s `PRIORITY_RE` required a closing `)` right after the priority word, so the *current-schema* em-dash/comma forms (`(Priority: HIGH — …)`, `(Priority: MEDIUM, …)`) were already mis-tagged `UNKNOWN` — this was a present bug, not just future risk (discovered building `07-health-daemon`'s `open_issue` monitor). Regex loosened + `parseIssues.test.ts` added. Residual general fragility (a wholly different future tag format) remains LOW.
 - ~~**`StatusChip` move to `src/components/ui/`.** `06-health` is the likely third consumer (after `02-dag` and `03-docs`). If all three ship before this is resolved, move `StatusChip` to `src/components/ui/` at that point and update imports in all three panels. *(Priority: LOW — triggers on third confirmed consumer.)*~~ → addressed by `99-maintenance/01-round-1` R4 (2026-05-26). Trigger fired (`02-dag` + `03-docs` + `06-health` all consume it); move + six import updates landed.
 - **Dep-impact BFS performance at scale.** The BFS over `DocNode[]` is linear in node count and fine for the current tree (≤50 nodes). Revisit if the tree grows into the hundreds. *(Priority: LOW.)*
 - **Token cost widget real wiring.** When the API server's cost endpoint lands, `useHealthData` must be updated to fetch `SubtreeCost[]` from it. Track this as a follow-up task in the health daemon's spec, not here. *(Priority: LOW — deferred to health daemon node.)*
@@ -352,6 +352,12 @@ Independent implementation review was run against this worktree post-rebase. Ver
 | `index-*.css` (gzip) | — | 7.96 kB | — |
 
 The original Implementation Notes bundle-delta table above is superseded by this refreshed table.
+
+### §8b patch — priority-regex em-dash fix (v1.1, 2026-06-07)
+
+Post-COMPLETE LOW fix on this leaf (single-leaf, single-item → leaf-workflow §8b; a one-item maintenance round is "ceremony" per `_process/maintenance-round.md`).
+
+**Change.** `app/src/lib/parseIssues.ts` `PRIORITY_RE` dropped its trailing `\)` (`/\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)\)/i` → `…/i`), so the continuation forms (`— …`, `, …`, `.)`) used throughout the docs are tagged correctly instead of falling to `UNKNOWN` in the IssueRollupWidget priority filter. Added `app/src/lib/parseIssues.test.ts` (10 cases incl. em-dash/comma/period/lowercase/`*`-bullet regressions). Independent review verdict READY — confirmed no over-matching risk (the section is already scoped to `## Open Issues` before extraction). Gates green.
 
 ---
 
