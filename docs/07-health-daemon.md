@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v2, 2026-06-07)
+**Status:** COMPLETE (v2.1, 2026-06-07)
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-07 (DRAFT → COMPLETE reconciliation: v2 code had shipped to main 2026-06-06 while the header still read DRAFT; this transition records the missing independent implementation review + live verification and lands the review-driven fixes)
+**Last Updated:** 2026-06-07 (DRAFT → COMPLETE reconciliation: v2 code had shipped to main 2026-06-06 while the header still read DRAFT; this transition records the missing independent implementation review + live verification and lands the review-driven fixes. Same day, v2.1 replaced the noisy `orphan` monitor with a priority-aware `open_issue` monitor — see D12 + the v2.1 amendment.)
 
 **Dependencies:** `06-agent-dispatcher`
 
@@ -24,7 +24,7 @@ Replace the v1 poll-based daemon with an **on-demand health scanner** — a serv
 **Monitors:**
 
 1. **Size** — a doc's estimated token count exceeds a configurable threshold. Finding: `size`.
-2. **Orphaned issues** — a doc in a stable state (`COMPLETE`, `PLANNED`, `DEFERRED`, `ISSUE_OPEN`) has non-placeholder content in its Open Issues section and its `lastUpdated` is older than a configurable threshold. Finding: `orphan`.
+2. **Unresolved open issues** — a doc in a stable state (`COMPLETE`, `PLANNED`, `DEFERRED`, `ISSUE_OPEN`) carries at least one **unstruck** open issue tagged `(Priority: HIGH)` or `(Priority: MEDIUM)`. Finding: `open_issue`. No time component — the signal is "settled node still holding meaningful unfinished work", not "the doc went quiet". LOW/TRIVIAL/untagged and struck-through (resolved) items never trigger. *(v2.1, 2026-06-07 — replaced the v2 `orphan` monitor, which keyed on doc `lastUpdated` and fired on the healthiest nodes; see D12 and the v2.1 amendment in Implementation Notes.)*
 3. **Schema-invalid** — `validateDocNode` returns `{ ok: false }` for the doc. Finding: `schema_invalid`. (v1 silently skipped these; v2 surfaces them explicitly.)
 
 **Hard constraints:**
@@ -64,7 +64,7 @@ export interface HealthScannerHandle {
 // server/src/scanner/types.ts — server-internal; promote to @ledger/parser when UI consumes them
 
 export interface HealthFinding {
-  monitor: "size" | "orphan" | "schema_invalid";
+  monitor: "size" | "open_issue" | "schema_invalid";
   nodeId: string;
   detail: string;  // human-readable; e.g. "~14000 tokens (threshold: 12000)" or validation error text
 }
@@ -111,19 +111,17 @@ listScans(): HealthScan[];   // newest-first (ORDER BY scanned_at DESC)
     "sizeThresholdTokens": {
       "type": "integer", "minimum": 1,
       "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
-    },
-    "orphanThresholdDays": {
-      "type": "integer", "minimum": 0,
-      "description": "Days with non-empty Open Issues before an orphan finding. Default: 14."
     }
   }
 }
 ```
 
+*(v2.1, 2026-06-07: `orphanThresholdDays` was removed — the v2.1 `open_issue` monitor has no time component, so the field is dead. `HealthConfig` is now `{ sizeThresholdTokens }` only.)*
+
 The `parseProjectMetadata` function in `@ledger/parser` is updated to:
 - Accept the optional `health` key
 - Apply defaults when fields are absent
-- Expose `health: { sizeThresholdTokens: number; orphanThresholdDays: number }` on the parsed metadata object
+- Expose `health: { sizeThresholdTokens: number }` on the parsed metadata object
 
 ### Scanner implementation
 
@@ -147,7 +145,7 @@ for each file:
     continue                        // skip remaining monitors for invalid doc
   doc = result.node
   checkSize(doc, raw, config)      → HealthFinding | null
-  checkOrphans(doc, config)        → HealthFinding | null
+  checkOpenIssues(doc)             → HealthFinding | null   (v2.1; no config arg)
 collect findings (filter nulls)
 scan = { id: uuid(), scannedAt: new Date().toISOString(), findings }
 ctx.store.insertScan(scan)
@@ -166,20 +164,21 @@ if estimatedTokens > sizeThresholdTokens:
   → { monitor: "size", nodeId: doc.id, detail }
 ```
 
-**Orphan** (COMPLETE, PLANNED, DEFERRED, ISSUE_OPEN with authored source):
+**Open issues** (v2.1 — only fires for stable states: COMPLETE, PLANNED, DEFERRED, ISSUE_OPEN):
 ```
-EMPTY_PLACEHOLDERS = [
-  /^\s*\*\(none[^)]*\)\*\s*$/i,
-  /^\s*none\.?\s*$/i,
-]
-openIssues = doc.sections["Open Issues"] ?? ""
-hasRealIssues = openIssues.trim().length > 0
-               && !EMPTY_PLACEHOLDERS.some(p => p.test(openIssues.trim()))
-lastUpdatedAge = now - new Date(doc.lastUpdated + "T00:00:00Z")   (ms)
-if hasRealIssues && lastUpdatedAge > orphanThresholdDays * 86_400_000:
-  detail = `open issues present; lastUpdated ${doc.lastUpdated} is ${Math.floor(lastUpdatedAge/86_400_000)}d ago`
-  → { monitor: "orphan", nodeId: doc.id, detail }
+STABLE_STATUSES = {COMPLETE, PLANNED, DEFERRED, ISSUE_OPEN}
+if doc.status not in STABLE_STATUSES: return null
+
+items = parseOpenIssueItems(doc.sections["Open Issues"])   // one per `- `/`* ` bullet
+  // each item carries: text, struck (bullet leads with `~~`), priority
+  // priority via /\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)/i  (tolerant of "— …" / ", …" / ".)" tails)
+live = items where !struck && priority in {HIGH, MEDIUM}
+if live is empty: return null
+
+detail = `${live.length} unresolved issue(s) (${n} HIGH, ${m} MEDIUM): ${highest-priority snippet}`
+→ { monitor: "open_issue", nodeId: doc.nodeId, detail }
 ```
+No time component, no config. Placeholder sections (`None.`, `*(none yet …)*`) yield no bullets → no finding. Resolved-but-retained issues are struck (`- ~~**Title**~~ — Closed …`) and excluded; the project's strike-through convention is therefore load-bearing for this monitor's signal quality.
 
 **Schema-invalid** (handled in runScan orchestrator, not a separate monitor function):
 ```
@@ -267,12 +266,15 @@ The existing four widgets (`IssueRollupWidget`, `StalenessWidget`, `TokenCostWid
 | D9 | **`HealthScan` / `HealthFinding` types are server-internal for now** | The UI consumes them via the API (JSON) in v2, which doesn't require them to be in `@ledger/parser`. Promote when a non-server package needs them. |
 | D10 | **`GET /api/daemon/status` is removed, not redirected** | No current UI consumer. The health panel uses build-time data only (v1 of `01-ui/06-health`). A redirect that returns stale data would be misleading. |
 | D11 | **UI changes are additive** — existing four widgets untouched | The scan button + history list are new sections; the rest of the health dashboard is unchanged. This minimises regression surface. |
+| D12 | **v2.1 (2026-06-07): the `orphan` monitor is replaced by `open_issue` — predicate is "stable state ∧ ≥1 unstruck HIGH/MEDIUM issue", with no time component.** | The v2 `orphan` monitor keyed on doc `lastUpdated` and "Open Issues section non-empty", which made it fire on *every* completed node carrying any caveat — i.e. on the healthiest part of the tree — while ignoring the `(Priority: …)` tag that distinguishes a real bug from a deliberate LOW deferral. A live scan flagged 6 docs of which 5 were pure noise (LOW/TRIVIAL/struck) and the 1 real HIGH was buried indistinguishably. `lastUpdated` is the wrong clock (refreshed by doc-sync/status commits unrelated to the issue). v2.1 measures the right thing: meaningful (HIGH/MEDIUM), still-open (unstruck) work on a settled node. `orphanThresholdDays` config is removed as dead. Residual signal quality now depends on doc-hygiene (striking resolved issues) rather than a time heuristic. Full rationale: the analysis preserved in the v2.1 amendment below. |
 
 ---
 
 ## Open Issues
 
 - **Scan log grows without bound.** All scans are retained. This is fine initially but will need a retention policy (e.g. keep last N scans) once the log becomes large. *(Priority: LOW)*
+- **`app/src/lib/parseIssues.ts` priority regex under-tags the em-dash form.** Its `PRIORITY_RE` requires a closing `)` right after the priority word, so `(Priority: HIGH — …)` / `(Priority: MEDIUM, …)` get tagged `UNKNOWN` in `06-health`'s IssueRollupWidget. The scanner's `open_issue` monitor (v2.1) uses a tolerant regex and is unaffected; the real fix belongs in `06-health`. Filed here as the discovery site. *(Priority: LOW — owner: `01-ui/06-health`.)*
+- **`open_issue` signal quality depends on strike-through hygiene.** The monitor excludes struck (`~~…~~`) issues, so resolved-but-not-struck items show up as findings. The 2026-06-07 live scan suggests several MEDIUM hits are this. Mitigation is process (strike issues on resolution); if the MEDIUM backlog stays noisy, tighten the monitor to HIGH-only (D12). *(Priority: LOW)*
 
 ---
 
@@ -335,6 +337,14 @@ is `store.insertScan`; no `createTask`, enqueue, or dispatch anywhere in `scanne
 | R3 | Nit | Empty `server/src/daemon/` directory lingered after the v1 file deletions. | Removed. |
 | R4 | Gap (verification) | The node shipped with **zero scanner test coverage** — `health.test.ts` covers only `GET /api/_health`. The spec's Verification item 4 explicitly requires `insertScan`/`listScans` covered. | Closed — added `server/test/scanner.test.ts` (11 tests: `checkSize`/`checkOrphans` units, store round-trip + newest-first ordering, runScan over the `sample-project` fixture incl. schema_invalid + low-threshold size) and the isolation test from R1. Server suite 367 → 378. |
 | R5 | Cross-cutting (found during verification) | `pnpm -C app build` was **already broken on main** (TS2366) — `doc_decompose` was added to `TaskType` (`3d2fda2`) without updating `TaskTypeBadge.badgeBg`'s exhaustive switch. Not a scanner defect, but it blocked the build gate. | Fixed — `doc_decompose` added to the accent-soft group. Switch kept exhaustive (no `default`) so the next new `TaskType` still fails the build until handled. |
+
+### v2.1 amendment — `orphan` → `open_issue` monitor (2026-06-07)
+
+**Why.** Operator review of the v2 `orphan` monitor's first real output found it near-useless: of 6 docs it flagged, 5 carried only LOW/TRIVIAL or already-struck issues, and the single genuine HIGH bug (`01-ui/10-orchestration` parent/child status rollup) was indistinguishable from the noise. Root causes — (1) **wrong clock**: it keyed on doc `lastUpdated`, which for a COMPLETE node going quiet is the *expected* healthy state and is refreshed by unrelated doc-sync/status commits; (2) **wrong predicate**: "Open Issues non-empty" is true for every mature node, because this schema retains issues (struck-through) as durable provenance and keeps deferred-by-design caveats forever; (3) it **ignored the `(Priority: …)` tag** already present in every issue. Net: a low-specificity S3\* audit signal that fires loudest where the system is healthiest — training the operator to ignore the channel.
+
+**Change.** New `open_issue` monitor: fires iff a stable-state node holds ≥1 **unstruck** issue tagged HIGH or MEDIUM. No `lastUpdated`, no config threshold. `orphanThresholdDays` removed from `HealthConfig`/`HEALTH_DEFAULTS`/the JSON schema. Finding literal `orphan` → `open_issue` (UI `useHealthScans.ts` + `ScanHistoryWidget` label synced). Files: `server/src/scanner/monitors.ts` (`checkOrphans` → `checkOpenIssues` + a `parseOpenIssueItems` bullet/priority/struck parser), `scanner/index.ts`, `scanner/types.ts`, `packages/parser/src/project/{types,validateProjectMetadata}.ts`, `docs/_schemas/project-metadata.schema.json`, `app/src/lib/useHealthScans.ts`, `app/src/components/health/ScanHistoryWidget.tsx`. Tests: `scanner.test.ts` `checkOpenIssues` suite (7 cases) + isolation test updated; server suite 378 → 381. All gates green.
+
+**Live result (2026-06-07).** A scan over the real tree now flags 13 stable nodes (1 HIGH — `10-orchestration`; 12 MEDIUM) and is silent on the 4 pure-noise UI panels the old monitor caught (`01-shell`, `03-docs`, `06-health`, `09-workflow-progress`). The HIGH stands out via the per-finding `(n HIGH, m MEDIUM)` detail. Residual: some MEDIUM hits are likely resolved-but-not-struck (e.g. `08-markdown` anchor-offset) — the monitor is now bounded by doc-hygiene (strike resolved issues), not a time heuristic. Tightening to HIGH-only is a one-line change if the MEDIUM backlog proves too broad.
 
 ---
 
