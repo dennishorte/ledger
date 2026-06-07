@@ -357,7 +357,7 @@ The original Implementation Notes bundle-delta table above is superseded by this
 
 Post-COMPLETE LOW fix on this leaf (single-leaf, single-item → leaf-workflow §8b; a one-item maintenance round is "ceremony" per `_process/maintenance-round.md`).
 
-**Change.** `app/src/lib/parseIssues.ts` `PRIORITY_RE` dropped its trailing `\)` (`/\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)\)/i` → `…/i`), so the continuation forms (`— …`, `, …`, `.)`) used throughout the docs are tagged correctly instead of falling to `UNKNOWN` in the IssueRollupWidget priority filter. Added `app/src/lib/parseIssues.test.ts` (10 cases incl. em-dash/comma/period/lowercase/`*`-bullet regressions). Independent review verdict READY — confirmed no over-matching risk (the section is already scoped to `## Open Issues` before extraction). Gates green.
+**Change.** `app/src/lib/parseIssues.ts` `PRIORITY_RE` dropped its trailing `\)` (`/\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)\)/i` → `…/i`), so the continuation forms (`— …`, `, …`, `.)`) used throughout the docs are tagged correctly instead of falling to `UNKNOWN` in the IssueRollupWidget priority filter. Added `app/src/lib/parseIssues.test.ts` (9 cases incl. em-dash/comma/period/lowercase/`*`-bullet regressions). Independent review verdict READY — confirmed no over-matching risk (the section is already scoped to `## Open Issues` before extraction). Gates green.
 
 ---
 
