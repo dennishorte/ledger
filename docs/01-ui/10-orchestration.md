@@ -510,7 +510,7 @@ COMPLETE → ISSUE_OPEN → fix → VERIFY → COMPLETE on this leaf for the HIG
 
 **Implementation Review (2026-06-07).** Independent clean-context review — verdict READY. One should-fix applied: the cycle guard returned the node's own status, which could under-report on a (data-impossible) cycle; changed to return the max-rank sentinel so a cycle can never suppress a downgrade. Test-coverage nits applied (BLOCKED/PENDING ranks, 3-level chain). Gates: app typecheck/lint/build green; full suite green.
 
-*Not browser-verified this pass — the 04-tasks panel rendering of a rolled-up parent row is the operator's COMPLETE sign-off (leaf-workflow stage 8). The fix is unit-proven; recommend a glance at `/tasks` during the next live dispatch with active sub-agents.*
+**Operator verification (2026-06-07).** Confirmed in the browser — the `/tasks` panel renders rolled-up parent status correctly. Operator sign-off complete (leaf-workflow stage 8); §8b cycle closed.
 
 ---
 
