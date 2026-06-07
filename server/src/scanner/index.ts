@@ -16,32 +16,34 @@ export function createHealthScanner(ctx: ScannerContext): HealthScannerHandle {
     const rawDocs = await readDocsTree(ctx.docsRoot);
 
     for (const [relKey, content] of Object.entries(rawDocs)) {
-      let parsed: unknown;
+      // Per-doc isolation: any failure (parse, validate, or a monitor) is logged
+      // and skipped so a single bad file never aborts the whole scan (spec hard
+      // constraint). `continue` inside the try is fine — it does not trip the catch.
       try {
-        parsed = parseDocNode(relKey, content);
+        const parsed = parseDocNode(relKey, content);
+
+        // parseDocNode returns null for out-of-scope paths (underscore-prefixed folders, parent docs)
+        if (parsed === null) continue;
+
+        const result = validateDocNode(parsed);
+        if (!result.ok) {
+          const nodeId = relKey.replace(/\.md$/, "");
+          const errorDetail = result.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
+          findings.push({ monitor: "schema_invalid", nodeId, detail: errorDetail });
+          continue;
+        }
+
+        const doc = result.node;
+
+        const sizeFinding = checkSize(doc, content, ctx.config.sizeThresholdTokens);
+        if (sizeFinding !== null) findings.push(sizeFinding);
+
+        const orphanFinding = checkOrphans(doc, ctx.config.orphanThresholdDays);
+        if (orphanFinding !== null) findings.push(orphanFinding);
       } catch (err) {
-        console.warn(`[scanner] parseDocNode failed for ${relKey}:`, (err as Error).message);
+        console.warn(`[scanner] monitor error for ${relKey}; skipping:`, (err as Error).message);
         continue;
       }
-
-      // parseDocNode returns null for out-of-scope paths (underscore-prefixed folders, parent docs)
-      if (parsed === null) continue;
-
-      const result = validateDocNode(parsed);
-      if (!result.ok) {
-        const nodeId = relKey.replace(/\.md$/, "");
-        const errorDetail = result.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-        findings.push({ monitor: "schema_invalid", nodeId, detail: errorDetail });
-        continue;
-      }
-
-      const doc = result.node;
-
-      const sizeFinding = checkSize(doc, content, ctx.config.sizeThresholdTokens);
-      if (sizeFinding !== null) findings.push(sizeFinding);
-
-      const orphanFinding = checkOrphans(doc, ctx.config.orphanThresholdDays);
-      if (orphanFinding !== null) findings.push(orphanFinding);
     }
 
     const scan: HealthScan = {

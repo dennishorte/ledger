@@ -35,7 +35,7 @@
         "sizeThresholdTokens": {
           "type": "integer",
           "minimum": 1,
-          "description": "Estimated token count above which a doc triggers a size finding. Default: 3000."
+          "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
         },
         "orphanThresholdDays": {
           "type": "integer",
