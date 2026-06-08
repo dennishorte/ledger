@@ -52,6 +52,7 @@ export function parseIssueItems(nodeId: NodeId, raw: string): IssueItem[] {
     if (!trimmed.startsWith("- ") && !trimmed.startsWith("* ")) continue;
     const text = trimmed.slice(2).trim();
     if (!text) continue;
+    if (text.startsWith("~~")) continue;
     items.push({
       nodeId,
       text,

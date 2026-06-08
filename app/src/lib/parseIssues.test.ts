@@ -54,6 +54,14 @@ describe("parseIssueItems priority extraction", () => {
     expect(priorities(raw)).toEqual(["HIGH", "MEDIUM", "LOW"]);
   });
 
+  it("skips struck-through (resolved) bullets", () => {
+    const raw =
+      HEADER +
+      "- ~~Resolved thing. *(Priority: HIGH)*~~\n" +
+      "- Open thing. *(Priority: MEDIUM)*";
+    expect(priorities(raw)).toEqual(["MEDIUM"]);
+  });
+
   it("returns [] when there is no Open Issues section", () => {
     expect(parseIssueItems("99-test", "# Title\n\nNo issues section here.")).toEqual([]);
   });
