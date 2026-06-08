@@ -3,6 +3,7 @@ import { Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { docValidationErrorPaths } from "@/lib/parseDocs";
 import { projectMetadata } from "@/lib/project/loadProjectMetadata";
+import { useProjectMetadata } from "@/lib/project/useProjectMetadata";
 
 interface StatusChipProps {
   label: string;
@@ -21,8 +22,9 @@ function StatusChip({ label, value }: StatusChipProps): JSX.Element {
 }
 
 export function Topbar(): JSX.Element {
-  const name = projectMetadata.ok ? projectMetadata.metadata.name : "untitled project";
-  const metadataFailed = !projectMetadata.ok;
+  const liveMetadata = useProjectMetadata();
+  const name = liveMetadata?.name ?? (projectMetadata.ok ? projectMetadata.metadata.name : "untitled project");
+  const metadataFailed = !projectMetadata.ok && liveMetadata === null;
   const totalErrors = docValidationErrorPaths.length + (metadataFailed ? 1 : 0);
   const firstErrorPath = metadataFailed
     ? ".ledger/project.json"

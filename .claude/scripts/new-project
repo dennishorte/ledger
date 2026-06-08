@@ -1,0 +1,294 @@
+#!/usr/bin/env bash
+# Create a new ledger-managed project.
+# Usage: new-project <project-path> [--name NAME] [--app-port N] [--api-port N]
+#
+# Idempotent: existing files/dirs are left untouched (skipped with a notice).
+set -euo pipefail
+
+LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+
+usage() {
+  echo "usage: new-project <project-path> [--name NAME] [--app-port N] [--api-port N]" >&2
+  exit 2
+}
+
+# ── argument parsing ──────────────────────────────────────────────────────────
+PROJECT_PATH=""
+PROJECT_NAME=""
+APP_PORT=""
+API_PORT=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --name)     PROJECT_NAME="$2"; shift 2 ;;
+    --app-port) APP_PORT="$2";     shift 2 ;;
+    --api-port) API_PORT="$2";     shift 2 ;;
+    -h|--help)  usage ;;
+    -*)         echo "new-project: unknown option: $1" >&2; usage ;;
+    *)
+      if [[ -n "$PROJECT_PATH" ]]; then
+        echo "new-project: unexpected argument: $1" >&2; usage
+      fi
+      PROJECT_PATH="$1"
+      shift
+      ;;
+  esac
+done
+
+[[ -z "$PROJECT_PATH" ]] && usage
+
+# ── resolve / validate ────────────────────────────────────────────────────────
+# Resolve to absolute path without requiring the directory to exist yet
+if [[ "$PROJECT_PATH" != /* ]]; then
+  PROJECT_PATH="$(pwd)/$PROJECT_PATH"
+fi
+
+[[ -z "$PROJECT_NAME" ]] && PROJECT_NAME="$(basename "$PROJECT_PATH")"
+
+if [[ -z "$APP_PORT" || -z "$API_PORT" ]]; then
+  echo "new-project: --app-port and --api-port are required" >&2
+  echo "(example: new-project ~/code/myproject --app-port 4181 --api-port 4182)" >&2
+  exit 2
+fi
+
+for port in "$APP_PORT" "$API_PORT"; do
+  if ! [[ "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 || "$port" -gt 65535 ]]; then
+    echo "new-project: invalid port: $port" >&2; exit 2
+  fi
+done
+
+if [[ "$APP_PORT" == "$API_PORT" ]]; then
+  echo "new-project: --app-port and --api-port must be different" >&2; exit 2
+fi
+
+TODAY="$(date +%Y-%m-%d)"
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+write_file() {
+  local dest="$1"
+  local content="$2"
+  if [[ -e "$dest" ]]; then
+    echo "  skip  $dest  (already exists)"
+  else
+    printf '%s\n' "$content" > "$dest"
+    echo "  write $dest"
+  fi
+}
+
+copy_file() {
+  local src="$1"
+  local dest="$2"
+  if [[ -e "$dest" ]]; then
+    echo "  skip  $dest  (already exists)"
+  else
+    cp "$src" "$dest"
+    echo "  copy  $dest"
+  fi
+}
+
+# ── directories (mkdir -p is idempotent) ──────────────────────────────────────
+echo "Setting up: $PROJECT_PATH"
+mkdir -p "$PROJECT_PATH/docs/_process"
+mkdir -p "$PROJECT_PATH/.ledger"
+
+# ── .ledger/project.json ──────────────────────────────────────────────────────
+write_file "$PROJECT_PATH/.ledger/project.json" \
+'{
+  "schemaVersion": 1,
+  "name": "'"$PROJECT_NAME"'",
+  "docs": "docs",
+  "agent": "claude-code"
+}'
+
+# ── docs/00-project.md ───────────────────────────────────────────────────────
+write_file "$PROJECT_PATH/docs/00-project.md" \
+"# $PROJECT_NAME
+
+**Node ID:** 00-project
+**Parent:** (root)
+**Status:** DRAFT
+**Created:** $TODAY
+**Last Updated:** $TODAY
+**Dependencies:** (none)
+
+---
+
+## 1. Problem Statement
+
+*(describe the problem this project solves)*
+
+---
+
+## 2. Goals
+
+- ...
+
+---
+
+## 3. Scope
+
+**In scope:**
+- ...
+
+**Out of scope (v1):**
+- ...
+
+---
+
+## Requirements
+
+- R1. ...
+
+---
+
+## Design
+
+*(architecture, data contracts, component structure)*
+
+---
+
+## Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+
+---
+
+## Open Issues
+
+*(none yet)*
+
+---
+
+## Implementation Notes
+
+*(none yet — pre-implementation)*
+
+---
+
+## §14 Children Manifest
+
+| ID | Title | Status | Dependencies |
+|----|-------|--------|--------------|"
+
+# ── docs/_process/ (framework playbooks) ─────────────────────────────────────
+for src in "$LEDGER_DIR/docs/_process/"*.md; do
+  copy_file "$src" "$PROJECT_PATH/docs/_process/$(basename "$src")"
+done
+
+# ── CLAUDE.md ─────────────────────────────────────────────────────────────────
+if [[ -e "$PROJECT_PATH/CLAUDE.md" ]]; then
+  echo "  skip  $PROJECT_PATH/CLAUDE.md  (already exists)"
+else
+  # Written with a single-quoted heredoc (no shell expansion) then substituted
+  # so backtick/dollar content in the markdown is not interpreted by bash.
+  cat > "$PROJECT_PATH/CLAUDE.md" << 'CLAUDE_MD_EOF'
+# Claude/agent briefing — {{PROJECT_NAME}}
+
+This project uses the **ledger framework** — a document-driven, spec-verified workflow for LLM-assisted engineering. Every implementation node is governed by a doc in `docs/` that tracks status, decisions, and verification through its lifecycle.
+
+## Start here
+
+- **`docs/00-project.md`** — project root / PRD. Read first for vision, scope, and decisions. Its §14 holds the top-level children manifest.
+- **`docs/_process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
+- **`docs/_process/decomposition.md`** — how to decompose a parent node into children.
+
+**To find current focus:** walk the children manifests starting at `docs/00-project.md` §14 and descend through Status fields. The most-recently-advanced leaf node tells you where work currently lives.
+
+## Running the project
+
+```bash
+./dev.sh        # starts the ledger UI at http://localhost:{{APP_PORT}}
+```
+
+The ledger UI (`/dag` panel) shows the live document DAG, node statuses, and inspector. The task runner panel shows dispatched agent tasks.
+
+## Documentation discipline
+
+Every node in `docs/` follows this schema (required sections in order):
+
+- **Front-matter:** Node ID, Parent, Status, Created, Last Updated, Dependencies.
+- **Requirements** — with explicit out-of-scope bullets.
+- **Design** — data contracts, layout, components & files, interaction model, acceptance check.
+- **Decisions** — numbered D1...Dn table, one row per choice with rationale.
+- **Open Issues** — priority-tagged HIGH / MEDIUM / LOW / TRIVIAL.
+- **Implementation Notes** — empty pre-implementation; pinned versions and deviations post.
+- **Verification** — what the verifier confirms before promoting to COMPLETE.
+- **Children** — None for leaves; manifest table for parents.
+
+**Lifecycle (§6.2):**
+```
+DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
+                                                    ↓
+                                               ISSUE_OPEN → (back to APPROVED or DRAFT)
+```
+
+## Hard constraints
+
+- **No implementation until a node reaches APPROVED.**
+- Every lifecycle transition is its own git commit.
+- Status must be updated in both the node doc AND the parent's children manifest row in the same commit.
+- The doc tree is the source of truth. If code and a doc disagree, either the doc wins or it must be updated to reflect a deliberate change — never silently.
+- Decisions made in conversation that aren't in the docs are not durable — persist them.
+
+## Process notes
+
+- **Underscore-prefixed folders** (`docs/_process/`, `docs/_investigations/`, `docs/_schemas/`) are framework-internal — the ledger parser skips them and they never appear in the DAG. They hold playbooks, incident write-ups, and JSON Schemas respectively.
+- Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
+- **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
+- Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.
+CLAUDE_MD_EOF
+  sed -i '' \
+    -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
+    -e "s/{{APP_PORT}}/$APP_PORT/g" \
+    "$PROJECT_PATH/CLAUDE.md"
+  echo "  write $PROJECT_PATH/CLAUDE.md"
+fi
+
+# ── .gitignore ───────────────────────────────────────────────────────────────
+write_file "$PROJECT_PATH/.gitignore" \
+'.DS_Store
+.ledger/runner.db
+.ledger/runner.db-wal
+.ledger/runner.db-shm'
+
+# ── dev.sh ────────────────────────────────────────────────────────────────────
+DEV_SH_CONTENT="#!/usr/bin/env bash
+# Start ledger for: $PROJECT_NAME
+#   App UI:  http://localhost:$APP_PORT
+#   API:     http://localhost:$API_PORT
+set -euo pipefail
+
+LEDGER_DIR=\"$LEDGER_DIR\"
+PROJECT_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
+
+APP_PORT=$APP_PORT
+API_PORT=$API_PORT
+
+echo \"Starting ledger for: \$(basename \"\$PROJECT_DIR\")\"
+echo \"  App UI: http://localhost:\$APP_PORT\"
+echo \"  API:    http://localhost:\$API_PORT\"
+echo \"\"
+
+LEDGER_PORT=\$API_PORT pnpm -C \"\$LEDGER_DIR/server\" dev \"\$PROJECT_DIR\" &
+SERVER_PID=\$!
+
+LEDGER_APP_PORT=\$APP_PORT LEDGER_API_PORT=\$API_PORT pnpm -C \"\$LEDGER_DIR/app\" dev &
+APP_PID=\$!
+
+cleanup() { kill \"\$SERVER_PID\" \"\$APP_PID\" 2>/dev/null || true; }
+trap cleanup INT TERM
+wait \"\$SERVER_PID\" \"\$APP_PID\""
+
+if [[ -e "$PROJECT_PATH/dev.sh" ]]; then
+  echo "  skip  $PROJECT_PATH/dev.sh  (already exists)"
+else
+  printf '%s\n' "$DEV_SH_CONTENT" > "$PROJECT_PATH/dev.sh"
+  chmod +x "$PROJECT_PATH/dev.sh"
+  echo "  write $PROJECT_PATH/dev.sh"
+fi
+
+# ── summary ───────────────────────────────────────────────────────────────────
+echo ""
+echo "Done. To start:"
+echo "  $PROJECT_PATH/dev.sh"

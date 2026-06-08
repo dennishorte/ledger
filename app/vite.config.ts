@@ -7,6 +7,9 @@ import { transcriptMiddleware } from "./server/middleware.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const APP_PORT = Number(process.env["LEDGER_APP_PORT"] ?? "4179");
+const API_PORT = Number(process.env["LEDGER_API_PORT"] ?? "4180");
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), transcriptMiddleware()],
   resolve: {
@@ -15,11 +18,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 4179,
+    port: APP_PORT,
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:4180",
+        target: `http://127.0.0.1:${API_PORT}`,
         changeOrigin: false,
       },
     },
@@ -31,7 +34,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 4179,
+    port: APP_PORT,
     strictPort: true,
   },
   define: {
