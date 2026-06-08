@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Push docs/_process/ updates from the ledger repo to child projects.
+# Usage: sync-process [<project-path> ...]
+#
+# With no arguments, syncs all projects listed in .ledger/child-projects.
+# With path arguments, syncs only those projects.
+set -euo pipefail
+
+LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+REGISTRY="$LEDGER_DIR/.ledger/child-projects"
+SRC="$LEDGER_DIR/docs/_process"
+
+# ── collect targets ───────────────────────────────────────────────────────────
+targets=()
+if [[ $# -gt 0 ]]; then
+  for arg in "$@"; do
+    if [[ "$arg" != /* ]]; then arg="$(pwd)/$arg"; fi
+    targets+=("$arg")
+  done
+else
+  if [[ ! -f "$REGISTRY" ]]; then
+    echo "sync-process: no child projects registered (run new-project first)" >&2
+    exit 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    targets+=("$line")
+  done < "$REGISTRY"
+fi
+
+if [[ ${#targets[@]} -eq 0 ]]; then
+  echo "sync-process: no targets" >&2; exit 1
+fi
+
+# ── sync each project ─────────────────────────────────────────────────────────
+any_error=0
+for project in "${targets[@]}"; do
+  dest="$project/docs/_process"
+  echo "$project"
+  if [[ ! -d "$project" ]]; then
+    echo "  ERROR: directory not found — skipping"
+    any_error=1
+    continue
+  fi
+  mkdir -p "$dest"
+  for src_file in "$SRC/"*.md; do
+    filename="$(basename "$src_file")"
+    dest_file="$dest/$filename"
+    if [[ -e "$dest_file" ]] && diff -q "$src_file" "$dest_file" > /dev/null 2>&1; then
+      echo "  ok    $filename"
+    else
+      cp "$src_file" "$dest_file"
+      echo "  sync  $filename"
+    fi
+  done
+done
+
+exit $any_error

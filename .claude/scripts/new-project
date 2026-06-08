@@ -298,6 +298,15 @@ else
   echo "  write $PROJECT_PATH/dev.sh"
 fi
 
+# ── register in child-projects ───────────────────────────────────────────────
+REGISTRY="$LEDGER_DIR/.ledger/child-projects"
+if grep -qxF "$PROJECT_PATH" "$REGISTRY" 2>/dev/null; then
+  echo "  skip  registry  (already listed)"
+else
+  echo "$PROJECT_PATH" >> "$REGISTRY"
+  echo "  register $PROJECT_PATH"
+fi
+
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Done. To start:"
