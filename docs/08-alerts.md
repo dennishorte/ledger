@@ -2,9 +2,9 @@
 
 **Node ID:** `08-alerts`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-06-08)
 **Created:** 2026-06-07
-**Last Updated:** 2026-06-07 (implemented + independent review; awaiting operator browser walk for COMPLETE)
+**Last Updated:** 2026-06-08 (operator browser sign-off — VERIFY → COMPLETE)
 
 **Dependencies:** `05-task-runner`, `01-ui/01-shell`
 
@@ -134,6 +134,10 @@ Independent clean-context reviewer (per `docs/_process/verification-signoff.md`)
 | N4 | No UI test for `useAlertStream` | Deferred — consistent with the repo's light UI-hook coverage. |
 
 Remaining for COMPLETE: operator walks acceptance checks 1–6 in the browser (the banner path needs human eyes), then VERIFY → COMPLETE.
+
+### Live verification + operator sign-off (2026-06-08)
+
+VERIFY → COMPLETE. A controlled live run reproduced the canonical algedonic case end-to-end: a bogus-`ANTHROPIC_API_KEY` API server (dist binary, no `.env` load — guarantees auth failure, no real agent run) plus the operator's running UI. Injecting a `verify` task drove `RUNNING → FAILED` (`subprocess_failed:` carrying claude's auth-init error) in ~1 s; the report-only observer raised the `Alert` (`GET /api/alerts` seq 0), and it surfaced both directly and through the Vite proxy (`4179 → 4180`). **Operator confirmed the banner renders correctly on-route** (acceptance check 1). Checks 2–3 (View-log link, dismiss-persistence) are present UI affordances; 5 (backfill) confirmed via the proxy fetch; 4 (no-webhook-error) and 6 (no boot-flood) are covered by the channel unit tests + the Req-6 regression test. The webhook delivery path (acceptance 3 proper, with `LEDGER_ALERT_WEBHOOK` set) remains exercised at the unit level only — deferred to first real use.
 
 ## Verification
 
