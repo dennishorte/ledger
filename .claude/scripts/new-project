@@ -223,6 +223,16 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
                                                ISSUE_OPEN → (back to APPROVED or DRAFT)
 ```
 
+## File naming and placement
+
+| Case | Location |
+|------|----------|
+| Top-level leaf (no children) | `docs/NN-name.md` |
+| Fresh parent (always had children) | `docs/NN-name/00-name.md` (parent) + `docs/NN-name/MM-child.md` (children) |
+| Decomposed former-leaf | doc stays at `docs/NN-name.md`; children go in `docs/NN-name/MM-child.md` |
+
+`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_process/`, `_investigations/`, `_schemas/`) never carry `NN-` numbering.
+
 ## Hard constraints
 
 - **No implementation until a node reaches APPROVED.**

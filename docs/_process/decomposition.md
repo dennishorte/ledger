@@ -43,6 +43,16 @@ The original node keeps its document and becomes a coordinator:
 
 For each child, create `docs/<parent-path>/<id>.md` with the full §6.1 schema (Requirements, Design, Decisions, Open Issues, Implementation Notes, Status: PLANNED). The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`. A child that is itself multi-responsibility re-runs this playbook from Step 0 — but the depth cap (§6.6 rule 4) means that should be rare.
 
+**File placement rules:**
+
+| Case | Parent doc | Child docs |
+|------|-----------|------------|
+| Fresh parent (new node, always had children) | `docs/NN-name/00-name.md` | `docs/NN-name/MM-child.md` |
+| Decomposed former-leaf (doc already exists at `docs/NN-name.md`) | stays at `docs/NN-name.md` | `docs/NN-name/MM-child.md` |
+| Top-level leaf (no children) | `docs/NN-name.md` | — |
+
+`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. The sequence determines display order in the DAG but carries no semantic meaning — leave gaps rather than renumber when inserting. The `_process/`, `_investigations/`, and `_schemas/` siblings always use an underscore prefix and never carry `NN-` numbering.
+
 ---
 
 ## Step 4 — Sequence and dispatch
