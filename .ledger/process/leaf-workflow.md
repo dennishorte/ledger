@@ -112,6 +112,8 @@ Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean
 
 Output shape: the **per-requirement sign-off matrix** (`.ledger/process/verification-signoff.md`) — one row per Requirements bullet *and* per Acceptance-check item, each PASS/FAIL/PARTIAL/N/A with concrete evidence (a `file:line`, a gate exit, or a named test; a PASS with no evidence is recorded as FAIL). Acceptance items that need a browser walk are `N/A — operator gate` for a headless reviewer; the operator's stage-8 pass is their real sign-off.
 
+**No shortcut.** Unlike the spec review (stage 2), the implementation review is mandatory for every node. The operator cannot assess code correctness from a browser walk alone; the headless reviewer catches type errors, spec-conformance gaps, and discipline violations (no `any`, no dead code) that stage 8's manual walk misses.
+
 Evaluation criteria expand to include:
 
 - **Spec conformance** — especially the Spec Review closures from stage 3, since those were known risk areas.
@@ -160,6 +162,8 @@ Single commit in the worktree.
 
 ### 10. Merge `--no-ff` — bundle the cross-doc sync into the merge commit
 
+**Prerequisites:** stage 6 implementation review complete, stage 7 audit committed, stage 8 operator sign-off. Do not merge a worktree that has not cleared all three.
+
 ```bash
 git -C /path/to/main merge --no-ff --no-commit <worktree-branch>
 ```
@@ -200,7 +204,7 @@ Once merged:
 
 - **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. Stages whose only output is a transition (stages 2, 4a, 8b) commit just the status bump; stages that bundle a transition with substantive work (stages 1, 3, 4c, 7, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
-- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps.
+- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps. The *spec* review (stage 2) may be skipped on a small, trusted spec — the operator's call. The *implementation* review (stage 6) is non-negotiable; no shortcut applies.
 
 - **Rebase before review** (stage 5). Eliminates the branch-divergence "deletion" artifact and surfaces merge conflicts early. Reviewer sees a clean diff; the merge in stage 10 is mechanical.
 
