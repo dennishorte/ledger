@@ -130,7 +130,7 @@ V1 accepts residual test tasks in the DB across runs — seeded tasks accumulate
 - API URLs in fixtures and API-only tests use `http://localhost:4180` (not `127.0.0.1`) — on macOS, Vite binds to `::1` (IPv6), and `127.0.0.1` (IPv4) is unreachable for those checks. The Hono server responds on both, but `localhost` is used uniformly for consistency.
 - DAG node clicks use `{ force: true }` — ReactFlow status-badge child elements sit on top of the node wrapper and intercept pointer events under Playwright's actionability model. Forcing bypasses the interception and dispatches the event to the intended target.
 - Inspector "hidden" is asserted via `toHaveAttribute('aria-hidden', 'true')` rather than `toBeHidden()` — the aside stays in the DOM with `w-0`/`aria-hidden="true"` (no `display:none`), which Playwright considers visible.
-- TaskRow renders `task.title`, not the task ID — HITL flow tests find rows by their seeded title strings.
+- TaskRow renders `task.title`, not the task ID — HITL flow tests find rows by their seeded title. Titles include a `Math.random()` suffix to avoid `.first()` grabbing an old COMPLETE task with the same title from a previous run (accumulated-task data isolation issue, Open Issues LOW).
 - Alert dismiss test skips when no active alerts are present in the DB — this is correct; the test self-skips rather than failing when no failures exist. It passes when a real `RUNNING→FAILED` alert is in the ring buffer.
 - 22 tests pass, 1 skips (alert dismiss — no active failures in current DB state). `pnpm -C e2e typecheck` clean.
 

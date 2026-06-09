@@ -14,7 +14,7 @@ test.describe("Tasks panel — HITL approve flow", () => {
   }) => {
     const task = await seedTask(request, {
       type: "human_review",
-      title: "e2e: HITL approve test",
+      title: "e2e: HITL status check",
       source: "operator_injected",
     });
     expect(task.id).toBeTruthy();
@@ -31,27 +31,29 @@ test.describe("Tasks panel — HITL approve flow", () => {
     page,
     request,
   }) => {
+    // Unique suffix prevents accumulated tasks from previous runs matching first()
+    const uid = Math.random().toString(36).slice(2, 8);
+    const title = `e2e: HITL approve ${uid}`;
     const task = await seedTask(request, {
       type: "human_review",
-      title: "e2e: HITL approve UI test",
+      title,
       source: "operator_injected",
     });
     await waitForTaskStatus(request, task.id, "AWAITING_HUMAN_REVIEW");
 
     await page.goto("/tasks");
-    // TaskRow renders task.title — find by the seeded title
-    const taskRow = page.locator(`text=e2e: HITL approve UI test`).first();
+    const taskRow = page.locator(`text=${title}`).first();
     await expect(taskRow).toBeVisible({ timeout: 10_000 });
     await taskRow.click();
 
     const inspector = page.locator('aside[aria-label="Inspector"]');
     await expect(inspector).toBeVisible();
 
-    const approveBtn = inspector.locator('button', { hasText: "Approve" });
+    const approveBtn = inspector.locator("button", { hasText: "Approve" });
     await expect(approveBtn).toBeVisible({ timeout: 5_000 });
     await approveBtn.click();
 
-    // After approval the button should disappear (task moves to COMPLETE)
+    // After approval the button disappears (task moves to COMPLETE)
     await expect(approveBtn).toBeHidden({ timeout: 5_000 });
     const completed = await waitForTaskStatus(request, task.id, "COMPLETE");
     expect(completed.status).toBe("COMPLETE");
@@ -61,33 +63,34 @@ test.describe("Tasks panel — HITL approve flow", () => {
     page,
     request,
   }) => {
+    const uid = Math.random().toString(36).slice(2, 8);
+    const title = `e2e: HITL reject ${uid}`;
     const task = await seedTask(request, {
       type: "human_review",
-      title: "e2e: HITL reject UI test",
+      title,
       source: "operator_injected",
     });
     await waitForTaskStatus(request, task.id, "AWAITING_HUMAN_REVIEW");
 
     await page.goto("/tasks");
-    // TaskRow renders task.title — find by the seeded title
-    const taskRow = page.locator(`text=e2e: HITL reject UI test`).first();
+    const taskRow = page.locator(`text=${title}`).first();
     await expect(taskRow).toBeVisible({ timeout: 10_000 });
     await taskRow.click();
 
     const inspector = page.locator('aside[aria-label="Inspector"]');
     await expect(inspector).toBeVisible();
 
-    const rejectBtn = inspector.locator('button', { hasText: /reject/i });
+    const rejectBtn = inspector.locator("button", { hasText: /reject/i });
     await expect(rejectBtn).toBeVisible({ timeout: 5_000 });
     await rejectBtn.click();
 
-    // Rejection rationale textarea should appear
-    const textarea = inspector.locator('textarea, [role="textbox"]').first();
+    // Rejection rationale textarea appears
+    const textarea = inspector.locator("textarea, [role='textbox']").first();
     await expect(textarea).toBeVisible({ timeout: 3_000 });
     await textarea.fill("e2e rejection reason");
 
-    // Confirm / submit rejection
-    const confirmBtn = inspector.locator('button', {
+    // Confirm button is gated on non-empty rationale
+    const confirmBtn = inspector.locator("button", {
       hasText: /confirm|submit/i,
     });
     await expect(confirmBtn).toBeEnabled({ timeout: 3_000 });
