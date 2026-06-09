@@ -21,7 +21,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "CLAUDE.md",
     ...(parentPath ? [parentPath] : []),
     "docs/00-project.md",
-    "docs/_process/leaf-workflow.md",
+    ".ledger/process/leaf-workflow.md",
   ];
 
   return [

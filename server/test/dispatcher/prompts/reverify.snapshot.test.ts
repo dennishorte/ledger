@@ -56,8 +56,8 @@ describe("reverify template snapshot", () => {
       Load these files via the Read tool before acting. They establish constraints you must honour:
 
       - CLAUDE.md
-      - docs/_process/leaf-workflow.md
-      - docs/_process/verification-signoff.md
+      - .ledger/process/leaf-workflow.md
+      - .ledger/process/verification-signoff.md
 
       ## Success criteria
 
@@ -69,7 +69,7 @@ describe("reverify template snapshot", () => {
 
       ## Sign-off matrix (primary artifact)
 
-      Produce a Markdown table with exactly one row per previously-failed item plus every Requirements/Acceptance row the fix touched. Format and rules: docs/_process/verification-signoff.md.
+      Produce a Markdown table with exactly one row per previously-failed item plus every Requirements/Acceptance row the fix touched. Format and rules: .ledger/process/verification-signoff.md.
 
       | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
       |---|-------------------------------------|---------|----------|

@@ -58,8 +58,8 @@ describe("specReview template snapshot", () => {
       - CLAUDE.md
       - app/src/lib/types.ts
       - packages/parser/src/runner/types.ts
-      - docs/_process/leaf-workflow.md
-      - docs/_process/verification-signoff.md
+      - .ledger/process/leaf-workflow.md
+      - .ledger/process/verification-signoff.md
 
       ## Success criteria
 
@@ -72,7 +72,7 @@ describe("specReview template snapshot", () => {
 
       ## Sign-off matrix (primary artifact)
 
-      Produce a Markdown table with exactly one row per PRD §-coverage item the spec must address and every Requirements bullet the spec declares. Format and rules: docs/_process/verification-signoff.md.
+      Produce a Markdown table with exactly one row per PRD §-coverage item the spec must address and every Requirements bullet the spec declares. Format and rules: .ledger/process/verification-signoff.md.
 
       | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
       |---|-------------------------------------|---------|----------|

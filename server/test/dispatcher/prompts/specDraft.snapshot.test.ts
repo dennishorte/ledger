@@ -57,7 +57,7 @@ describe("specDraft template snapshot", () => {
 
       - CLAUDE.md
       - docs/00-project.md
-      - docs/_process/leaf-workflow.md
+      - .ledger/process/leaf-workflow.md
 
       ## Success criteria
 

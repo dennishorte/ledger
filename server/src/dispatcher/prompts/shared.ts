@@ -92,7 +92,7 @@ End with exactly one terminal call:
  * Returns the per-requirement sign-off matrix block for the three reviewer personas
  * (spec_review / verify / reverify). Forces the review into a row-per-requirement shape
  * with evidence discipline, rather than a freeform verdict — the rigor half of the
- * self-audit mitigation (PRD §11; canonical format docs/_process/verification-signoff.md).
+ * self-audit mitigation (PRD §11; canonical format .ledger/process/verification-signoff.md).
  *
  * `items` names what gets a row for this persona (e.g. "every Requirements bullet and
  * every Acceptance-check item"). The independence half (clean context) is the dispatch
@@ -101,7 +101,7 @@ End with exactly one terminal call:
 export function signOffMatrixReminder(items: string): string {
   return `## Sign-off matrix (primary artifact)
 
-Produce a Markdown table with exactly one row per ${items}. Format and rules: docs/_process/verification-signoff.md.
+Produce a Markdown table with exactly one row per ${items}. Format and rules: .ledger/process/verification-signoff.md.
 
 | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
 |---|-------------------------------------|---------|----------|

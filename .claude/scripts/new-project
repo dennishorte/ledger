@@ -88,8 +88,7 @@ copy_file() {
 
 # ── directories (mkdir -p is idempotent) ──────────────────────────────────────
 echo "Setting up: $PROJECT_PATH"
-mkdir -p "$PROJECT_PATH/docs/_process"
-mkdir -p "$PROJECT_PATH/.ledger"
+mkdir -p "$PROJECT_PATH/.ledger/process"
 
 # ── .ledger/project.json ──────────────────────────────────────────────────────
 write_file "$PROJECT_PATH/.ledger/project.json" \
@@ -171,9 +170,9 @@ write_file "$PROJECT_PATH/docs/00-project.md" \
 | ID | Title | Status | Dependencies |
 |----|-------|--------|--------------|"
 
-# ── docs/_process/ (framework playbooks) ─────────────────────────────────────
-for src in "$LEDGER_DIR/docs/_process/"*.md; do
-  copy_file "$src" "$PROJECT_PATH/docs/_process/$(basename "$src")"
+# ── .ledger/process/ (framework playbooks) ───────────────────────────────────
+for src in "$LEDGER_DIR/.ledger/process/"*.md; do
+  copy_file "$src" "$PROJECT_PATH/.ledger/process/$(basename "$src")"
 done
 
 # ── CLAUDE.md ─────────────────────────────────────────────────────────────────
@@ -190,8 +189,8 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 ## Start here
 
 - **`docs/00-project.md`** — project root / PRD. Read first for vision, scope, and decisions. Its §14 holds the top-level children manifest.
-- **`docs/_process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
-- **`docs/_process/decomposition.md`** — how to decompose a parent node into children.
+- **`.ledger/process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
+- **`.ledger/process/decomposition.md`** — how to decompose a parent node into children.
 
 **To find current focus:** walk the children manifests starting at `docs/00-project.md` §14 and descend through Status fields. The most-recently-advanced leaf node tells you where work currently lives.
 
@@ -231,7 +230,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 | Fresh parent (always had children) | `docs/NN-name/00-name.md` (parent) + `docs/NN-name/MM-child.md` (children) |
 | Decomposed former-leaf | doc stays at `docs/NN-name.md`; children go in `docs/NN-name/MM-child.md` |
 
-`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_process/`, `_investigations/`, `_schemas/`) never carry `NN-` numbering.
+`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_investigations/`, `_schemas/`) never carry `NN-` numbering.
 
 ## Hard constraints
 
@@ -243,7 +242,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## Process notes
 
-- **Underscore-prefixed folders** (`docs/_process/`, `docs/_investigations/`, `docs/_schemas/`) are framework-internal — the ledger parser skips them and they never appear in the DAG. They hold playbooks, incident write-ups, and JSON Schemas respectively.
+- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are never parsed as project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_schemas/`) are also framework-internal and skipped by the parser.
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
 - **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
 - Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.

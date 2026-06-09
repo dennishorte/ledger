@@ -24,8 +24,8 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "CLAUDE.md",
     ...(docPath ? [docPath] : []),
     ...(parentPath ? [parentPath] : []),
-    "docs/_process/leaf-workflow.md",
-    "docs/_process/verification-signoff.md",
+    ".ledger/process/leaf-workflow.md",
+    ".ledger/process/verification-signoff.md",
   ];
 
   const docRef = docPath ?? `(spec doc for node ${task.id})`;
