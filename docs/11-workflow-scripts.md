@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts`
 **Parent:** `00-project`
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-06-10
 **Last Updated:** 2026-06-10
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`)
