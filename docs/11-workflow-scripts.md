@@ -2,10 +2,10 @@
 
 **Node ID:** `11-workflow-scripts`
 **Parent:** `00-project`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-06-10
 **Last Updated:** 2026-06-10
-**Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`)
+**Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
 
 ---
 
@@ -44,7 +44,7 @@
   leaf-workflow-finish.js   # stages 9–11
 ```
 
-Both files must be added to `.claude/settings.json` `allowedTools` or equivalent workflow allowlist so they are not blocked by the permission classifier.
+Workflow scripts in `.claude/workflows/` are auto-discovered by the Claude Code Workflow tool — no settings.json registration is required.
 
 ### leaf-workflow.js — args and return
 
@@ -112,7 +112,8 @@ STATUS_SCHEMA = {
 
 // Output of stage-2 spec review and stage-6 implementation review
 REVIEW_SCHEMA = {
-  verdict: "string",       // LGTM | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS | READY_WITH_FOLLOWUPS | READY_FOR_COMPLETE | NEEDS_REVISIONS
+  verdict: "string",       // Stage 2 (spec review): LGTM | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS | READY_WITH_FOLLOWUPS | NEEDS_REVISIONS
+                           // Stage 6 (impl review): READY_FOR_COMPLETE | NEEDS_REVISIONS | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS
   matrix: [{ id, item, verdict, evidence }],  // one row per Requirements/Acceptance item
   findings: [{ severity, description, fix, isMechanical }],
   summaryMarkdown: "string"
@@ -148,7 +149,7 @@ WORKTREE_SCHEMA = {
 
 ### Stage 0 (Inspect) agent prompt outline
 
-Read `specPath`. Return `STATUS_SCHEMA`. If status is `COMPLETE`, return early with `{ status: "already-complete" }`. Derive boolean flags (`runDraft`, `runSpecReview`, `runApprove`, `runImpl`, `runRebase`, `runImplReview`, `runFixes`) from current lifecycle status so downstream stages are skipped on re-entry.
+Read `specPath`. Return `STATUS_SCHEMA`. If status is `COMPLETE`, return early with `{ status: "already-complete" }`. Derive boolean flags (`runDraft`, `runSpecReview`, `runApprove`, `runImpl`, `runRebase`, `runImplReview`, `runFixes`, `runGate`) from current lifecycle status so downstream stages are skipped on re-entry.
 
 Entry-state mapping:
 - `NOT_FOUND` → all stages run
@@ -156,7 +157,7 @@ Entry-state mapping:
 - `SPEC_REVIEW` → skip stages 1–2; start at stage 3
 - `APPROVED` → skip stages 1–3; start at stage 4
 - `IN_PROGRESS` → skip stages 1–3; locate existing worktree; start at stage 5
-- `VERIFY` → skip stages 1–4; locate existing worktree; start at stage 6
+- `VERIFY` → skip stages 1–4; locate existing worktree; start at stage 6; `runGate: true` (gate not yet created)
 - `COMPLETE` → early return
 
 ### Stage 1 (Draft) agent prompt outline
@@ -181,7 +182,7 @@ Apply all `isMechanical: true` findings from stage 2's `REVIEW_SCHEMA`. Add a `#
 
 `isolation: "worktree"`. Branch from current main: `feat/${leafId}`.
 
-Three commits per leaf-workflow.md:
+Two status-transition commits per leaf-workflow.md (4b is the implementation work bundled into commit 4c, not a standalone commit):
 - **4a** (entry): bump Status `APPROVED → IN_PROGRESS` in spec + parent manifest, commit `"docs(${leafId}): APPROVED → IN_PROGRESS"`. Nothing else in this commit.
 - **4b** (implementation): implement per spec; run `pnpm -C app typecheck`, `pnpm -C app lint`, `pnpm -C app build`, `pnpm -C e2e test`; fill Implementation Notes (deps, decisions, bundle delta, deviations).
 - **4c** (exit): bump Status `IN_PROGRESS → VERIFY` in spec + parent manifest, commit `"docs(${leafId}): IN_PROGRESS → VERIFY"`. Implementation code + Implementation Notes + status bump in one commit.
@@ -216,6 +217,8 @@ Return `REVIEW_SCHEMA`. Same evidence discipline as stage 2 — PASS without con
 
 Apply `isMechanical: true` findings from stage 6's `REVIEW_SCHEMA`. Add `### Implementation Review (YYYY-MM-DD)` subsection to Implementation Notes with the full sign-off matrix. Commit in worktree: `"review(${leafId}): apply impl-review fixes"`. If implementation deviated from the spec in an operator-approved way, update the spec in the same commit.
 
+If any FAIL or PARTIAL finding has `isMechanical: false`, log them to the operator and return `{ status: "manual-needed", message: "Non-mechanical impl-review findings require operator resolution", findings: [...] }`. The workflow does not proceed to Stage 8 until all non-mechanical findings are resolved.
+
 ### Stage 8 (Gate) agent prompt outline
 
 POST to `http://localhost:4180/api/tasks`:
@@ -236,7 +239,7 @@ Return the created task `id` as `humanReviewTaskId`. The script's return value i
 
 ### leaf-workflow-finish.js stage outlines
 
-**Stage 9 (Promote):** Bump Status `VERIFY → COMPLETE (v1, YYYY-MM-DD)` in spec + parent manifest. Single commit in worktree: `"docs(${leafId}): VERIFY → COMPLETE"`.
+**Stage 9 (Promote):** Bump Status `VERIFY → COMPLETE (v1, YYYY-MM-DD)` in spec + parent manifest. If the spec contains a sample-tree picture (ASCII table showing node status), update its row to reflect COMPLETE status. Single commit in worktree: `"docs(${leafId}): VERIFY → COMPLETE"`.
 
 **Stage 10 (Merge):**
 ```bash
@@ -263,12 +266,31 @@ git branch -d <branchName>
 | D5 | Plain JavaScript, no TypeScript | Workflow scripts are parsed as JS; TypeScript annotations cause parse failures per the framework runtime. |
 | D6 | `meta` must be a pure literal | Framework requirement. Computed meta (variables, spread, function calls) breaks workflow registration at parse time. |
 | D7 | `repoPath` defaults to `/Users/dennis/code/ledger` | This repo. Operators on other machines pass `repoPath` explicitly. The default eliminates boilerplate for the primary use case. |
+| D8 | No settings.json registration for workflow scripts | `.claude/workflows/*.js` files are auto-discovered by the Claude Code Workflow tool from the `.claude/workflows/` directory. Adding an `allowedTools` entry for them does nothing; the existing `permissions.allow` in settings.json governs Bash tool patterns only. |
 
 ---
 
 ## Open Issues
 
 None known at DRAFT time.
+
+---
+
+## Spec Review (2026-06-10)
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | Stage 0 flag list missing `runGate` for Stage 8; VERIFY entry-state needs `runGate: true` | applied |
+| S2 | Design section claimed `allowedTools` registration required for workflow scripts (factually wrong) | applied — replaced with accurate auto-discovery statement; D8 added |
+| S3 | IN_PROGRESS re-entry has no specified worktree-location mechanism (non-mechanical — requires structural spec decision) | skipped: requires operator judgment on state-file vs deterministic-branch-name approach |
+| S4 | Stage 4 header said "Three commits" contradicting leaf-workflow.md's two-commit pattern | applied — changed to "Two status-transition commits" |
+| S5 | Stage 2 outline conflates script-level status-bump commit with reviewer invocation (non-mechanical — structural rewrite) | skipped: requires operator judgment on splitting Stage 2 outline into 2a/2b |
+| S6 | `REVIEW_SCHEMA` verdict enum included `READY_FOR_COMPLETE` without per-stage annotation; single enum serves both spec-review and impl-review contexts | applied — annotated valid verdicts per stage in schema comment |
+| S7 | Stage 3 missing manual-needed return path for non-mechanical spec-review findings (non-mechanical — structural addition) | skipped: requires operator judgment on exact exit behavior |
+| S8 | `leaf-workflow-finish.js` missing `humanReviewTaskId` arg and pre-condition check (non-mechanical — structural API change) | skipped: requires operator judgment on finish-script API contract |
+| S9 | Dependencies line omitted `app/src/lib/types.ts`, `docs/00-project.md` §14, and parent manifest | applied |
+| S10 | Stage 9 outline missing sample-tree picture update step | applied |
+| S11 | Stage 7 missing manual-needed return for non-mechanical impl-review findings | applied |
 
 ---
 
