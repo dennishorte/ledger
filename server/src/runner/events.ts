@@ -98,6 +98,7 @@ export function withPublishing(store: Store, bus: EventBus): Store {
     // unbound-method rule). The Store is a factory-closure pattern — methods
     // don't use `this`, so .bind() is a no-op semantically. Binding avoids
     // the per-call closure allocation that arrow wrappers would introduce.
+    deleteTask: store.deleteTask.bind(store),
     loadTask: store.loadTask.bind(store),
     getStatus: store.getStatus.bind(store),
     listTasks: store.listTasks.bind(store),

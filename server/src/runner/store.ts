@@ -142,6 +142,8 @@ export interface Store {
     taskId: TaskId,
     event: Omit<LogEvent, "id" | "taskId" | "seq" | "at">,
   ): LogEvent;
+  /** Hard-deletes a task and all its events. Returns true if the row existed. */
+  deleteTask(id: TaskId): boolean;
   loadTask(id: TaskId): Task | undefined;
   getStatus(id: TaskId): TaskStatus | undefined;
   listTasks(filter?: ListTasksFilter): Task[];
@@ -248,6 +250,14 @@ export function createStore(db: Database): Store {
 
   const stmtUpdateReviewPayload = db.prepare<[string, string]>(
     `UPDATE tasks SET review_payload = ? WHERE id = ?`,
+  );
+
+  const stmtDeleteEvents = db.prepare<[string]>(
+    `DELETE FROM events WHERE task_id = ?`,
+  );
+
+  const stmtDeleteTask = db.prepare<[string]>(
+    `DELETE FROM tasks WHERE id = ?`,
   );
 
   const stmtInsertScan = db.prepare<[string, string, string]>(
@@ -404,6 +414,15 @@ export function createStore(db: Database): Store {
     return result;
   }
 
+  function deleteTask(id: TaskId): boolean {
+    const txDelete = db.transaction(() => {
+      stmtDeleteEvents.run(id);
+      const info = stmtDeleteTask.run(id);
+      return info.changes > 0;
+    });
+    return txDelete() as boolean;
+  }
+
   function loadTask(id: TaskId): Task | undefined {
     const row = stmtLoadTask.get(id) as RawTaskRow | undefined;
     if (!row) return undefined;
@@ -505,6 +524,7 @@ export function createStore(db: Database): Store {
     createTask,
     updateTaskStatus,
     appendEvent,
+    deleteTask,
     loadTask,
     getStatus,
     listTasks,

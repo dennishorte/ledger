@@ -28,6 +28,13 @@ export async function seedTask(
   return body.task;
 }
 
+export async function deleteTask(
+  request: APIRequestContext,
+  id: string,
+): Promise<void> {
+  await request.delete(`${API}/tasks/${id}`);
+}
+
 export async function getTask(
   request: APIRequestContext,
   id: string,
@@ -58,13 +65,19 @@ export async function waitForTaskStatus(
   );
 }
 
-// Extended test fixture that exposes seedTask/waitForTaskStatus bound to the request context.
+// Extended test fixture: seedTask auto-tracks created IDs and deletes them after each test.
 export const test = base.extend<{
   seedTask: (input: TaskSeed) => Promise<CreatedTask>;
   waitForTaskStatus: (id: string, status: string, timeoutMs?: number) => Promise<CreatedTask>;
 }>({
   seedTask: async ({ request }, use) => {
-    await use((input) => seedTask(request, input));
+    const created: string[] = [];
+    await use(async (input) => {
+      const task = await seedTask(request, input);
+      created.push(task.id);
+      return task;
+    });
+    await Promise.all(created.map((id) => deleteTask(request, id)));
   },
   waitForTaskStatus: async ({ request }, use) => {
     await use((id, status, timeoutMs) =>

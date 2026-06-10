@@ -173,6 +173,16 @@ export const tasksRoute = new Hono<ServerEnv>()
     return c.json({ task }, 201);
   })
   // -------------------------------------------------------------------------
+  // DELETE /:id — hard-delete task + events (test teardown / operator cleanup)
+  // -------------------------------------------------------------------------
+  .delete("/:id", (c) => {
+    const project = c.get("project");
+    const id = c.req.param("id");
+    const deleted = project.runner.store.deleteTask(id);
+    if (!deleted) return c.json({ error: "task_not_found" }, 404);
+    return c.body(null, 204);
+  })
+  // -------------------------------------------------------------------------
   // POST /:id/cancel — eager CANCELLED transition + SIGTERM (D1 — inline in tasksRoute)
   // Spec: docs/06-agent-dispatcher/05-dispatch-api.md §Design cancel handler shape
   // -------------------------------------------------------------------------
