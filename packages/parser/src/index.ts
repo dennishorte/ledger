@@ -11,6 +11,7 @@ export { HEALTH_DEFAULTS } from "./project/types.js";
 
 // Docs graph
 export { buildDocGraph, idForPath, pathForNodeId } from "./docs/buildDocGraph.js";
+export type { BuildDocGraphResult, DocValidationFailure } from "./docs/buildDocGraph.js";
 export type { DocNode } from "./docs/types.js";
 
 // Core types (canonical home — re-exported by app/src/lib/types.ts)

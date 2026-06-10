@@ -18,8 +18,8 @@ export const docsRoute = new Hono<ServerEnv>()
   .get("/", async (c) => {
     const project = c.get("project");
     const rawDocs = await readDocsTree(project.docsRoot);
-    const { nodes, validationErrorPaths } = buildDocGraph(rawDocs);
-    return c.json({ nodes, validation: { errorPaths: validationErrorPaths } });
+    const { nodes, validationErrorPaths, validationErrors } = buildDocGraph(rawDocs);
+    return c.json({ nodes, validation: { errorPaths: validationErrorPaths, errors: validationErrors } });
   })
   .get("/:nodeId{.+}", async (c) => {
     const project = c.get("project");

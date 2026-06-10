@@ -103,7 +103,11 @@ export async function loadProjectContext(opts: {
   // Load the docs tree and build the graph once at context boot.
   // renderPrompt / pathForNodeId use this array to resolve NodeId → source path.
   const rawDocs = await readDocsTree(docsRoot);
-  const { nodes: docs } = buildDocGraph(rawDocs);
+  const { nodes: docs, validationErrors: docValidationErrors } = buildDocGraph(rawDocs);
+  for (const { path, errors } of docValidationErrors) {
+    const detail = errors.map((e) => `${e.path} ${e.message}`).join("; ");
+    console.warn(`[docs] schema validation failed, node degraded: ${path} — ${detail}`);
+  }
   const resolveDocPath = (nodeId: string) => pathForNodeId(docs, nodeId);
 
   const runner = createRunnerForProject({ projectRoot });

@@ -11,4 +11,10 @@ export interface DocNode {
   authored: boolean;
   /** File path key, kept for debugging/routing. */
   source?: string;
+  /**
+   * Absent or undefined = node passed schema validation (or is not subject to it).
+   * `false` = node failed schema validation; derived fields (status, title) come
+   * from heuristic parseOne fallback and may be unreliable.
+   */
+  valid?: boolean;
 }

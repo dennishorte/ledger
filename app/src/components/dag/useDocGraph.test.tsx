@@ -25,7 +25,7 @@ describe("useDocGraph", () => {
       { id: "test-node", parentId: null, title: "Test", status: "DRAFT", dependsOn: [], authored: true },
     ];
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ nodes: mockNodes, validation: { errorPaths: [] } }), {
+      new Response(JSON.stringify({ nodes: mockNodes, validation: { errorPaths: [], errors: [] } }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })

@@ -1,5 +1,5 @@
 import { buildDocGraph, idForPath } from "@ledger/parser";
-import type { DocNode } from "@ledger/parser";
+import type { DocNode, DocValidationFailure } from "@ledger/parser";
 
 /**
  * Build-time parser for the project's `docs/**.md` tree.
@@ -17,16 +17,13 @@ const rawDocs = import.meta.glob<string>("../../../docs/**/*.md", {
   eager: true,
 });
 
-function getBuilt(): { nodes: DocNode[]; validationErrorPaths: string[] } {
-  return buildDocGraph(rawDocs);
-}
-
-const _built = getBuilt();
+const _built = buildDocGraph(rawDocs);
 
 export function loadDocNodes(): DocNode[] {
   return _built.nodes;
 }
 
 export const docValidationErrorPaths: readonly string[] = _built.validationErrorPaths;
+export const docValidationErrors: readonly DocValidationFailure[] = _built.validationErrors;
 
 export { idForPath };

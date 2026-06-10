@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -17,7 +17,7 @@ import { DocSubtreeNode } from "@/components/dag/DocSubtreeNode";
 import { DocCollapsedSubtreeNode } from "@/components/dag/DocCollapsedSubtreeNode";
 import { NodeInspector } from "@/components/dag/NodeInspector";
 import { useDagLayout, type DocNodeData } from "@/components/dag/useDagLayout";
-import { useDocGraph } from "@/components/dag/useDocGraph";
+import { useDocGraph, useDocValidationErrors } from "@/components/dag/useDocGraph";
 import { computeEffectiveExpansion } from "@/lib/dagExpansion";
 import { useShellStore } from "@/stores/shell";
 import { useDagViewStore } from "@/stores/dagView";
@@ -34,6 +34,8 @@ const fitViewOptions = { padding: 0.2 } as const;
 
 function DagCanvasInner(): JSX.Element {
   const docs = useDocGraph();
+  const validationErrors = useDocValidationErrors();
+  const [errorsBannerDismissed, setErrorsBannerDismissed] = useState(false);
   const openInspector = useShellStore((s) => s.openInspector);
   const { fitView } = useReactFlow();
 
@@ -96,8 +98,46 @@ function DagCanvasInner(): JSX.Element {
     [docs, openInspector],
   );
 
+  const showErrorsBanner = validationErrors.length > 0 && !errorsBannerDismissed;
+
   return (
-    <div className="h-full w-full">
+    <div className="flex h-full w-full flex-col">
+      {showErrorsBanner && (
+        <div
+          role="alert"
+          style={{ backgroundColor: "var(--color-warning-soft)", borderColor: "var(--color-border)" }}
+          className="flex shrink-0 items-start gap-2 border-b px-3 py-2 text-[12px]"
+        >
+          <span className="font-medium" style={{ color: "var(--color-fg)" }}>
+            {validationErrors.length === 1
+              ? "1 doc failed schema validation"
+              : `${validationErrors.length.toString()} docs failed schema validation`}
+            {" — "}shown in the DAG with degraded data:
+          </span>
+          <ul className="flex flex-wrap gap-x-3 gap-y-0.5" style={{ color: "var(--color-fg)" }}>
+            {validationErrors.map((ve) => (
+              <li key={ve.path} className="font-mono">
+                {ve.path}
+                {ve.errors[0] ? (
+                  <span style={{ color: "var(--color-muted)" }}>
+                    {" "}({ve.errors[0].path || "/"} {ve.errors[0].message})
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => { setErrorsBannerDismissed(true); }}
+            aria-label="Dismiss"
+            className="ml-auto shrink-0 cursor-pointer rounded px-1.5 py-0.5 transition-colors"
+            style={{ color: "var(--color-muted)" }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -149,6 +189,7 @@ function DagCanvasInner(): JSX.Element {
           className="!bg-[color:var(--color-surface-raised)] !shadow-sm [&>button]:!border-[color:var(--color-border)] [&>button]:!bg-[color:var(--color-surface-raised)] [&>button]:!text-[color:var(--color-fg)] [&>button:hover]:!bg-[color:var(--color-surface-sunken)]"
         />
       </ReactFlow>
+      </div>
     </div>
   );
 }

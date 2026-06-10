@@ -1,11 +1,20 @@
 import type { NodeId, NodeStatus } from "../coreTypes.js";
 import { parseDocNode } from "../schema/parseDocNode.js";
 import { validateDocNode } from "../schema/validateDocNode.js";
+import type { ValidationError } from "../schema/validateDocNode.js";
 import type { DocNode } from "./types.js";
+
+export interface DocValidationFailure {
+  path: string;
+  errors: ValidationError[];
+}
 
 export interface BuildDocGraphResult {
   nodes: DocNode[];
+  /** Kept for back-compat — same paths as `validationErrors`. */
   validationErrorPaths: string[];
+  /** Full error detail for each node that failed schema validation. */
+  validationErrors: DocValidationFailure[];
 }
 
 const KNOWN_STATUSES: ReadonlySet<NodeStatus> = new Set<NodeStatus>([
@@ -214,7 +223,7 @@ export function idForPath(path: string): NodeId | null {
  */
 export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphResult {
   const parsed: ParsedDoc[] = [];
-  const validationErrors: { path: string }[] = [];
+  const validationErrors: DocValidationFailure[] = [];
 
   for (const [key, body] of Object.entries(rawDocs)) {
     const sub = toDocsRelPath(key);
@@ -230,7 +239,12 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
       }
       const result = validateDocNode(candidate);
       if (!result.ok) {
-        validationErrors.push({ path: key });
+        validationErrors.push({ path: key, errors: result.errors });
+        // Degrade to heuristic parseOne so the node stays visible in the DAG
+        // with valid: false rather than vanishing entirely. parseOne sets
+        // validated: false, which threads through to DocNode.valid = false.
+        const p = parseOne(key, body);
+        if (p) parsed.push(p);
         continue;
       }
       const node = result.node;
@@ -264,6 +278,7 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
       dependsOn: [],
       authored: true,
       source: p.source,
+      ...(p.validated ? {} : { valid: false as const }),
     });
   }
 
@@ -290,5 +305,6 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
   return {
     nodes: Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id)),
     validationErrorPaths: validationErrors.map((e) => e.path),
+    validationErrors,
   };
 }
