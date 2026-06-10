@@ -307,7 +307,14 @@ None known at DRAFT time.
 - **WORKTREE_SCHEMA `additionalProperties`:** Schema properties use `type: ['string', 'null']` to allow null for re-entry paths where worktree isn't found yet.
 - **Stage 3 / Stage 7 TODAY_DATE token:** The word `TODAY_DATE` is used as a placeholder in the agent prompts; the executing agent substitutes the actual date when running. This is idiomatic for dynamic prompts — the workflow script cannot call `new Date()` inside a prompt string and have it evaluated at agent-call time correctly without agent interpolation.
 - **Rebase fallthrough:** Stage 5 returns early with `{ status: 'rebase-conflict' }` if `rebaseResult.success === false`. The worktree git state is preserved (no `--abort`) per spec §Stage 5.
-- **Stage 7 non-mechanical guard:** Returns `{ status: 'manual-needed' }` if any FAIL/PARTIAL non-mechanical finding exists, per spec §Stage 7. This is a local return from the `phase()` callback — the outer function continues to `stage-8`; the full early return should be handled by the outer scope. Noted as a follow-up improvement: move the non-mechanical check to the outer scope to actually short-circuit stage 8.
+- **Stage 7 non-mechanical guard (B1 fixed):** Returns `{ status: 'manual-needed' }` from the outer function when non-mechanical blocking/should-fix findings exist. The original implementation returned from inside a `phase()` callback (dead code). Fixed by moving the guard to top-level flow.
+
+### Post-review structural rewrite (2026-06-10)
+
+The implementation review identified two blocking defects requiring a rewrite of both scripts:
+
+- **B1 — `phase()` callback pattern (structural):** Both scripts used `export default async function(args, { agent, phase })` with `await phase('title', async () => {...})` callbacks. The Workflow framework uses **top-level globals** — `agent()` and `phase()` are globals, not injected arguments, and `phase(title)` is `void` (ignores a callback). Every stage-local variable would be `undefined` at runtime. Fixed by rewriting both scripts as top-level async code with global `phase()`/`agent()` calls.
+- **B2 — `leaf-workflow-finish.js` missing idempotent status check (R4):** No startup check; all stages ran unconditionally. Fixed by adding a Stage 0 `Inspect` phase that reads current status and whether the branch is already merged, then derives `runPromote` and `runMerge` flags.
 
 ### Gate results
 
