@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts`
 **Parent:** `00-project`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-06-10)
 **Created:** 2026-06-10
 **Last Updated:** 2026-06-10
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
