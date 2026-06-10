@@ -96,7 +96,7 @@ export default async function leafWorkflowFinish(args, { agent, phase }) {
     await agent(
       'Clean up the worktree and branch.\n\n' +
       'Run:\n' +
-      '  git -C ' + repoPath + ' worktree remove -f ' + worktreePath + '\n' +
+      '  git -C ' + repoPath + ' worktree remove -f -f ' + worktreePath + '\n' +
       '  git -C ' + repoPath + ' branch -d ' + branchName + '\n\n' +
       'The -f flag is needed because Claude Code worktrees may be locked.\n' +
       'The lowercase -d refuses to delete if not fully merged — a safety net; if it fails, report why.'

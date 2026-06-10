@@ -27,7 +27,7 @@ export const meta = {
     },
     {
       id: 'stage-4',
-      name: 'Implement — isolated worktree, three commits (entry/impl/exit)',
+      name: 'Implement — isolated worktree, two status-transition commits (4a entry + 4c exit with impl bundled)',
     },
     {
       id: 'stage-5',
@@ -316,7 +316,7 @@ export default async function leafWorkflow(args, { agent, phase }) {
       '4a. ENTRY COMMIT:\n' +
       '  - Create a git worktree: git -C ' + repoPath + ' worktree add .claude/worktrees/feat-' + leafId + ' -b ' + branchToCreate + '\n' +
       '  - In the worktree, bump **Status:** APPROVED → IN_PROGRESS in "' + specPath + '" and the parent manifest row.\n' +
-      '  - Commit: git commit -m "impl(' + leafId + '): APPROVED → IN_PROGRESS"\n' +
+      '  - Commit: git commit -m "docs(' + leafId + '): APPROVED → IN_PROGRESS"\n' +
       '  - Nothing else in this commit.\n\n' +
       '4b. IMPLEMENTATION:\n' +
       '  - Implement per the spec. No TypeScript in .js files. No `any`. No `console.log`. No dead code.\n' +
@@ -328,7 +328,7 @@ export default async function leafWorkflow(args, { agent, phase }) {
       '  - Fill Implementation Notes with: deps, decisions, bundle delta, deviations.\n\n' +
       '4c. EXIT COMMIT:\n' +
       '  - Bump **Status:** IN_PROGRESS → VERIFY in spec + parent manifest.\n' +
-      '  - Commit everything (code + Implementation Notes + status bump): git commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
+      '  - Commit everything (code + Implementation Notes + status bump): git commit -m "docs(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
       'Return your worktreePath (output of `pwd` inside the worktree) and branchName (output of `git branch --show-current`).',
       {
         isolation: 'worktree',
@@ -423,6 +423,8 @@ export default async function leafWorkflow(args, { agent, phase }) {
 
   // ── Stage 7: Fixes ────────────────────────────────────────────────────────
 
+  let manualNeededResult = null;
+
   await phase('stage-7', async () => {
     if (!runFixes || !implReview || !worktreePath) {
       return;
@@ -434,11 +436,12 @@ export default async function leafWorkflow(args, { agent, phase }) {
     });
 
     if (nonMechanical.length > 0) {
-      return {
+      manualNeededResult = {
         status: 'manual-needed',
         message: 'Non-mechanical impl-review findings require operator resolution',
         findings: nonMechanical,
       };
+      return;
     }
 
     await agent(
@@ -452,6 +455,10 @@ export default async function leafWorkflow(args, { agent, phase }) {
       'Commit in the worktree: git commit -m "review(' + leafId + '): apply impl-review fixes"'
     );
   });
+
+  if (manualNeededResult) {
+    return manualNeededResult;
+  }
 
   // ── Stage 8: Gate ─────────────────────────────────────────────────────────
 

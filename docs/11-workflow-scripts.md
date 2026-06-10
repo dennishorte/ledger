@@ -315,6 +315,47 @@ None known at DRAFT time.
 - `pnpm -C app lint`: exit 0 (after fixing pre-existing vite.config.ts lint error)
 - `pnpm -C app build`: exit 0
 
+### Implementation Review (2026-06-10)
+
+**Verdict:** NEEDS_REVISIONS (3 blocking / 2 should-fix / 1 nit; 4 mechanical fixes applied; 1 non-mechanical skipped)
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| R1 | leaf-workflow.js exists at .claude/workflows/leaf-workflow.js | PASS | .claude/worktrees/wf_baef01ca-b46-5/.claude/workflows/leaf-workflow.js exists; diff stat confirms +498 lines |
+| R2 | leaf-workflow-finish.js exists at .claude/workflows/leaf-workflow-finish.js | PASS | .claude/worktrees/wf_baef01ca-b46-5/.claude/workflows/leaf-workflow-finish.js exists; diff stat confirms +113 lines |
+| R3 | leaf-workflow.js accepts { nodeId, repoPath?, skipSpecReview? } | PASS | leaf-workflow.js:52-54; args.nodeId, args.repoPath\|\|'/Users/dennis/code/ledger', args.skipSpecReview\|\|false |
+| R3b | leaf-workflow-finish.js accepts { nodeId, worktreePath, branchName, repoPath? } | PASS | leaf-workflow-finish.js:30-33; all four args present with repoPath defaulting to '/Users/dennis/code/ledger' |
+| R4 | Both scripts read current doc status at startup and skip already-completed stages (idempotent re-entry) | FAIL | leaf-workflow.js does implement status check with skip flags (lines 178-185). leaf-workflow-finish.js has NO status check at startup — all three phases run unconditionally regardless of current doc state. Re-running after stage-9 completes will attempt a duplicate VERIFY→COMPLETE commit and re-run the merge. R4 says 'both scripts'. |
+| R5 | Stage-2 spec review and stage-6 implementation review produce structured output via REVIEW_SCHEMA | PASS | leaf-workflow.js:274 (stage 2) and leaf-workflow.js:420 (stage 6) both pass { schema: REVIEW_SCHEMA }; schema enforces required fields including matrix items with verdict enum ['PASS','FAIL','PARTIAL','N/A'] and required evidence field |
+| R6 | Stage 4 uses isolation: 'worktree' | PASS | leaf-workflow.js:334-336; agent() call passes { isolation: 'worktree', schema: IMPL_SCHEMA } |
+| R7 | Both scripts are plain JavaScript (no TypeScript annotations) | PASS | grep for ': string', ': number', ': boolean', 'interface ', '<T>' in both files returns no matches (only occurrences are inside prompt strings, not as code annotations) |
+| R8 | Both scripts export meta as a pure literal (no variables, spreads, function calls inside meta block) | PASS | leaf-workflow.js:8-49 and leaf-workflow-finish.js:10-27; meta objects contain only string literals and object/array literals — no variables, template literals, spread operators, or function calls |
+| R9 | leaf-workflow.js returns structured result covering success, rebase-conflict, already-complete, and manual-needed states | PARTIAL | already-complete at line 175 (PASS); rebase-conflict at lines 379-386 (PASS); awaiting-operator (success) at lines 487-497 (PASS). manual-needed for stage-7 non-mechanical findings (line 437-441) returns from the phase() callback, not from leafWorkflow() itself — the outer function proceeds to stage-8 regardless. Self-documented in Implementation Notes line 310. The manual-needed path for missing nodeId (line 57) works correctly. |
+| R10 | leaf-workflow-finish.js applies cross-doc sync (CLAUDE.md + PRD §14 manifest row) inside the --no-commit merge window | PASS | leaf-workflow-finish.js:71-90; stage-10 agent prompt: Step 1 runs merge --no-ff --no-commit, Step 2 edits CLAUDE.md and docs/00-project.md §14 before Step 4 commits |
+| A1 | leaf-workflow.js exists and exports a valid meta object (pure literal, no computed values) | PASS | leaf-workflow.js:8-49; meta is a top-level const with static string values only |
+| A2 | leaf-workflow-finish.js exists and exports a valid meta object (pure literal) | PASS | leaf-workflow-finish.js:10-27; meta is a top-level const with static string values only |
+| A3 | Running the Workflow tool with name: 'leaf-workflow' resolves and displays its phase list | N/A | Requires live Workflow tool invocation; operator gate per spec Verification section. Code-present: meta.phases array has 9 entries for leaf-workflow, 3 for leaf-workflow-finish. |
+| A4 | leaf-workflow.js handles all entry states (NOT_FOUND, DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE) without crashing | PASS | leaf-workflow.js:178-185; boolean flags derived from currentStatus cover all six non-COMPLETE states. COMPLETE exits at line 175. IN_PROGRESS/VERIFY trigger worktree-location agent at lines 192-203. runRebase/runImplReview guards at lines 358/393 prevent NPE when worktreePath is null. |
+| A5 | leaf-workflow.js returns { status: 'already-complete' } when node doc reads COMPLETE | PASS | leaf-workflow.js:174-176; currentStatus === 'COMPLETE' returns { nodeId, status: 'already-complete' } before any phase() calls |
+| A6 | leaf-workflow.js returns { status: 'rebase-conflict', conflicts: [...] } on rebase failure without aborting git state | PASS | leaf-workflow.js:378-386; checks rebaseResult.success === false and returns rebase-conflict object. Stage-5 prompt at line 373 explicitly says 'Do NOT run git rebase --abort'. |
+| A7 | leaf-workflow-finish.js merges with --no-ff and edits both CLAUDE.md and docs/00-project.md §14 inside the --no-commit window before committing | PASS | leaf-workflow-finish.js:73-89; Step 1 runs merge --no-ff --no-commit, Step 2a edits CLAUDE.md, Step 2b edits docs/00-project.md §14, Step 4 commits only after gates pass |
+| A8 | Neither script contains TypeScript type annotations (: string, <T>, interface, etc.) | PASS | grep for TypeScript annotation patterns (': string', ': number', ': boolean', 'interface ', '<T>') returns zero matches in the script files' own code (matches only appear inside prompt strings) |
+| A9 | pnpm -C app typecheck exits 0 after the changes | PASS | pnpm -C /Users/dennis/code/ledger/.claude/worktrees/wf_baef01ca-b46-5/app typecheck: exit 0 |
+| BUILD-lint | pnpm -C app lint exits 0 | PASS | pnpm -C /Users/dennis/code/ledger/.claude/worktrees/wf_baef01ca-b46-5/app lint: exit 0 (pre-existing vite.config.ts eslint error fixed in this branch) |
+| BUILD-build | pnpm -C app build exits 0 | PASS | pnpm -C /Users/dennis/code/ledger/.claude/worktrees/wf_baef01ca-b46-5/app build: exit 0 (chunk size warnings are non-fatal; pre-existing) |
+| DISC-commits | Stage-4 commit messages match spec: 'docs(${leafId}): APPROVED → IN_PROGRESS' and 'docs(${leafId}): IN_PROGRESS → VERIFY' | FAIL | leaf-workflow.js:319,331; implementation used 'impl(' prefix. Fixed: changed to 'docs(' prefix. |
+| DISC-meta-phase4 | Stage-4 meta phase name accurately describes the commit pattern | FAIL | leaf-workflow.js:30: meta phase name said 'three commits (entry/impl/exit)'. Fixed: changed to 'two status-transition commits (4a entry + 4c exit with impl bundled)'. |
+| DISC-worktree-remove | Stage-11 worktree remove uses -f -f as required for locked Claude Code worktrees | FAIL | leaf-workflow-finish.js:99 used 'git worktree remove -f'. Fixed: changed to 'git worktree remove -f -f'. |
+
+**Applied fixes:**
+- Stage-7 manual-needed: hoisted sentinel `manualNeededResult` outside phase() callback; check inserted between stage-7 and stage-8 returns it from the outer function (Blocking, isMechanical)
+- Stage-4 commit prefix: changed `impl(` → `docs(` in both 4a and 4c commit messages (Should-fix, isMechanical)
+- Stage-11 worktree remove: changed `-f` → `-f -f` (Should-fix, isMechanical)
+- meta.phases[3].name: updated to 'two status-transition commits (4a entry + 4c exit with impl bundled)' (Nit, isMechanical)
+
+**Skipped:**
+- R4 / leaf-workflow-finish.js idempotency guard (Blocking, isMechanical: false) — requires architectural decision on how to detect partial completion state (branch-already-merged check + VERIFY→COMPLETE duplicate detection); deferred as Open Issue.
+
 ### Acceptance items requiring operator verification
 
 - **A3** — Workflow tool invocation: running the Workflow tool with `name: "leaf-workflow"` and `name: "leaf-workflow-finish"` must resolve and display phase lists. Requires live Workflow tool; N/A in headless environment.
