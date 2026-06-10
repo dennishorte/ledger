@@ -272,7 +272,7 @@ git branch -d <branchName>
 
 ## Open Issues
 
-None known at DRAFT time.
+- **LOW — `Workflow({ name: "leaf-workflow" })` does not resolve project-local scripts.** The Workflow tool's `name:` parameter only resolves built-in/plugin-registered workflows; `.claude/workflows/*.js` scripts are not discoverable by name via that tool. The scripts are correctly picked up by the **Skill tool** registry (appearing as `leaf-workflow` and `leaf-workflow-finish` in the available-skills list), so they can be invoked via `Skill({ skill: "leaf-workflow", args: "..." })`. The reliable scriptPath invocation also works: `Workflow({ scriptPath: "/Users/dennis/code/ledger/.claude/workflows/leaf-workflow.js", args: {...} })`. Revisit when Claude Code exposes a project-local named-workflow registry that the Workflow tool can resolve.
 
 ---
 
