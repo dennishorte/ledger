@@ -37,7 +37,7 @@ Create `docs/<path>/<id>.md` following the schema in PRD §6.1. Required section
 - **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
 - **Open Issues** — priority-tagged (HIGH / MEDIUM / LOW / TRIVIAL).
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
-- **Verification** — what the verifier confirms before promoting to COMPLETE.
+- **Verification** — what the verifier confirms before promoting to COMPLETE. For any node that introduces or changes UI panels or API endpoints, this section must name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface.
 - **Children** — None, unless decomposing further.
 
 Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md` (the gold standard) and `01-ui/06-health.md` (a recent thorough DRAFT).
@@ -82,9 +82,11 @@ Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
 - Required context: spec docs of any dependencies, parent doc, CLAUDE.md, the actual source files it will touch.
 - Process steps — **two commits**, one per status transition:
   - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
-  - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
+  - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → add or update E2E tests (see below) → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
   - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event.
-- Reporting: bundle delta vs a named baseline, files changed, acceptance-check items the agent could not verify in its headless environment.
+- Reporting: bundle delta vs a named baseline, files changed, `pnpm -C e2e test` exit code and pass/skip/fail counts, acceptance-check items the agent could not verify in its headless environment.
+
+**E2E test requirement.** Every node that introduces or modifies a UI panel or a user-facing API endpoint must ship corresponding additions to `e2e/tests/`. The minimum bar per panel is a smoke test (page loads, landmark heading visible, at least one data item renders). Interaction flows (approve/reject, dispatch, scan trigger, alert dismiss) get their own tests. Tests that require a live `ANTHROPIC_API_KEY` or real agent dispatch are out of scope for the suite — note them as `test.skip` with a reason string. Run `pnpm -C e2e test` inside the worktree before reporting done; a red suite blocks the exit commit.
 
 Why worktree isolation:
 
@@ -120,6 +122,7 @@ Evaluation criteria expand to include:
 - **Build/lint/typecheck** — run them; report exit codes and bundle numbers.
 - **Code discipline** — no `any`, no suppressions (especially `eslint-disable-next-line ...`), no `console.log`, no dead code.
 - **Bundle delta sanity** — compare to the named baseline from stage 4.
+- **E2E coverage** — `pnpm -C e2e test` passes; new/modified UI surfaces have corresponding tests in `e2e/tests/`; smoke tests and interaction-flow tests are present per the spec's Verification section. A node that touches a UI panel with no E2E additions is a FAIL unless the spec explicitly justified the omission.
 - **Regression checks** for any shared infrastructure the node touched (e.g., DAG panel if shared types or parser logic changed).
 - **Anything the implementer's report glossed over.**
 
@@ -131,15 +134,26 @@ If the implementation diverged from the spec in a way the operator approves, upd
 
 ### 8. Operator manual verification
 
-Start the worktree's dev server (the only place the work currently lives):
+**Primary gate — run the E2E suite:**
 
 ```bash
-pnpm -C /path/to/worktree/app dev
+pnpm -C e2e test
 ```
 
-Port 4179 is pinned with `strictPort: true` in `vite.config.ts`. If something else is already on 4179 (typically main's dev server from a different terminal), stop it first — `lsof -i :4179 -P -n` finds the PID; `kill <pid>` stops it.
+`webServer` boots the full stack automatically (Hono API + Vite dev server) if they are not already running; `reuseExistingServer: true` reuses them if they are. All tests introduced by this node must pass. A failing E2E test is a blocking bug; enter stage 8b.
 
-Walk the spec's Acceptance check items in the browser. UI changes need human eyes — `typecheck` / `lint` / `build` verify *code correctness*, not *feature correctness*. The mandatory gate before COMPLETE is operator sign-off, not green checks.
+**Secondary gate — browser spot-check for surfaces the suite cannot cover:**
+
+For acceptance-check items explicitly marked `N/A — operator gate` in the implementation review (things like first-paint aesthetics, SSE stream visible in DevTools, or flows that require a real `ANTHROPIC_API_KEY`), boot the dev server and walk them manually:
+
+```bash
+pnpm -C server dev /path/to/project   # terminal A
+pnpm -C app dev                        # terminal B
+```
+
+Port 4179 is pinned with `strictPort: true`. Stop any conflicting process first (`lsof -iTCP:4179 -sTCP:LISTEN -t | xargs kill`).
+
+The E2E suite is the primary correctness gate; the browser walk is a supplement for what automation cannot reach. If the suite passes and the spot-check finds nothing, promote to COMPLETE.
 
 #### 8b. If verification finds bugs — VERIFY → ISSUE_OPEN, loop back
 
@@ -236,7 +250,7 @@ Most of this is hand-driven today because the orchestration substrate (PRD §7) 
 - Stage 4 (implementation) becomes an `implement` task with declared resource claims on the node's doc + relevant source files. Resource claims address the multi-worktree shared-file gap.
 - Stage 5 (rebase) becomes implicit — the task runner schedules implementers against the current state, no drift.
 - Stage 6 (implementation review) becomes a `verify` task — possibly with a separate reviewer-agent persona (MetaGPT-style role specialisation, see PRD §4.1).
-- Stage 8 (operator manual verification) becomes a `human_review` task gate that pauses the runner and surfaces the diff for explicit approval.
+- Stage 8 (operator manual verification) becomes a `human_review` task gate that pauses the runner and surfaces the diff for explicit approval. The E2E suite still runs headlessly as part of the gate; the human_review step covers the residual browser-only items.
 - Stage 8b (ISSUE_OPEN loop-back) becomes an automatic task-runner transition: failed `human_review` enqueues a follow-up `implement` task with the operator's findings as input.
 - Stage 10's cross-doc sync is partially automated by the health daemon's staleness checks (PRD §6.4).
 - Stage 11 (worktree cleanup) becomes the task runner's normal lifecycle teardown.
