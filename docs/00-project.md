@@ -1,8 +1,8 @@
 # LLM Project Framework
  
 **Status:** COMPLETE (PRD §14 manifest fully COMPLETE; `07-health-daemon` v2 shipped 2026-06-07)
-**Version:** 0.5.14
-**Last Updated:** 2026-06-09
+**Version:** 0.5.15
+**Last Updated:** 2026-06-10
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
@@ -20,6 +20,7 @@ v0.5.9 — Closed the **"Decomposition termination criteria"** §11 issue (MEDIU
 v0.5.10 — Closed both named deliverables of the **"Self-audit problem"** §11 issue (was HIGH; VSM finding 4). The structured **per-requirement sign-off matrix** now lives in `docs/_process/verification-signoff.md`, wired into the `spec_review`/`verify`/`reverify` prompt templates (`shared.ts` `signOffMatrixReminder` helper, `04-prompt-templates` v1.2) and leaf-workflow stages 2 & 6: every requirement gets a PASS/FAIL/PARTIAL/N/A row with evidence, a PASS without evidence is recorded as FAIL, and the headline verdict must be derivable from the matrix. The separate reviewer-agent persona (the issue's other named deliverable) already shipped at `06-agent-dispatcher` COMPLETE. Residual downgraded to LOW: nothing yet *enforces* that an independent review runs before COMPLETE — a task-runner gate deferred until dispatch is the default path.  
 v0.5.11 — New node **`08-alerts`** (VERIFY) closes the **"Passive algedonic channel"** §11 issue (was MEDIUM; VSM finding 3). A report-only global EventBus observer (`subscribeAll`, additive to the COMPLETE EventBus) raises an `Alert` on every `RUNNING→FAILED` and pushes it over two paths the operator chose: an outbound webhook (`LEDGER_ALERT_WEBHOOK`) and an always-mounted UI banner via `GET /api/alerts/stream`. `Alert` is canonical in `@ledger/parser`. §14 gains the `08-alerts` row. Independent clean-context review: READY_WITH_FOLLOWUPS (all R/D PASS); server suite 381 → 401. Awaiting operator browser walk for COMPLETE.  
 v0.5.12 — Specced the **"Transcript ingestion couples the orchestration data layer"** §11 issue (MEDIUM) as a new DRAFT node **`09-transcript-decouple`** — a decision-enabling spec posing three paths (A drop / B adapter boundary / C runner-native ingestion) with B recommended; awaiting operator approval of the path before implementation. §11 entry annotated with the forward pointer; §14 gains the `09-transcript-decouple` DRAFT row. Issue stays open until the node reaches COMPLETE.  
+v0.5.15 — Defined **parent-node completion predicate** in §6.2: a parent reaches `COMPLETE` when all children are `COMPLETE` or `DEFERRED`, excluding `maintenance-container` children (which hold `APPROVED` as a permanent steady state and are lifecycle-independent of their parent). Formally records `DEFERRED` as terminal-for-completion (previously load-bearing but undocumented). Advanced `01-ui` to COMPLETE (v1, 2026-06-10) under the new predicate. `maintenance-round.md` updated with the exemption subsection; `99-maintenance/00-maintenance.md` carries the new `Node Kind: maintenance-container` marker.  
 v0.5.14 — New node **`10-e2e-testing`** (DRAFT) — Playwright browser-driven acceptance suite; covers every COMPLETE UI panel and primary interaction flows; wires into `pnpm test` fanout via a new `e2e/` workspace package. §14 gains the row.  
 v0.5.13 — `08-alerts` VERIFY → COMPLETE (v1, 2026-06-08). Operator browser sign-off after a controlled live run: a bogus-`ANTHROPIC_API_KEY` server drove a `verify` task `RUNNING→FAILED` (auth failure, no real agent run), the report-only observer raised the `Alert`, and the always-mounted banner rendered on-route. §14 row → COMPLETE; §11 algedonic entry updated VERIFY → COMPLETE.
  
@@ -163,6 +164,10 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 An agent may not begin implementation until a node reaches `APPROVED`. Verification compares generated artifacts against the node's Requirements and Design sections. Failed verification transitions the node to `ISSUE_OPEN` and appends findings to the document.
 
 `DEFERRED` is a terminal status — a deliberate decision that the node is out of scope for the current roadmap. It is distinct from `COMPLETE` (work done) and from `DRAFT` (work pending): it asserts that no further work is planned. The status row should record the version that deferred it and the rationale (e.g. `DEFERRED (v0.5.1) — out of v1 scope. <reason>`). A deferred node may be reactivated by transitioning back to any earlier state.
+
+**Parent nodes** (nodes holding a children manifest) reach `COMPLETE` when every child in their manifest is in a terminal-for-completion state — `COMPLETE` or `DEFERRED` — *excluding* children carrying `**Node Kind:** maintenance-container`. A parent's `COMPLETE` asserts that its declared implementation scope is fully resolved; it does not assert that the subtree is frozen. A `maintenance-container` child holds `APPROVED` as its permanent steady state and continues accepting new maintenance rounds even after its parent completes — it is lifecycle-independent of its parent by design. It does not block, and is not blocked by, its parent's completion. `DEFERRED` is also formally terminal-for-completion (previously load-bearing but undocumented: `07-replay` was DEFERRED and counted toward `01-ui`'s completion before this was written down).
+
+> **Forward dependency:** `maintenance-container` is currently a prose-level marker, not a `NodeStatus` enum value. Any future automated parent-completion gate (e.g. a task-runner COMPLETE-transition check) must explicitly apply this carve-out; the predicate above is its spec.
  
 ### 6.3 Task Queue and DAG
  
@@ -397,7 +402,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | APPROVED (round-2 manifest complete: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED in v0.5.1, out of v1 scope; `99-maintenance/01-round-1` COMPLETE v1 2026-05-26 — first batched maintenance pass; `02-dag` v1.3 2026-05-27 — dagre → ELK layout-engine migration per `01-ui/00-ui.md` D10) |
+| `01-ui` | UI — operator-facing surface for the framework | — | COMPLETE (v1, 2026-06-10 — all implementation children COMPLETE or DEFERRED: shell + 02-dag + 03-docs + 04-tasks + 05-logs + 06-health + 08-markdown + 09-workflow-progress + 10-orchestration all COMPLETE; 07-replay DEFERRED v0.5.1; `99-maintenance` carries `Node Kind: maintenance-container` and is exempt from the parent-completion predicate per §6.2) |
 | `02-schema` | Document schema artifact (JSON Schema + validator; formalises what `parseDocs.ts` assumes today) | — | COMPLETE (v1) |
 | `03-project-metadata` | Project metadata file (`.ledger/project.json`) and loader; provides project identity and scoping (§7.1) | — | COMPLETE (v1) |
 | `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | COMPLETE (v1, 2026-05-26 — decomposed into 5 sub-leaves: `01-workspace-conversion`, `02-parser-extraction`, `03-server-package`, `04-cli-launcher`, `05-ui-hook-migration` all COMPLETE) |

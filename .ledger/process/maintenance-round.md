@@ -39,6 +39,12 @@ Each round's Node ID is its path slug (e.g., `01-ui/99-maintenance/01-round-1`).
 
 A round is **never re-cycled through ISSUE_OPEN** to address newly-discovered work. New work goes into the next round. This keeps each round's lifecycle linear and its audit tables interpretable.
 
+### Maintenance-container lifecycle independence
+
+The `00-maintenance.md` parent of each round set carries `**Node Kind:** maintenance-container` in its header and holds `APPROVED` as its permanent steady state — not a pre-implementation stall, but its *operating state*. It never advances past `APPROVED` and never re-cycles (consistent with the "no round re-cycles" rule one level down).
+
+Per PRD §6.2, a `maintenance-container` child is **exempt from the parent-completion predicate**: the subtree parent (e.g. `01-ui`) may advance to `COMPLETE` regardless of the container's `APPROVED` state. The two are lifecycle-independent by design — the subtree completing does not close the maintenance capacity; new rounds may still be instigated on a COMPLETE subtree whenever the punch list grows round-sized again.
+
 ---
 
 ## Stages — deltas from `leaf-workflow.md`
