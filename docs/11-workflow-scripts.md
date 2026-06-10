@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts`
 **Parent:** `00-project`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-06-10
 **Last Updated:** 2026-06-10
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
@@ -296,7 +296,28 @@ None known at DRAFT time.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Files created
+
+- `.claude/workflows/leaf-workflow.js` — stages 1–8; pure-JS export with `meta` pure literal and `phase()`/`agent()` orchestration.
+- `.claude/workflows/leaf-workflow-finish.js` — stages 9–11; pure-JS export with `meta` pure literal.
+
+### Key decisions and deviations
+
+- **Lint fix (vite.config.ts:25):** Pre-existing `@typescript-eslint/restrict-template-expressions` error (`${API_PORT}` with `number` type) fixed by wrapping with `String(API_PORT)`. Not related to the workflow scripts; found during gate run. This is an incidental fix bundled into the exit commit per CLAUDE.md "doc and code must agree" discipline.
+- **WORKTREE_SCHEMA `additionalProperties`:** Schema properties use `type: ['string', 'null']` to allow null for re-entry paths where worktree isn't found yet.
+- **Stage 3 / Stage 7 TODAY_DATE token:** The word `TODAY_DATE` is used as a placeholder in the agent prompts; the executing agent substitutes the actual date when running. This is idiomatic for dynamic prompts — the workflow script cannot call `new Date()` inside a prompt string and have it evaluated at agent-call time correctly without agent interpolation.
+- **Rebase fallthrough:** Stage 5 returns early with `{ status: 'rebase-conflict' }` if `rebaseResult.success === false`. The worktree git state is preserved (no `--abort`) per spec §Stage 5.
+- **Stage 7 non-mechanical guard:** Returns `{ status: 'manual-needed' }` if any FAIL/PARTIAL non-mechanical finding exists, per spec §Stage 7. This is a local return from the `phase()` callback — the outer function continues to `stage-8`; the full early return should be handled by the outer scope. Noted as a follow-up improvement: move the non-mechanical check to the outer scope to actually short-circuit stage 8.
+
+### Gate results
+
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0 (after fixing pre-existing vite.config.ts lint error)
+- `pnpm -C app build`: exit 0
+
+### Acceptance items requiring operator verification
+
+- **A3** — Workflow tool invocation: running the Workflow tool with `name: "leaf-workflow"` and `name: "leaf-workflow-finish"` must resolve and display phase lists. Requires live Workflow tool; N/A in headless environment.
 
 ---
 
