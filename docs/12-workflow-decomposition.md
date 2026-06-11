@@ -2,7 +2,7 @@
 
 **Node ID:** `12-workflow-decomposition`
 **Parent:** `00-project`
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-06-11
 **Last Updated:** 2026-06-11
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6
