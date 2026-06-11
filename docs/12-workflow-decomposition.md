@@ -2,7 +2,7 @@
 
 **Node ID:** `12-workflow-decomposition`
 **Parent:** `00-project`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-06-11
 **Last Updated:** 2026-06-11
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6
@@ -55,8 +55,9 @@ Run these signals against the freshly written DRAFT. If **any** fire, stop and f
   session without itself having to dispatch sub-agents.
 - **Size already large:** the DRAFT spec is already pushing the token-size threshold
   (default 12 000 tokens) or the implementation diff is clearly unbounded.
-- **Depth headroom exhausted:** adding this leaf would push the subtree past 4 nesting
-  levels with no written coordination justification in the parent's Decisions section.
+- **Depth headroom exhausted:** this node already sits at nesting level 4, so any
+  children would exceed the depth cap with no written coordination justification in the
+  parent's Decisions section.
 - **≥3 independent top-level files:** the Design section lists ≥3 files that have no
   shared type or interface dependency — a strong proxy for hidden multi-responsibility.
 
@@ -101,6 +102,15 @@ If none fire, the node is a leaf. Proceed to stage 2.
 
 ---
 
+## Spec Review (2026-06-11)
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| 1 | Should-fix: Signal 4 "Depth headroom exhausted" wording pointed in the wrong direction — "adding this leaf" read as a test on whether to add a node rather than whether to decompose the current DRAFT. Rewording to fire when the current node is at depth 4 and children would exceed the cap. | applied |
+| 2 | Nit: Verification section repeated Acceptance checks verbatim from Design with no verifier-specific callouts. Collapsed into a forward reference plus one mechanical check per item. | applied |
+
+---
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -111,11 +121,13 @@ If none fire, the node is a leaf. Proceed to stage 2.
 
 This node introduces no UI panel and no API endpoint. The only artifact is a text change to `.ledger/process/leaf-workflow.md`.
 
-- A1: The checkpoint subsection exists at the end of stage 1 in `leaf-workflow.md`, after "Add the new node to its parent's children manifest in the same commit."
-- A2: The exit instruction names `.ledger/process/decomposition.md` verbatim.
-- A3: Every signal maps to a §6.6 rule (documented in Design § Signal rationale map).
-- A4: The lifecycle diagram in `leaf-workflow.md` is unchanged.
-- A5: No file other than `leaf-workflow.md` is modified.
+See Design §Acceptance checks (A1–A5) for the full acceptance criteria. Verifier confirms each by:
+
+- A1: `grep -n "Decomposition checkpoint" .ledger/process/leaf-workflow.md` — confirm the subsection appears after the "Add the new node to its parent's children manifest" line and before the stage 2 heading.
+- A2: `grep "decomposition.md" .ledger/process/leaf-workflow.md` — confirm the exit instruction names `.ledger/process/decomposition.md` verbatim.
+- A3: Cross-check each signal against the rationale map in Design §Signal rationale map — every signal should map to a numbered §6.6 rule.
+- A4: `git diff main -- .ledger/process/leaf-workflow.md | grep "lifecycle\|DRAFT\|SPEC_REVIEW\|APPROVED\|IN_PROGRESS\|VERIFY\|COMPLETE"` — confirm no lifecycle diagram lines changed (the diagram block is byte-for-byte identical to pre-implementation).
+- A5: `git diff --name-only main` — confirm only `leaf-workflow.md` (and this node's doc + parent manifest) changed.
 
 E2E: No Playwright tests required — no UI or API surface introduced. "Passes existing suite" applies.
 
