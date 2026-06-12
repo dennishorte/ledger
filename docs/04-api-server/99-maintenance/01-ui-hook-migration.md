@@ -2,7 +2,7 @@
 
 **Node ID:** `04-api-server/99-maintenance/01-ui-hook-migration`
 **Parent:** `04-api-server/99-maintenance` (`docs/04-api-server/99-maintenance/00-maintenance.md`)
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
@@ -30,6 +30,8 @@ Two remaining UI hooks still read doc content from build-time Vite globs rather 
 
 ### In scope for v1
 
+0. **Promote `IssueItem` and `parseIssueItems` to `@ledger/parser`** as a prerequisite before implementing item 3. `IssueItem` currently lives in `app/src/lib/types.ts`; `parseIssueItems` lives in `app/src/lib/parseIssues.ts`. Neither is exported from `@ledger/parser`. The server-side scanner uses a private `parseOpenIssueItems` in `server/src/scanner/monitors.ts` (different return type: `OpenIssueItem`). Per the "domain types live where they're authoritative" rule, the canonical home for doc-issue types is the parser. Required steps: (a) create `packages/parser/src/docs/issues.ts` containing `IssueItem` (type) and `parseIssueItems` (function); (b) export both from `packages/parser/src/index.ts`; (c) update `app/src/lib/types.ts` and `app/src/lib/parseIssues.ts` to re-export from `@ledger/parser` (preserving existing import sites); (d) evaluate whether `parseOpenIssueItems` in `server/src/scanner/monitors.ts` can be consolidated with the promoted `parseIssueItems` (defer if non-trivial, but note the duplication). Item 3 depends on this step completing first.
+
 1. **New `GET /api/docs/:nodeId/source` endpoint** in `server/src/routes/docs.ts`. Response: `{ id: string; raw: string }`. 404 if `nodeId` does not resolve to a tracked file. No schema validation on the raw body — raw is raw. Uses `readDocsTree` + `findRawDocForNodeId` (already present in the handler for `/:nodeId{.+}`).
 2. **Migrate `useDocSource`** (`app/src/components/docs/useDocSource.ts`) from the module-level `import.meta.glob` map to a TanStack Query against `GET /api/docs/:nodeId/source`. Query key: `["docs", id, "source"]`. `staleTime: 30_000`. `placeholderData`: the existing `sourceMap.get(id)` fallback from the current module-level map (keep the map as a placeholder-only fallback, not the primary path). Returns `DocSource | undefined`; returns `undefined` during loading (callers already handle `undefined`).
 3. **New `GET /api/health/issues` endpoint** in `server/src/routes/health.ts`. Reads the docs tree, calls `parseIssueItems` for each authored node, sorts HIGH→TRIVIAL, returns `IssueItem[]`. No SSE — plain JSON. Reuses `readDocsTree` + `buildDocGraph` from the existing `/api/docs` handler pattern.
@@ -56,9 +58,13 @@ The following Open Issues from `04-api-server` and its children were **considere
 
 ### Architecture overview
 
-Two new server endpoints; two hook rewrites; no new npm packages; no shared-type changes beyond adding `IssueItem` to `server/` imports (already exported from `@ledger/parser`).
+Two new server endpoints; two hook rewrites; no new npm packages. Requires one prerequisite parser change: `IssueItem` (type) and `parseIssueItems` (function) promoted from `app/src/lib/` to `packages/parser/src/docs/issues.ts` and exported from `@ledger/parser` (see item 0 in Requirements). After promotion, `app/src/lib/types.ts` and `app/src/lib/parseIssues.ts` re-export from the parser; no existing import sites break.
 
 ```
+packages/parser/src/docs/issues.ts             [new — IssueItem type + parseIssueItems function]
+packages/parser/src/index.ts                   [modified — export IssueItem + parseIssueItems]
+app/src/lib/types.ts                           [modified — re-export IssueItem from @ledger/parser]
+app/src/lib/parseIssues.ts                     [modified — re-export parseIssueItems from @ledger/parser]
 server/src/routes/docs.ts       [modified — add /:nodeId/source route]
 server/src/routes/health.ts     [modified — add GET /api/health/issues route]
 server/test/docs.test.ts        [modified — source endpoint tests]
@@ -71,7 +77,7 @@ docs/04-api-server/99-maintenance/01-ui-hook-migration.md  [this spec]
 docs/04-api-server/99-maintenance/00-maintenance.md        [children manifest row]
 ```
 
-No changes to `packages/parser/src/` — `IssueItem` and `parseIssueItems` are already exported. No changes to `app/src/lib/types.ts`. No new workspace packages.
+No new npm packages. No new workspace packages. `app/src/lib/types.ts` and `app/src/lib/parseIssues.ts` change from source-of-truth to re-export shims (additive — no existing import sites break).
 
 ### Item 1 — `GET /api/docs/:nodeId/source`
 
@@ -147,7 +153,7 @@ Add to `server/src/routes/health.ts` alongside the existing scan routes:
 })
 ```
 
-`PRIORITY_ORDER` is a local constant (`{ HIGH: 0, MEDIUM: 1, LOW: 2, TRIVIAL: 3, UNKNOWN: 4 }`) — same as the client-side copy in `useHealthData.ts`, which is deleted by item 4. `IssueItem` and `parseIssueItems` are already exported from `@ledger/parser`. `findRawDocForNodeId` is already in `docs.ts`; extract to a shared `readDocs.ts` helper or duplicate locally — implementer's call, but no new public API needed.
+`PRIORITY_ORDER` is a local constant (`{ HIGH: 0, MEDIUM: 1, LOW: 2, TRIVIAL: 3, UNKNOWN: 4 }`) — same as the client-side copy in `useHealthData.ts`, which is deleted by item 4. `IssueItem` and `parseIssueItems` are imported from `@ledger/parser` after the prerequisite item-0 promotion. Required imports for `health.ts`: `IssueItem`, `parseIssueItems` from `@ledger/parser`; `buildDocGraph`, `readDocsTree` (pattern-matching the existing `/api/docs` handler); `findRawDocForNodeId` from `docs.ts` or a shared helper. `DocSource` is `{ id: NodeId; raw: string }` — matches the item-1 endpoint shape exactly, so the `as DocSource` cast in item 2's `queryFn` is safe. `findRawDocForNodeId` is already in `docs.ts`; extract to a shared `readDocs.ts` helper or duplicate locally — implementer's call, but no new public API needed.
 
 Response shape: `{ issues: IssueItem[] }`.
 
@@ -163,6 +169,9 @@ Reads docs on every call (consistent with the v1 no-cache posture). At ~15–40 
 - `rawByNodeId` module-level constant is deleted.
 
 The `PRIORITY_ORDER` constant also moves to the server (item 3); its client-side copy in `useHealthData.ts` is deleted.
+
+- `subtreeCosts: SubtreeCost[]` in the `HealthData` return value is **unchanged** — `PLACEHOLDER_COSTS` constant is preserved as-is. `subtreeCosts` migration is out of scope for this round.
+- The issues query uses `staleTime: 60_000` (1 minute — per D5; health panel does not need 30s cadence).
 
 `subtreeCosts` and `nodes` fields of `HealthData` are unchanged.
 
@@ -202,7 +211,15 @@ The `PRIORITY_ORDER` constant also moves to the server (item 3); its client-side
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Spec review — 2026-06-12 — APPROVED_WITH_CHANGES → APPROVED**
+
+Reviewer confirmed APPROVED_WITH_CHANGES; fixes applied before promoting to APPROVED.
+
+- **S1 (Blocking, fixed):** The original spec incorrectly stated that `IssueItem` and `parseIssueItems` were "already exported from `@ledger/parser`." They were not — both lived client-side (`app/src/lib/types.ts` and `app/src/lib/parseIssues.ts`). The server scanner has a private `parseOpenIssueItems` with a different return type (`OpenIssueItem`). Fix: added item 0 as an explicit prerequisite promotion step; corrected the Architecture overview and Item 3 prose. Item 3 now depends on item 0.
+- **S2 (Should-fix, fixed):** `server/src/routes/health.ts` is a 14-line stub (`GET /` only). Item 3 prose now lists the required imports explicitly rather than implying they're already present.
+- **S3 (Should-fix, fixed):** `DocSource` type compatibility with the item-1 endpoint shape (`{ id: NodeId; raw: string }`) is now confirmed inline in Item 3 prose — the `as DocSource` cast is safe.
+- **N1 (Nit, fixed):** `subtreeCosts: PLACEHOLDER_COSTS` unchanged status now explicitly noted in Item 4.
+- **N2 (Nit, fixed):** `staleTime: 60_000` for the issues query now noted inline in Item 4 (was only in D5).
 
 ---
 

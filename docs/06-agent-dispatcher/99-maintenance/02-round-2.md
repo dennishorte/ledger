@@ -2,7 +2,7 @@
 
 **Node ID:** `06-agent-dispatcher/99-maintenance/02-round-2`
 **Parent:** `06-agent-dispatcher/99-maintenance` (`docs/06-agent-dispatcher/99-maintenance/00-maintenance.md`)
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
@@ -93,7 +93,7 @@ Files potentially touched:
 
 The banner at `NodeInspector.tsx:141–145` renders `dispatchBanner` as a plain string inside a `<div>`. Replace the inner text with a `<Link>` that navigates to the Tasks panel pre-filtered on the full task ID.
 
-The Tasks panel's URL filter shape: the existing `useTaskList` hook's panel renders at `/tasks`; the panel accepts a `?id=<taskId>` query param to pre-select a task in the inspector (confirmed by `04-tasks`'s implementation). Navigation target: `/tasks?id=${data.task.id}`.
+The navigation target is the existing `/logs/:taskId` route (`router.tsx:40`), which takes a task ID as a path segment and renders the task's log stream and status. The `/tasks` panel does not accept a `?id=` param for pre-selection — its URL state (`useTaskFilters.ts`) encodes only `status`, `type`, and `q`; the inspector is opened via local `useState`. Using `/logs/:taskId` requires no new URL param and no upstream feature addition, which is the right scope for this round.
 
 Change at `onSuccess` callback (line 165): keep the `setDispatchBanner` call but store the full `data.task.id` alongside the short display text, then render a `<Link>` in the banner `<div>`.
 
@@ -111,7 +111,7 @@ setDispatchedTaskId(data.task.id);
 {dispatchBanner !== null && (
   <div className="rounded border border-[color:var(--color-border)] px-2 py-1 text-xs text-[color:var(--color-fg)]">
     {dispatchedTaskId !== null ? (
-      <Link to={`/tasks?id=${dispatchedTaskId}`}>{dispatchBanner}</Link>
+      <Link to={`/logs/${dispatchedTaskId}`}>{dispatchBanner}</Link>
     ) : (
       dispatchBanner
     )}
@@ -129,17 +129,18 @@ Files touched: `app/src/components/dag/NodeInspector.tsx`.
 
 ### Item 3 — Extract `MutationErrorBody` to `app/src/lib/errors.ts`
 
-Create `app/src/lib/errors.ts`:
+Create `app/src/lib/errors.ts`. The existing definition in `useApproveTask.ts` is a **class** (`export class MutationErrorBody extends Error`), not an interface — consumers may use `instanceof MutationErrorBody` checks, which require a class. The extraction preserves the class form:
 
 ```ts
 /** Shared error-body shape for TanStack Query mutation hooks that call Hono API endpoints. */
-export interface MutationErrorBody {
-  status: number;
-  body: unknown;
+export class MutationErrorBody extends Error {
+  constructor(public status: number, public body: unknown) {
+    super(`HTTP ${status}`);
+  }
 }
 ```
 
-Remove the `MutationErrorBody` interface from `app/src/lib/useApproveTask.ts` and replace with `import type { MutationErrorBody } from "@/lib/errors"`. Apply the same import substitution in:
+Remove the `MutationErrorBody` class from `app/src/lib/useApproveTask.ts` and replace with `import { MutationErrorBody } from "@/lib/errors"`. Apply the same import substitution in:
 - `app/src/lib/useRejectTask.ts`
 - `app/src/lib/useCancelTask.ts`
 - `app/src/components/dag/NodeInspector.tsx`
@@ -158,7 +159,7 @@ Files touched:
 
 ### Item 4 — Build-time assertion: tool-contract reminder covers all MCP tools (`prompts/shared.test.ts`)
 
-`02-runner-tools` registers five MCP tools: `runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`. The `mcpToolContractReminder()` in `shared.ts` mentions all five in its fixed text (confirmed by reading the function body at implementation time). The assertion ensures future additions to `02-runner-tools` are not silently omitted from the reminder.
+`02-runner-tools` registers five MCP tools: `runner.emit_event`, `runner.complete_task`, `runner.fail_task`, `runner.await_human_review`, `runner.get_task`. Of these, `mcpToolContractReminder()` in `shared.ts` currently mentions four in its fixed text (`emit_event`, `complete_task`, `fail_task`, `await_human_review`); `runner.get_task` appears only in the `issue_triage` persona preamble, not in the shared reminder. The assertion covers the four tools actually present in the reminder. If a future decision adds `runner.get_task` to the reminder text, the `RUNNER_TOOLS` array in the test should be extended at the same time.
 
 Create `server/test/dispatcher/prompts/shared.test.ts`:
 
@@ -166,14 +167,15 @@ Create `server/test/dispatcher/prompts/shared.test.ts`:
 import { describe, it, expect } from "vitest";
 import { mcpToolContractReminder } from "../../../src/dispatcher/prompts/shared.js";
 
-// The five canonical runner MCP tool names as of 02-runner-tools v1.
-// If a new tool is added to 02-runner-tools, add it here and update mcpToolContractReminder().
+// The four tool names currently mentioned in mcpToolContractReminder() as of 02-runner-tools v1.
+// runner.get_task is registered in 02-runner-tools but appears only in the issue_triage preamble,
+// not in the shared reminder — omitted here intentionally.
+// If a new tool is added to the reminder, add it here too.
 const RUNNER_TOOLS = [
   "runner.emit_event",
   "runner.complete_task",
   "runner.fail_task",
   "runner.await_human_review",
-  "runner.get_task",
 ] as const;
 
 describe("mcpToolContractReminder", () => {
@@ -196,7 +198,7 @@ Files touched: `server/test/dispatcher/prompts/shared.test.ts` (new).
 
 Two doc edits:
 
-**`docs/00-project.md` §6.2 (lifecycle spec):** Add one paragraph after the existing Mode B description (or as an explicit callout near the `doc_decompose` task type) recording the decision: when a `doc_decompose` runs against an APPROVED/DRAFT/PLANNED node (Mode A), the template sets the new children to PLANNED status; the **parent's status is unchanged** — the APPROVED state continues to mean "approved to implement this subtree", now as a decomposed set of leaves rather than a single leaf. The operator re-approves each child individually. No intermediate status is introduced.
+**`docs/00-project.md` §6.2 (lifecycle spec):** Locate the `doc_decompose` task type entry in §6.2 (grep for `doc_decompose` — there is exactly one occurrence). Add one paragraph immediately after that entry recording the decision: when a `doc_decompose` runs against an APPROVED/DRAFT/PLANNED node (Mode A — forward decompose), the template sets the new children to PLANNED status; the **parent's status is unchanged** — the APPROVED state continues to mean "approved to implement this subtree", now as a decomposed set of leaves rather than a single leaf. The operator re-approves each child individually. No intermediate status is introduced.
 
 **`docs/06-agent-dispatcher/04-prompt-templates.md` D12 row:** Append a note to D12: *"Mode A parent-status decision recorded in PRD §6.2 (maintenance round `06-agent-dispatcher/99-maintenance/02-round-2`, 2026-06-12): APPROVED parent keeps APPROVED after forward decompose. Closes the Mode A open issue."*
 
@@ -245,9 +247,9 @@ Per-item acceptance checks the operator walks in stage 8:
 
 **Item 2 — Dispatch success banner link:**
 
-5. Dispatch an APPROVED node from the DAG panel. The success banner reads "Dispatched as task {short-id}…" and the text is a clickable link. Clicking navigates to `/tasks?id={full-task-id}`.
+5. Dispatch an APPROVED node from the DAG panel. The success banner reads "Dispatched as task {short-id}…" and the text is a clickable link. Clicking navigates to `/logs/{full-task-id}`.
 6. Open Issues bullet in `05-dispatch-api.md` for the toast surface struck with forward pointer.
-7. Implementation Notes (dispatch-api) records the link implementation: state field used, navigation target.
+7. Implementation Notes (this round) records the link implementation: state field used, navigation target.
 
 **Item 3 — `MutationErrorBody` extraction:**
 
