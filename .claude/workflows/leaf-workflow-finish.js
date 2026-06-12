@@ -11,11 +11,14 @@ export const meta = {
 }
 
 // ── Args ──────────────────────────────────────────────────────────────────────
+// Defensive coercion: named-workflow invocations may deliver args as a JSON
+// string instead of an object.
+const _args = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 
-const nodeId = args.nodeId
-const worktreePath = args.worktreePath
-const branchName = args.branchName
-const repoPath = args.repoPath ?? '/Users/dennis/code/ledger'
+const nodeId = _args.nodeId
+const worktreePath = _args.worktreePath
+const branchName = _args.branchName
+const repoPath = _args.repoPath ?? '/Users/dennis/code/ledger'
 
 if (!nodeId || !worktreePath || !branchName) {
   return { status: 'manual-needed', message: 'nodeId, worktreePath, and branchName are all required.' }

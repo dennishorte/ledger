@@ -16,10 +16,14 @@ export const meta = {
 }
 
 // ── Args (globals injected by the Workflow framework) ─────────────────────────
+// Defensive coercion: named-workflow invocations may deliver args as a JSON
+// string instead of an object. Plain-string args (single-value case) are left
+// as-is and will fail the !nodeId guard below with a clear message.
+const _args = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 
-const nodeId = args.nodeId
-const repoPath = args.repoPath ?? '/Users/dennis/code/ledger'
-const skipSpecReview = args.skipSpecReview ?? false
+const nodeId = _args.nodeId
+const repoPath = _args.repoPath ?? '/Users/dennis/code/ledger'
+const skipSpecReview = _args.skipSpecReview ?? false
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
