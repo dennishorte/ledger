@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTask } from "./useTask.js";
+import { isRunnerTaskId } from "./types.js";
 import type { ConnectionStatus, LogEvent, TaskId } from "./types.js";
 
 /** Minimum ms the error state must persist before the pill shows "reconnecting…". */
@@ -75,14 +76,11 @@ export function useLogStream(taskId: TaskId): UseLogStreamResult {
       esRef.current = null;
     }
 
-    // Pick the SSE URL by the same ID-format discriminant as useTask (D3):
-    // transcript IDs contain ":" (session:<uuid> / agent:<id>); runner IDs are
-    // bare UUIDv4. The dep array [taskId, queryStatus, taskQuery.data] is
-    // unchanged — the runner stream opens/closes on the same transitions as the
-    // transcript stream (Spec Review N2).
-    const url = taskId.includes(":")
-      ? `/api/transcripts/${encodeURIComponent(taskId)}/stream`
-      : `/api/tasks/${encodeURIComponent(taskId)}/stream`;
+    // Pick the SSE URL using the canonical isRunnerTaskId predicate (D2, D3,
+    // 05-task-runner round-2). Mirrors useTask's endpoint selection.
+    const url = isRunnerTaskId(taskId)
+      ? `/api/tasks/${encodeURIComponent(taskId)}/stream`
+      : `/api/transcripts/${encodeURIComponent(taskId)}/stream`;
     const es = new EventSource(url);
     esRef.current = es;
     setConnStatus("live");

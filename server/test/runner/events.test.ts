@@ -128,6 +128,40 @@ describe("createEventBus", () => {
     bus.close();
   });
 
+  it("throw isolation: first subscriber throws, second still receives the event", () => {
+    const bus = createEventBus();
+    const received: string[] = [];
+
+    bus.subscribe("task-1", () => {
+      throw new Error("subscriber exploded");
+    });
+    bus.subscribe("task-1", (id) => {
+      received.push(id);
+    });
+
+    // publish must not rethrow
+    expect(() => { bus.publish("task-1"); }).not.toThrow();
+    // second subscriber still fired
+    expect(received).toEqual(["task-1"]);
+    bus.close();
+  });
+
+  it("throw isolation: throwing global subscriber does not prevent per-taskId subscribers", () => {
+    const bus = createEventBus();
+    const perTaskReceived: string[] = [];
+
+    bus.subscribeAll(() => {
+      throw new Error("global subscriber exploded");
+    });
+    bus.subscribe("task-1", (id) => {
+      perTaskReceived.push(id);
+    });
+
+    expect(() => { bus.publish("task-1"); }).not.toThrow();
+    expect(perTaskReceived).toEqual(["task-1"]);
+    bus.close();
+  });
+
   it("close() drops all subscribers; subsequent publish is a no-op", () => {
     const bus = createEventBus();
     const cb1 = vi.fn();

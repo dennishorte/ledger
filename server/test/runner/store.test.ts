@@ -86,6 +86,30 @@ describe("createTask", () => {
     const child = store.createTask({ type: "noop", title: "child", parentTaskId: parent.id });
     expect(child.parentTaskId).toBe(parent.id);
   });
+
+  // -- dependsOn validation (05-task-runner round-2 item 5) ------------------
+
+  it("throws when dependsOn references a non-existent task ID", () => {
+    expect(() => {
+      store.createTask({ type: "noop", title: "bad-dep", dependsOn: ["nonexistent-id"] });
+    }).toThrow(/unknown task id.*nonexistent-id/);
+  });
+
+  it("does not write a task row when dependsOn validation fails", () => {
+    const before = store.listTasks().length;
+    try {
+      store.createTask({ type: "noop", title: "bad-dep", dependsOn: ["ghost-id"] });
+    } catch {
+      // expected
+    }
+    expect(store.listTasks().length).toBe(before);
+  });
+
+  it("succeeds when dependsOn references an existing task ID", () => {
+    const dep = store.createTask({ type: "noop", title: "dep task" });
+    const child = store.createTask({ type: "noop", title: "dependent", dependsOn: [dep.id] });
+    expect(child.dependsOn).toEqual([dep.id]);
+  });
 });
 
 // ---------------------------------------------------------------------------

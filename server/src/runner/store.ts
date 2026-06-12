@@ -312,6 +312,16 @@ export function createStore(db: Database): Store {
     const resourceClaims = input.resourceClaims ?? [];
     const priority = input.priority ?? 0;
 
+    // D4/D5 (05-task-runner round-2): validate dep IDs at creation time, not
+    // at tick time, so operators get an immediate error rather than a
+    // forever-BLOCKED task. loadTask is a cheap single-row read; no new method needed.
+    for (const depId of dependsOn) {
+      const exists = stmtLoadTask.get(depId) !== undefined;
+      if (!exists) {
+        throw new Error(`createTask: dependsOn references unknown task id "${depId}"`);
+      }
+    }
+
     const txCreate = db.transaction(() => {
       stmtInsertTask.run(
         id,

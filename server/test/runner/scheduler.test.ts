@@ -333,24 +333,24 @@ it("test 9: dependency on FAILED task keeps dependent BLOCKED indefinitely", () 
 });
 
 // ---------------------------------------------------------------------------
-// Test 10: Dep on non-existent task ID → stays BLOCKED with blocked_by_dep:<id>
+// Test 10: Dep on non-existent task ID → creation-time error (05-task-runner round-2 item 5)
 // ---------------------------------------------------------------------------
-it("test 10: dependency on non-existent task → BLOCKED with blocked_by_dep:<missing-id>", () => {
+it("test 10: dependency on non-existent task → createTask throws, no row written", () => {
   const missingId = "00000000-0000-0000-0000-000000000000";
-  const task = runner.createTask({ type: "noop", title: "orphan dep", dependsOn: [missingId] });
+  const countBefore = store.listTasks().length;
 
-  expect(store.loadTask(task.id)?.status).toBe("BLOCKED");
-  const lastEvt = getLastEvent(store.getEvents(task.id));
-  if (lastEvt.kind === "status_change") {
-    expect(lastEvt.reason).toBe(`blocked_by_dep:${missingId}`);
-  }
+  expect(() => {
+    runner.createTask({ type: "noop", title: "orphan dep", dependsOn: [missingId] });
+  }).toThrow(/unknown task id/);
 
-  runner.tick();
-  expect(store.loadTask(task.id)?.status).toBe("BLOCKED");
+  // No task row should have been written
+  expect(store.listTasks().length).toBe(countBefore);
 });
 
 // ---------------------------------------------------------------------------
 // Test 11: Reason precedence — dep check before conflict check
+// (05-task-runner round-2 item 5: dep must be a real task; non-existent dep IDs
+// are rejected at createTask time, so we use a real RUNNING dep here)
 // ---------------------------------------------------------------------------
 it("test 11: BLOCKED reason names dep (not conflict) when both conditions apply", () => {
   const holdExec: Executor = {
@@ -362,25 +362,29 @@ it("test 11: BLOCKED reason names dep (not conflict) when both conditions apply"
   reg.set("implement", holdExec);
   const { runner: r, store: s } = makeRunnerPair(reg);
 
-  const missingId = "11111111-1111-1111-1111-111111111111";
   const writeClaim = { kind: "node" as const, nodeId: "y", mode: "write" as const };
 
-  // Start an in-flight task with the same write claim
+  // Start an in-flight task that holds the write claim (RUNNING).
   const inFlight = r.createTask({ type: "implement", title: "in-flight", resourceClaims: [writeClaim] });
   expect(s.loadTask(inFlight.id)?.status).toBe("RUNNING");
 
-  // Create B with both an unmet dep AND a conflicting claim
+  // Create a second in-flight implement task — it will be RUNNING (holds are fine).
+  // We use this as the dep for B: it exists in the DB but is not COMPLETE.
+  const depTask = r.createTask({ type: "implement", title: "dep-task" });
+  expect(s.loadTask(depTask.id)?.status).toBe("RUNNING");
+
+  // Create B with both an unmet dep (depTask is RUNNING, not COMPLETE) AND a conflicting claim.
   const b = r.createTask({
     type: "noop",
     title: "B",
-    dependsOn: [missingId],
+    dependsOn: [depTask.id],
     resourceClaims: [writeClaim],
   });
 
-  // B should be BLOCKED with dep reason (dep check runs first)
+  // B should be BLOCKED; dep check runs first, so reason is blocked_by_dep (not conflict).
   const lastBEvt = getLastEvent(s.getEvents(b.id));
   if (lastBEvt.kind === "status_change") {
-    expect(lastBEvt.reason).toBe(`blocked_by_dep:${missingId}`);
+    expect(lastBEvt.reason).toBe(`blocked_by_dep:${depTask.id}`);
   }
 
   s.close();

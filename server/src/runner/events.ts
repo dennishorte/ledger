@@ -64,10 +64,22 @@ export function createEventBus(): EventBus {
       // without skipping siblings (live-Set iteration would skip the next element).
       const set = subs.get(taskId);
       if (set !== undefined) {
-        for (const cb of Array.from(set)) cb(taskId);
+        for (const cb of Array.from(set)) {
+          try {
+            cb(taskId);
+          } catch (err) {
+            console.error("[EventBus] subscriber threw; continuing", err);
+          }
+        }
       }
       if (globalSubs.size > 0) {
-        for (const cb of Array.from(globalSubs)) cb(taskId);
+        for (const cb of Array.from(globalSubs)) {
+          try {
+            cb(taskId);
+          } catch (err) {
+            console.error("[EventBus] subscriber threw; continuing", err);
+          }
+        }
       }
     },
     close() {

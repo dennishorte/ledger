@@ -11,6 +11,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { isRunnerTaskId } from "./types.js";
 import type { LogEvent, Task, TaskId } from "./types.js";
 
 export interface TaskDetail {
@@ -19,12 +20,12 @@ export interface TaskDetail {
 }
 
 function pickEndpoint(id: TaskId): string {
-  // Transcript IDs are namespaced (session:<uuid> or agent:<id>); runner IDs
-  // are bare UUIDv4. The colon discriminant is sufficient — D2. If a future
-  // ID-format change breaks this assumption, useTask would need a fallback.
-  return id.includes(":")
-    ? `/api/transcripts/${encodeURIComponent(id)}`
-    : `/api/tasks/${encodeURIComponent(id)}`;
+  // Use the canonical isRunnerTaskId predicate (D2, 05-task-runner round-2).
+  // Consolidates the colon-based invariant in one place; all call sites use
+  // isRunnerTaskId rather than bare id.includes(":") checks.
+  return isRunnerTaskId(id)
+    ? `/api/tasks/${encodeURIComponent(id)}`
+    : `/api/transcripts/${encodeURIComponent(id)}`;
 }
 
 async function fetchTask(id: TaskId): Promise<TaskDetail | null> {

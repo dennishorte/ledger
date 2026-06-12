@@ -223,7 +223,7 @@ describe("POST /api/tasks", () => {
     ctx.closeAll();
   });
 
-  it("missing type → 400 with errors array", async () => {
+  it("missing type → 422 with errors array (05-task-runner round-2 item 4: semantic validation = 422)", async () => {
     const ctx = makeInMemoryContext();
     const app = createServer(ctx);
 
@@ -232,7 +232,7 @@ describe("POST /api/tasks", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "no-type" }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
     const body = await res.json() as { errors: unknown[] };
     expect(Array.isArray(body.errors)).toBe(true);
     expect(body.errors.length).toBeGreaterThan(0);
@@ -254,7 +254,7 @@ describe("POST /api/tasks", () => {
     ctx.closeAll();
   });
 
-  it("dependsOn: [missing-id] → 201 (accepts; task stays BLOCKED — no creation-time dep validation)", async () => {
+  it("dependsOn: [missing-id] → 400 with error (05-task-runner round-2 item 5: creation-time dep validation)", async () => {
     const ctx = makeInMemoryContext();
     const app = createServer(ctx);
 
@@ -267,10 +267,9 @@ describe("POST /api/tasks", () => {
         dependsOn: ["does-not-exist-uuid-1234"],
       }),
     });
-    expect(res.status).toBe(201);
-    const body = await res.json() as { task: Task };
-    // Task was created; scheduler will evaluate and find dep not COMPLETE → BLOCKED
-    expect(["PENDING", "BLOCKED"]).toContain(body.task.status);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("invalid_dependsOn");
     ctx.closeAll();
   });
 });

@@ -158,9 +158,10 @@ export const tasksRoute = new Hono<ServerEnv>()
     }
     const result = validateTaskInput(raw);
     if (!result.ok) {
-      // D7: 400 (Bad Request) for schema failures. Inconsistent with docs.ts
-      // which returns 422; logged as an Open Issue for coordinated cleanup.
-      return c.json({ errors: result.errors }, 400);
+      // D7 (amended, 05-task-runner round-2): 422 aligns with docs.ts convention
+      // (RFC 9110: well-formed body, semantically invalid). 400 reserved for
+      // structurally malformed requests (unparseable JSON, above).
+      return c.json({ errors: result.errors }, 422);
     }
     // B1: success branch is { ok: true; input: TaskInput } — use result.input.
     // D8: ajv useDefaults:true already applied defaults in validateTaskInput;
@@ -168,7 +169,15 @@ export const tasksRoute = new Hono<ServerEnv>()
     // Spec: "Returns the post-tick Task" — reload from store so the response
     // reflects any synchronous tick (e.g., noop → COMPLETE) rather than the
     // PENDING snapshot that runner.createTask returns.
-    const created = project.runner.createTask(result.input);
+    // Item 5 (05-task-runner round-2): createTask throws on unknown dependsOn
+    // IDs — surface as 400 so the operator gets a structured error.
+    let created;
+    try {
+      created = project.runner.createTask(result.input);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "invalid_dependsOn", detail: msg }, 400);
+    }
     const task = project.runner.store.loadTask(created.id) ?? created;
     return c.json({ task }, 201);
   })

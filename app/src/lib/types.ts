@@ -98,6 +98,22 @@ export type {
 export { defaultResourceClaims } from "@ledger/parser";
 
 // ---------------------------------------------------------------------------
+// Task ID format helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when `id` is a runner-emitted task ID (bare UUIDv4, no colon).
+ *
+ * Invariant: runner IDs are bare UUIDv4 (36 chars, no colon); transcript IDs
+ * are namespace-prefixed — "session:<uuid>" or "agent:<id>" — and always
+ * contain a colon. If this naming convention ever changes, update this predicate
+ * and all callers will automatically inherit the fix (D2, 05-task-runner round-2).
+ */
+export function isRunnerTaskId(id: string): boolean {
+  return !id.includes(":");
+}
+
+// ---------------------------------------------------------------------------
 // Workflow-progress types — introduced by 01-ui/09-workflow-progress
 // ---------------------------------------------------------------------------
 

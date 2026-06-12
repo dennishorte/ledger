@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/02-round-2`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied)
+**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied; APPROVED → IN_PROGRESS → VERIFY)
 
 **Dependencies:** `05-task-runner/04-api-endpoints` (EventBus, task routes), `05-task-runner/05-ui-hook-migration` (`useTask`, `useLogStream`), `05-task-runner/02-scheduler` (task creation path)
 
@@ -120,7 +120,12 @@ No migration. No new table. Check whether `store.getTask(id)` already exists bef
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+- **Item 1 (bus throw-isolation):** `createEventBus().publish` now wraps each subscriber call (both per-taskId and global) in `try/catch`; errors logged via `console.error("[EventBus] subscriber threw; continuing", err)`. Two new tests added to `server/test/runner/events.test.ts`.
+- **Item 2 (discriminant consolidation):** `isRunnerTaskId(id: string): boolean` added to `app/src/lib/types.ts` with a doc-comment explaining the UUID/colon invariant. Both `useTask.ts` and `useLogStream.ts` updated to use the named predicate; no bare `id.includes(":")` call sites remain in `app/src/lib/` (the one remaining occurrence is inside `isRunnerTaskId`'s own implementation).
+- **Item 3 (useLogStream coverage):** `app/src/lib/useLogStream.test.ts` created from scratch with a `FakeEventSource` class (no pre-existing infra — the spec's claim was aspirational). Six tests: URL routing for runner vs transcript, event append, unmount cleanup, seq dedup, close event status transition.
+- **Item 4 (422 convention):** `server/src/routes/tasks.ts` line 164 changed from `400` to `422`; D7 comment amended. `tasks.test.ts` test name and expected status updated.
+- **Item 5 (dependsOn validation):** Validation loop added in `store.createTask` before the transaction, iterating `dependsOn` and calling `stmtLoadTask.get(depId)` for each (using the already-prepared statement — no new method needed). Route handler wraps `runner.createTask` in `try/catch` and returns `400 { error: "invalid_dependsOn" }` on failure. Three new store tests; `scheduler.test.ts` tests 10 and 11 updated: test 10 now asserts `createTask` throws for a non-existent dep; test 11 rewritten to use real RUNNING tasks as deps (the missingId scenario is no longer reachable via the public API).
+- **Pre-existing test failures (NodeInspector.test.tsx, 2 tests):** Confirmed pre-existing before this round's changes — unrelated to items 1–5. Not introduced here.
 
 ---
 
