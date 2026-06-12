@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-06-12)
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (APPROVED → VERIFY, implementation complete + impl-review sign-off)
+**Last Updated:** 2026-06-12 (VERIFY → COMPLETE — operator verification: typecheck clean, toggle implemented, doc strikes confirmed)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (reject endpoint `followUp` field), `05-task-runner/05-ui-hook-migration` (`TaskInspector`, `useRejectTask`)
 

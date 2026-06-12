@@ -12,17 +12,11 @@ This file is the durable output of the triage stages (0–3) of `open-issue-reso
 | # | Slug | Priority | Resolution | Nodes | Issues |
 |---|------|----------|------------|-------|--------|
 | ~~1~~ | ~~`dispatcher-sigkill-escalation`~~ | ~~MEDIUM~~ | ~~maintenance-pass~~ | ~~`06-agent-dispatcher/03-claude-code-executor`, `06-agent-dispatcher/05-dispatch-api`~~ | ~~2~~ |
-| 2 | `hitl-rejection-rationale-ui-display` | MEDIUM | maintenance-pass | `05-task-runner/03-hitl-gate`, `05-task-runner/05-ui-hook-migration` | 2 |
+| ~~2~~ | ~~`hitl-rejection-rationale-ui-display`~~ | ~~MEDIUM~~ | ~~maintenance-pass~~ | ~~`05-task-runner/03-hitl-gate`, `05-task-runner/05-ui-hook-migration`~~ | ~~2~~ |
 
 ### ~~`dispatcher-sigkill-escalation`~~ → resolved by `06-agent-dispatcher/99-maintenance/01-round-1` (2026-06-12)
 
-### `hitl-rejection-rationale-ui-display`
-**Category:** tech-debt  
-**Execution notes:** (1) Verify `TaskInspector` reads the full rationale from the `kind=error` detail event body, not `status_change.reason` (80-char truncated). If it reads `reason`, fix to read the detail event. (2) Add a "Reject and queue follow-up" toggle in `TaskInspector` that calls `useRejectTask` with a `followUp` field populated from the UI form; inherit rejected task's `resourceClaims` by default.
-
-Members:
-- `05-task-runner/03-hitl-gate` — "`reasons.rejected(rationale)` truncates at 80 chars … *(Priority: MEDIUM)*"
-- `05-task-runner/05-ui-hook-migration` — "Follow-up task injection on Reject (D9) … *(Priority: MEDIUM)*"
+### ~~`hitl-rejection-rationale-ui-display`~~ → resolved by `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display` (2026-06-12)
 
 ---
 
@@ -56,3 +50,4 @@ Re-evaluate at next collection pass. A parked group re-enters the active queue w
 |------|----------|-----|
 | `executor-stdout-stderr-stale-issue` | 2026-06-12 | doc-only — struck stale MEDIUM bullet in `03-claude-code-executor`; code had already shipped (`lifecycle.ts:92`). Commit `16e07c4`. |
 | `dispatcher-sigkill-escalation` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/01-round-1` — `killWithEscalation` + escalation timer in `cancellation.ts`; `subprocess_killed` LogEvent kind; doc-strikes in `03`/`05`/parent. |
+| `hitl-rejection-rationale-ui-display` | 2026-06-12 | `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display` — protective comment + test at `latestStatusReason` usage; "Queue follow-up task" toggle in `HitlActions`; `useRejectTask` extended with `followUp`; doc-strikes in `03-hitl-gate`/`05-ui-hook-migration`. Commit `b479706`. |

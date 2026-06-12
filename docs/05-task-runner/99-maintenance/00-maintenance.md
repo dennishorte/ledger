@@ -15,4 +15,4 @@ Maintenance container for accumulated Open Issues across the `05-task-runner` su
 
 | # | Node | Status | Notes |
 |---|------|--------|-------|
-| 01 | [`01-hitl-rejection-rationale-ui-display`](./01-hitl-rejection-rationale-ui-display.md) | APPROVED | HITL rejection-rationale display + follow-up injection |
+| 01 | [`01-hitl-rejection-rationale-ui-display`](./01-hitl-rejection-rationale-ui-display.md) | COMPLETE (v1, 2026-06-12) | HITL rejection-rationale display + follow-up injection |
