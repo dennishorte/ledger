@@ -266,7 +266,7 @@ This is provenance, not ceremony. Skip it for small passes (≤5 groups) where t
 
 ## Known limitations
 
-- **No machine-readable group assignments.** The triage table (stage 0c) and group list (stage 1c) are working artifacts in the conversation, not stored state. A long triage pass that spans multiple sessions must reconstruct the table from the scanner output and docs. The eventual fix is a `triage` task type that persists group assignments in the runner store.
+- **No machine-readable group assignments.** The triage table (stage 0c) and group list (stage 1c) are working artifacts in the conversation, not stored state. A long triage pass that spans multiple sessions must reconstruct the table from the scanner output and docs. The eventual fix is a `triage` task type that persists group assignments in the runner store. **Interim convention:** when a pass produces a queue worth carrying across sessions (≥5 groups or any active maintenance-pass/new-leaf entries), commit the triage output to `.ledger/process/open-issue-queue.md`. Subsequent passes update that file rather than rebuilding from scratch — promote parked groups, strike resolved ones, append newly-discovered groups. The file is not a spec node; it carries no lifecycle status.
 
 - **Priority tags are self-reported.** Issue severity is tagged by the implementer who filed the issue, not by an independent assessor. Stage 2's blast-radius and path-dependency scoring partially compensates, but a systematically under-tagged subtree will sort lower than it deserves. Mitigation: read the issue text, not just the tag, when scoring for path dependency.
 
