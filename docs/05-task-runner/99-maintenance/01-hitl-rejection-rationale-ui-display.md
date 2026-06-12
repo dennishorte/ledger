@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (DRAFT authored)
+**Last Updated:** 2026-06-12 (DRAFT → APPROVED, spec review applied)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (reject endpoint `followUp` field), `05-task-runner/05-ui-hook-migration` (`TaskInspector`, `useRejectTask`)
 
@@ -18,7 +18,7 @@ Curated punch list — two items from two siblings in the `05-task-runner` subtr
    - Source: "`reasons.rejected(rationale)` truncates at 80 chars; UI must render the full rationale from the detail event. Drift risk: if a future UI surface reads `event.reason` instead of the detail event's `stack`, the operator sees only 80 chars."
    - Priority: MEDIUM
    - Why this round: requires reading the live `TaskInspector.tsx` source to verify the current display path is correct, then either fixing it or closing the issue with a code comment + test. The verification work is mechanical and pairs naturally with item 2 (both touch the reject flow in `TaskInspector`).
-   - **Finding after source read:** `TaskInspector` already correctly reads `latestStatusReason` from `status_change.reason` for the "Status reason" row (line 56–65, `TaskInspector.tsx`) — showing the 80-char truncated form — and the full untruncated rationale surfaces via the existing `ErrorRow` in the LogStream panel via the `kind: "error"` detail event. The current behavior is architecturally correct per `03-hitl-gate` D4/D6. The open issue's concern is that a *future* UI surface might mistakenly read the truncated form. This round's deliverable is: (a) add an explicit comment in `TaskInspector.tsx` at the `latestStatusReason` usage site documenting that the truncated 80-char form is intentional here, (b) add a targeted test assertion in `TaskInspector.test.tsx` confirming the full rationale does NOT appear in the Status reason row (only the truncated form does), and (c) close the open issue bullet in `03-hitl-gate.md` via strikethrough.
+   - **Finding after source read:** `TaskInspector` already correctly reads `latestStatusReason` from `status_change.reason` for the "Status reason" row (line 56–65, `TaskInspector.tsx`) — showing the 80-char truncated form — and the full untruncated rationale surfaces via the existing `ErrorRow` in the LogStream panel via the `kind: "error"` detail event. The current behavior is architecturally correct per `03-hitl-gate` D4/D6. The open issue's concern is that a *future* UI surface might mistakenly read the truncated form. This round's deliverable is: (a) **replace** the existing comment in `TaskInspector.tsx` at the `latestStatusReason` usage site with the explicit comment shown in the Design section below — the existing comment is insufficient because it does not contain the negative instruction ("Do NOT switch this to read the detail event stack"); a mere paraphrase or augmentation of the existing text is not acceptable, (b) add a targeted test assertion in `TaskInspector.test.tsx` confirming the full rationale does NOT appear in the Status reason row (only the truncated form does), and (c) close the open issue bullet in `03-hitl-gate.md` via strikethrough.
 
 2. **Follow-up task injection on Reject** (`05-task-runner/05-ui-hook-migration`, Open Issues, MEDIUM)
    - Source: "Follow-up task injection on Reject (D9) — UI doesn't expose `followUp`."
@@ -80,16 +80,19 @@ body: JSON.stringify(
 Inside the `rejectOpen` branch, add below the existing `reason` textarea:
 
 ```tsx
+// DispatchableTaskType is defined BEFORE the state declaration (not after) to
+// avoid a TypeScript forward-reference error — the type alias must be in scope
+// before the useState generic uses it.
+// DispatchableTaskType = Exclude<TaskType, "noop" | "human_review" | "operator_session">
+// Not exported (scoped to this UI concern only).
+type DispatchableTaskType = Exclude<TaskType, "noop" | "human_review" | "operator_session">;
+
 // "Queue follow-up task" toggle — collapsed by default.
 // When expanded, reveals a title input (required) and type select.
-// followUpData state: undefined (toggle off) | { title: string; type: TaskType }
-
+// followUpData state: undefined (toggle off) | { title: string; type: DispatchableTaskType }
 const [followUpData, setFollowUpData] = useState<
   { title: string; type: DispatchableTaskType } | undefined
 >(undefined);
-
-// DispatchableTaskType = Exclude<TaskType, "noop" | "human_review" | "operator_session">
-// Defined inline; not exported (scoped to this UI concern only).
 ```
 
 Toggle renders as a checkbox + label "Queue follow-up task" above the Confirm/Cancel row. When checked, reveals:
@@ -155,7 +158,7 @@ Per-item acceptance checks (operator walks both after E2E suite passes):
 | 1a | `pnpm -C app test` green; new test "Status reason row shows truncated 80-char form, not full rationale" passes. | headless |
 | 1b | In `TaskInspector.tsx`, the `latestStatusReason` usage site carries the strengthened comment explaining the intentional 80-char truncation. | code review |
 | 1c | `docs/05-task-runner/03-hitl-gate.md` Open Issues bullet struck through with pointer to this round. | doc review |
-| 1d | Boot dev stack; inject `human_review` task; reject with a rationale longer than 80 characters. Inspector "Status reason" row shows the first ~86 chars (`"rejected: " + 80 chars`). LogStream panel renders the `ErrorRow` with the full untruncated rationale in the `stack` field. | operator gate |
+| 1d | Boot dev stack; inject `human_review` task; reject with a rationale longer than 80 characters. Inspector "Status reason" row shows the first ~90 chars (`"rejected: " + up to 80 chars = up to 90 chars total`, per `03-hitl-gate` `reasons.rejected`: `"rejected: " + rationale.slice(0, 80)`). LogStream panel renders the `ErrorRow` with the full untruncated rationale in the `stack` field. | operator gate |
 
 **Item 2 — Follow-up task injection**
 
