@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/02-round-2`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (initial DRAFT)
+**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied)
 
 **Dependencies:** `05-task-runner/04-api-endpoints` (EventBus, task routes), `05-task-runner/05-ui-hook-migration` (`useTask`, `useLogStream`), `05-task-runner/02-scheduler` (task creation path)
 
@@ -73,7 +73,7 @@ publish(event: LogEvent): void {
 
 Add a unit test: register two subscribers where the first throws; assert the second still receives the event and the error is swallowed.
 
-### Item 2 — `useTask` discriminant consolidation (`app/src/lib/useTask.ts` or wherever `id.includes(":")` lives)
+### Item 2 — `useTask` discriminant consolidation (`app/src/lib/useTask.ts`)
 
 Replace every `id.includes(":")` call that discriminates runner vs. transcript with a data-driven check. The authoritative shape is that runner tasks have `transcriptPath === undefined` and transcript entries have a non-null `transcriptPath`. Where the data is not yet fetched (the discriminant must fire before the fetch), use a narrower invariant: runner task IDs are UUIDs (no colon, 36 chars); transcript IDs contain a colon. Document this as an explicit invariant comment rather than leaving the logic implicit.
 
@@ -90,13 +90,13 @@ No new test infrastructure needed — extend the existing `EventSource` fake.
 
 ### Item 4 — 422 convention in `tasks.ts` (`server/src/routes/tasks.ts`)
 
-Locate every `c.json({ error: ... }, 400)` that fires on a validation/semantic error (as opposed to a truly malformed request). Replace those with `422`. Pure string constant change; no logic change. The `docs.ts` file (already shown: uses 422 on `validateDocNode` failure) is the reference convention.
+Locate every `c.json({ error: ... }, 400)` that fires on a validation/semantic error (as opposed to a truly malformed request). Replace those with `422`. Pure string constant change; no logic change. The `docs.ts` file (already shown: uses 422 on `validateDocNode` failure) is the reference convention. Based on the originating Open Issue (D7 reference in `04-api-endpoints`), expect one affected site on the `validateTaskInput` failure path; verify with `grep -n '400' server/src/routes/tasks.ts` to confirm no additional semantic-validation 400s remain after the fix.
 
 ### Item 5 — `dependsOn` validation on task creation (`server/src/runner/store.ts` or `scheduler.ts`)
 
 At the `createTask` call site, before writing the row, iterate `input.dependsOn ?? []` and call `store.taskExists(id)` (or equivalent read) for each. If any dep ID is not found, throw / return an error that surfaces as a `400` to the caller (operator injection via `POST /api/tasks`) or as an immediate thrown error for internal callers. Do not write the task row on validation failure.
 
-No migration. No new table. `store.taskExists` may be a new one-liner on the `Store` interface if it does not already exist.
+No migration. No new table. Check whether `store.getTask(id)` already exists before adding `store.taskExists` — if a `getTask` is already present, use it rather than adding a redundant method. If neither exists, `store.taskExists` is a minimal `SELECT 1 FROM tasks WHERE id = ? LIMIT 1` one-liner on the `Store` interface.
 
 ---
 
