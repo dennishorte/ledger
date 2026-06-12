@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/99-maintenance/01-round-1`
 **Parent:** `06-agent-dispatcher/99-maintenance` (`docs/06-agent-dispatcher/99-maintenance/00-maintenance.md`)
-**Status:** DRAFT
+**Status:** APPROVED
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-06-12 (APPROVED)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (owns `cancellation.ts` and the subprocess handle); `06-agent-dispatcher/05-dispatch-api` (cross-ref bullet to strike)
 
@@ -64,6 +64,8 @@ Files touched by item 1:
 - `server/src/routes/tasks.ts` — call site switches from `subprocess.kill("SIGTERM")` to `dispatchCancellation.killWithEscalation(id, "SIGTERM")`
 - `server/src/context.ts` — pass the runner emit callback when constructing the registry
 - `server/test/dispatcher/executor/cancellation.test.ts` — tests for the timer path
+- `packages/parser/src/runner/types.ts` — new `subprocess_killed` member in the `LogEvent` union
+- `docs/_schemas/log-event.schema.json` — additive `if/then` branch for the new kind
 
 **Item 2 (`05-dispatch-api.md` — doc edit):**
 
@@ -130,7 +132,7 @@ A new `LogEvent` kind: `{ kind: "subprocess_killed", signal: "SIGKILL", taskId: 
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+- **Spec review verdict (2026-06-12):** APPROVED_WITH_CHANGES. One should-fix applied (SF1: `packages/parser/src/runner/types.ts` and `docs/_schemas/log-event.schema.json` added to the item 1 files-touched list — information was present elsewhere in the spec but absent from the implementer's canonical scope reference). Two nits (N1: `"SIGKILL"` direct-path clarification; N2: `taskId` redundancy in `SubprocessKilledEvent` shape) noted but not applied — cosmetic only, do not affect correctness.
 
 ---
 
