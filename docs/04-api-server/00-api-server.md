@@ -646,3 +646,5 @@ Build order is determined by the dependency edges above. Sequential dispatch: ea
 Out-of-scope items from the parent's Requirements (write endpoints, task/log/dispatcher/daemon endpoints, auth, multi-project, OpenAPI, hot reload, packaging) apply to every child — none of them reintroduce a deferred concern. Each child spec cites this parent's Decisions table for architectural inheritance rather than restating.
 
 The end-to-end Acceptance check that originally lived in this parent's Verification section is distributed across the children: each child's Verification gate covers the items it produces, plus the final child (`05-ui-hook-migration`) carries the cross-cutting end-to-end gates (live DAG re-render on doc edit, server-down placeholder fallback, `03-project-metadata` Open Issue closure, `CLAUDE.md` doc sync).
+
+| `99-maintenance` | API Server Maintenance Rounds (container) | all v1 children COMPLETE | APPROVED |

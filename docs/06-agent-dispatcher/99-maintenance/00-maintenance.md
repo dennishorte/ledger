@@ -15,3 +15,4 @@ This container holds maintenance rounds for the `06-agent-dispatcher` subtree. P
 | ID | Title | Status |
 |----|-------|--------|
 | `06-agent-dispatcher/99-maintenance/01-round-1` | SIGKILL escalation after SIGTERM on cancel | COMPLETE |
+| `06-agent-dispatcher/99-maintenance/02-round-2` | Dispatcher–executor trivial polish (MCP config type, dispatch banner link, MutationErrorBody extraction, tool-contract reminder assertion, Mode A lifecycle decision) | DRAFT |
