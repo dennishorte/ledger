@@ -134,6 +134,20 @@ A new `LogEvent` kind: `{ kind: "subprocess_killed", signal: "SIGKILL", taskId: 
 
 - **Spec review verdict (2026-06-12):** APPROVED_WITH_CHANGES. One should-fix applied (SF1: `packages/parser/src/runner/types.ts` and `docs/_schemas/log-event.schema.json` added to the item 1 files-touched list — information was present elsewhere in the spec but absent from the implementer's canonical scope reference). Two nits (N1: `"SIGKILL"` direct-path clarification; N2: `taskId` redundancy in `SubprocessKilledEvent` shape) noted but not applied — cosmetic only, do not affect correctness.
 - **Implementation (2026-06-12):** All six files in the item-1 scope updated. `cancellation.ts` rewritten with `RegistryEntry` map (subprocess + escalationTimer), `killWithEscalation` method, `unref()` on the timer to avoid keeping Node.js alive, and timer cancellation in both `unbind` and bind-overwrite. `context.ts` passes `emitEvent` callback that writes to `runner.store.appendEvent`. `tasks.ts` cancel route switches from `subprocess.kill("SIGTERM")` to `dispatchCancellation.killWithEscalation(id, "SIGTERM")`. `subprocess_killed` kind added to `@ledger/parser/src/runner/types.ts` LogEvent union and `docs/_schemas/log-event.schema.json` oneOf. Tests expanded from 8 to 14 (timer-path: escalation fires, unbind cancels timer, SIGKILL direct path, emitEvent absent safe degradation, false on unknown taskId). Doc bullets struck in `03-claude-code-executor.md`, `05-dispatch-api.md`, `00-agent-dispatcher.md`. Typecheck and server test suite (407 pass / 2 skip) clean.
+- **Implementation review sign-off (2026-06-12):** APPROVED. All verification items pass.
+
+  | # | Item | Result |
+  |---|------|--------|
+  | V1 | Typecheck, lint, tests exit zero; cancellation tests pass | PASS |
+  | V2 | SIGTERM-exits-clean path: unbind cancels timer, no SIGKILL | PASS |
+  | V3 | SIGKILL escalation fires after delay | PASS |
+  | V4 | `unbind` before escalation races safely | PASS |
+  | V5 | `killWithEscalation("SIGKILL")` direct path: no timer | PASS |
+  | V6 | Unknown taskId returns `false` | PASS |
+  | V7 | Cancel route uses `killWithEscalation` not direct `.kill` | PASS |
+  | V8 | `subprocess_killed` kind accepted by AJV schema | PASS |
+
+  One LOW finding noted but not fixed (pre-existing cancel-route design artifact, not introduced by this round): the `lookup` pre-check on `tasks.ts:207` is redundant with `killWithEscalation`'s own `map.get` guard and creates a narrow TOCTOU window. Consequence is a missed SIGTERM for a task already transitioned to CANCELLED — a no-op in practice since the DB write succeeded. Logged here for a future round; no correctness impact on the SIGKILL escalation feature itself.
 
 ---
 
