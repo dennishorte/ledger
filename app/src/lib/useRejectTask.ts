@@ -11,11 +11,13 @@
  *
  * The `reason` field is required and non-empty. The UI enforces this via a
  * disabled Confirm button; the server 400s on empty reason if bypassed (D11).
- * followUp is deferred to a future enhancement (D9).
+ * `followUp` is optional — when present it is forwarded to the server's
+ * POST /api/tasks/:id/reject body, which creates a follow-up task and returns
+ * it as `followUpTask` in the response (03-hitl-gate D9).
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Task, TaskId } from "./types.js";
+import type { Task, TaskId, TaskInput } from "./types.js";
 import { MutationErrorBody } from "./useApproveTask.js";
 import type { TaskDetail } from "./useTask.js";
 
@@ -26,23 +28,30 @@ export interface RejectVariables {
   dbRowVersion: number;
   /** Required, non-empty. UI enforces; server 400s on empty. */
   reason: string;
+  /** Optional follow-up task to create on rejection (03-hitl-gate D9). */
+  followUp?: TaskInput;
 }
 
 async function postReject({
   taskId,
   dbRowVersion,
   reason,
-}: RejectVariables): Promise<{ task: Task }> {
+  followUp,
+}: RejectVariables): Promise<{ task: Task; followUpTask?: Task }> {
   const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/reject`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dbRowVersion, reason }),
+    body: JSON.stringify(
+      followUp !== undefined
+        ? { dbRowVersion, reason, followUp }
+        : { dbRowVersion, reason },
+    ),
   });
   if (!res.ok) {
     const body: unknown = await res.json().catch(() => undefined);
     throw new MutationErrorBody(res.status, body);
   }
-  return res.json() as Promise<{ task: Task }>;
+  return res.json() as Promise<{ task: Task; followUpTask?: Task }>;
 }
 
 export function useRejectTask() {

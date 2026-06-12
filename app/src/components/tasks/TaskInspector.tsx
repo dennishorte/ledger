@@ -10,7 +10,7 @@ import { useApproveTask } from "@/lib/useApproveTask";
 import { useRejectTask } from "@/lib/useRejectTask";
 import { useCancelTask } from "@/lib/useCancelTask";
 import { cn } from "@/lib/cn";
-import type { Task, ResourceClaim } from "@/lib/types";
+import type { Task, TaskType, ResourceClaim } from "@/lib/types";
 import type { MutationErrorBody } from "@/lib/useApproveTask";
 
 interface TaskInspectorProps {
@@ -204,13 +204,12 @@ export function TaskInspector({
         )}
       </Field>
 
-      {/* Status reason (NEW) — between Resource claims and Timing.
-          Surfaces the latest status_change event's reason field. Works for
-          blocked_by_dep:<id>, blocked_no_executor, orphaned_on_restart,
-          rejected:<truncated>, approved, etc. Hidden when no reason set.
-          The 80-char-truncated form is what shows here per Spec Review S2;
-          the full untruncated rejection rationale is in the LogStream panel's
-          ErrorRow. */}
+      {/* Status reason — intentionally shows the 80-char truncated form from
+          status_change.reason (per 03-hitl-gate D4/reasons.rejected). The full
+          untruncated rejection rationale is in the kind="error" detail event,
+          which renders in the LogStream panel's ErrorRow. Do NOT switch this to
+          read the detail event stack — the truncated form is the row-level summary;
+          the full text belongs in the log stream view. */}
       {latestStatusReason !== undefined && (
         <Field label="Status reason">
           <span className="text-xs text-[color:var(--color-fg)] break-all">
@@ -303,6 +302,29 @@ function cancelErrorBanner(err: unknown): string | null {
 // Sibling component in the same file (single inspector concern — spec D11 pattern).
 // ---------------------------------------------------------------------------
 
+// DispatchableTaskType is defined BEFORE the state declaration (not after) to
+// avoid a TypeScript forward-reference error — the type alias must be in scope
+// before the useState generic uses it.
+// DispatchableTaskType = Exclude<TaskType, "noop" | "human_review" | "operator_session">
+// Not exported (scoped to this UI concern only).
+type DispatchableTaskType = Exclude<
+  TaskType,
+  "noop" | "human_review" | "operator_session"
+>;
+
+const DISPATCHABLE_TYPES: DispatchableTaskType[] = [
+  "agent_task",
+  "implement",
+  "spec_review",
+  "spec_draft",
+  "doc_refactor",
+  "doc_decompose",
+  "issue_triage",
+  "verify",
+  "reverify",
+  "project_status_review",
+];
+
 function HitlActions({ task }: { task: Task }): JSX.Element {
   const approve = useApproveTask();
   const reject = useRejectTask();
@@ -310,6 +332,10 @@ function HitlActions({ task }: { task: Task }): JSX.Element {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  // "Queue follow-up task" toggle — undefined means toggle off.
+  const [followUpData, setFollowUpData] = useState<
+    { title: string; type: DispatchableTaskType } | undefined
+  >(undefined);
 
   // The most recent error from either mutation, for the 409 banner.
   const lastError = reject.error ?? approve.error;
@@ -374,15 +400,70 @@ function HitlActions({ task }: { task: Task }): JSX.Element {
             className="min-h-20 max-h-40 resize-y rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1 text-xs text-[color:var(--color-fg)]"
             aria-label="Rejection rationale"
           />
+
+          {/* "Queue follow-up task" toggle — collapsed by default. */}
+          <label className="flex items-center gap-1.5 text-xs text-[color:var(--color-fg)] select-none cursor-pointer">
+            <input
+              type="checkbox"
+              checked={followUpData !== undefined}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setFollowUpData({ title: "", type: "agent_task" });
+                } else {
+                  setFollowUpData(undefined);
+                }
+              }}
+              aria-label="Queue follow-up task"
+            />
+            Queue follow-up task
+          </label>
+
+          {followUpData !== undefined && (
+            <div className="flex flex-col gap-1.5 pl-5">
+              <input
+                type="text"
+                value={followUpData.title}
+                onChange={(e) => {
+                  setFollowUpData({ ...followUpData, title: e.target.value });
+                }}
+                placeholder="Follow-up task title (required)"
+                className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1 text-xs text-[color:var(--color-fg)]"
+                aria-label="Follow-up task title"
+              />
+              <select
+                value={followUpData.type}
+                onChange={(e) => {
+                  setFollowUpData({
+                    ...followUpData,
+                    type: e.target.value as DispatchableTaskType,
+                  });
+                }}
+                className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1 text-xs text-[color:var(--color-fg)]"
+                aria-label="Follow-up task type"
+              >
+                {DISPATCHABLE_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"
-              disabled={reason.trim().length === 0 || reject.isPending}
+              disabled={
+                reason.trim().length === 0 ||
+                reject.isPending ||
+                (followUpData !== undefined && followUpData.title.trim().length === 0)
+              }
               onClick={() => {
                 reject.mutate({
                   taskId: task.id,
                   dbRowVersion: task.dbRowVersion,
                   reason: reason.trim(),
+                  ...(followUpData !== undefined && followUpData.title.trim().length > 0
+                    ? { followUp: { type: followUpData.type, title: followUpData.title.trim() } }
+                    : {}),
                 });
               }}
               className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-danger-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:opacity-90 disabled:opacity-50"
@@ -394,6 +475,7 @@ function HitlActions({ task }: { task: Task }): JSX.Element {
               onClick={() => {
                 setRejectOpen(false);
                 setReason("");
+                setFollowUpData(undefined);
               }}
               className="inline-flex items-center rounded-md border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)]"
             >

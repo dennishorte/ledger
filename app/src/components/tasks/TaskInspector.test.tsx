@@ -414,6 +414,140 @@ describe("TaskInspector", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Item 1 (01-hitl-rejection-rationale-ui-display): status reason row
+  // shows the truncated 80-char form, NOT the full rationale.
+  // -------------------------------------------------------------------------
+
+  it("Status reason row shows truncated form; full rationale does not appear in that row", async () => {
+    // Full rationale is longer than 80 chars; server truncates to 80 in reason field.
+    // The suffix " in total length" (16 chars) is NOT in the truncated form.
+    const fullRationale = "This is a very long rejection rationale that exceeds eighty characters in total length";
+    const truncatedReason = "rejected: " + fullRationale.slice(0, 80);
+    const task = makeRunnerTask({ status: "FAILED" });
+    const reasonEvent = makeStatusChangeEvent(truncatedReason);
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [reasonEvent] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    // Wait for the Status reason label to appear, then check the row value.
+    await waitFor(() => {
+      expect(screen.queryByText(/status reason/i)).not.toBeNull();
+    });
+
+    // The truncated form starts with "rejected: This is a very long" — verify it is present.
+    expect(screen.queryByText(/rejected: This is a very long/i)).not.toBeNull();
+
+    // The trailing text that was sliced off must NOT appear anywhere (it belongs in LogStream ErrorRow).
+    expect(screen.queryByText(/in total length/i)).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Item 2 (01-hitl-rejection-rationale-ui-display): follow-up task toggle
+  // -------------------------------------------------------------------------
+
+  it("Confirm disabled when follow-up toggle on and title empty", async () => {
+    const task = makeRunnerTask();
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      jsonResponse({ task, events: [] }),
+    );
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /reject/i })).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /reject…/i }));
+
+    const textarea = await screen.findByRole("textbox", { name: /rejection rationale/i });
+    fireEvent.change(textarea, { target: { value: "needs rework" } });
+
+    // Confirm is enabled before toggle.
+    const confirmBtn = screen.getByRole("button", { name: /confirm reject/i });
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Enable follow-up toggle — title is empty, so Confirm should be disabled.
+    const toggle = screen.getByRole("checkbox", { name: /queue follow-up task/i });
+    fireEvent.click(toggle);
+
+    const titleInput = await screen.findByRole("textbox", { name: /follow-up task title/i });
+    expect(titleInput).not.toBeNull();
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("Reject with follow-up toggle: submits followUp in request body", async () => {
+    const task = makeRunnerTask();
+    const rejectedTask: Task = { ...task, status: "FAILED", dbRowVersion: 3 };
+    const followUpTask: Task = {
+      ...task,
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      type: "implement",
+      status: "PENDING",
+      title: "re-implement this",
+      dbRowVersion: 1,
+    };
+
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(jsonResponse({ task, events: [] }))
+      .mockResolvedValueOnce(jsonResponse({ task: rejectedTask, followUpTask }))
+      .mockResolvedValue(jsonResponse({ task: rejectedTask, events: [] }));
+
+    render(<TaskInspector task={task} allTasks={[task]} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /reject/i })).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /reject…/i }));
+
+    const textarea = await screen.findByRole("textbox", { name: /rejection rationale/i });
+    fireEvent.change(textarea, { target: { value: "needs rework" } });
+
+    const toggle = screen.getByRole("checkbox", { name: /queue follow-up task/i });
+    fireEvent.click(toggle);
+
+    const titleInput = await screen.findByRole("textbox", { name: /follow-up task title/i });
+    fireEvent.change(titleInput, { target: { value: "re-implement this" } });
+
+    // Select type "implement" from the select
+    const typeSelect = screen.getByRole("combobox", { name: /follow-up task type/i });
+    fireEvent.change(typeSelect, { target: { value: "implement" } });
+
+    const confirmBtn = screen.getByRole("button", { name: /confirm reject/i });
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      const calls = vi.mocked(globalThis.fetch).mock.calls;
+      const rejectCall = calls.find(
+        (c) => typeof c[0] === "string" && c[0].includes("/reject"),
+      );
+      expect(rejectCall).toBeDefined();
+      if (rejectCall !== undefined) {
+        const reqInit = rejectCall[1] as RequestInit;
+        const body = JSON.parse(reqInit.body as string) as {
+          reason: string;
+          dbRowVersion: number;
+          followUp?: { type: string; title: string };
+        };
+        expect(body.reason).toBe("needs rework");
+        expect(body.followUp).toBeDefined();
+        expect(body.followUp?.type).toBe("implement");
+        expect(body.followUp?.title).toBe("re-implement this");
+      }
+    });
+  });
+
   it("409 no_subprocess → inline banner shows no_subprocess message", async () => {
     const task = makeRunnerTask({ status: "RUNNING" });
     const errBody = { error: "no_subprocess", id: task.id, taskType: "implement" };
