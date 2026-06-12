@@ -35,25 +35,8 @@ export interface DocSource {
 // Health dashboard types — introduced by 01-ui/06-health
 // ---------------------------------------------------------------------------
 
-/**
- * A single open-issue item extracted from a doc node's "## Open Issues" section.
- * Introduced by 01-ui/06-health.
- */
-export interface IssueItem {
-  /** Source node. */
-  nodeId: NodeId;
-  /** The raw markdown text of the bullet (single item, may be multi-line). */
-  text: string;
-  /** Priority tag extracted from the item text, e.g. "HIGH", "MEDIUM", "LOW", "TRIVIAL". */
-  priority: IssuePriority;
-  /**
-   * Slug of the "## Open Issues" heading in the source doc, for anchor deep-linking.
-   * Always "open-issues" for the current doc schema.
-   */
-  sectionSlug: string;
-}
-
-export type IssuePriority = "HIGH" | "MEDIUM" | "LOW" | "TRIVIAL" | "UNKNOWN";
+// IssueItem and IssuePriority — canonical in @ledger/parser (04-api-server/99-maintenance/01-ui-hook-migration item 0)
+export type { IssueItem, IssuePriority } from "@ledger/parser";
 
 /**
  * Staleness signal for a single node. Phase-1: derived from status + open issues.

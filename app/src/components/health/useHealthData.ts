@@ -1,28 +1,20 @@
 /**
- * useHealthData — assembles all health-dashboard signals from build-time data.
+ * useHealthData — assembles all health-dashboard signals from live API data.
+ *
+ * Migrated from build-time import.meta.glob to TanStack Query against
+ * GET /api/health/issues in 04-api-server/99-maintenance/01-ui-hook-migration.
+ *
+ * - `issues` comes from GET /api/health/issues (IssueItem[], server-side parsed)
+ * - `staleness` is derived client-side from useDocGraph() nodes + issues
+ * - `subtreeCosts` remains PLACEHOLDER_COSTS (out of scope for this round)
+ * - `nodes` comes from useDocGraph() (already live-API-backed)
  *
  * Spec: docs/01-ui/06-health.md §Design > Components and files
- *
- * HOOK-RULES NOTE (spec R2 — §Design > Data source):
- * The spec calls for useDocSource(id) to be called in a loop over authored
- * nodes. That pattern is safe when the underlying hook is a thin synchronous
- * lookup over an eager build-time map — no conditional hooks, no Suspense, no
- * side effects that shift hook call order.
- *
- * In practice, calling any hook (even a safe one) inside .map() violates the
- * ESLint react-hooks/rules-of-hooks rule, which cannot introspect the
- * implementation. To stay lint-clean and future-proof, this file builds its
- * own module-level source map using the same import.meta.glob + idForPath
- * pattern as useDocSource.ts. If useDocSource ever becomes async (TanStack
- * Query, lazy glob, etc.), replace this map with a single batch query
- * returning Map<NodeId, string>. The component structure is unchanged.
- *
- * UPGRADE TRIGGER: async useDocSource → refactor to batch query.
  */
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useDocGraph } from "@/components/dag/useDocGraph";
-import { idForPath } from "@/lib/parseDocs";
 import type {
   DocNode,
   IssueItem,
@@ -30,37 +22,7 @@ import type {
   StalenessSignal,
   SubtreeCost,
 } from "@/lib/types";
-import { parseIssueItems } from "@/lib/parseIssues";
 import { deriveStaleness } from "@/lib/deriveHealth";
-
-// ---------------------------------------------------------------------------
-// Module-level eager raw-body map — same glob pattern as useDocSource.ts,
-// scoped to this file so the loop in assembleHealthData is a plain Map lookup
-// with no hook calls inside it.
-// ---------------------------------------------------------------------------
-
-const rawGlob = import.meta.glob<string>("../../../../docs/**/*.md", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-});
-
-function buildRawMap(): ReadonlyMap<NodeId, string> {
-  const map = new Map<NodeId, string>();
-  for (const [absPath, raw] of Object.entries(rawGlob)) {
-    const idx = absPath.indexOf("/docs/");
-    if (idx === -1) continue;
-    const relPath = "docs" + absPath.slice(idx + "/docs".length);
-    const id = idForPath(relPath);
-    if (id !== null) {
-      map.set(id, raw);
-    }
-  }
-  return map;
-}
-
-/** NodeId → raw markdown, built once at module load (build-time). */
-const rawByNodeId: ReadonlyMap<NodeId, string> = buildRawMap();
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -75,19 +37,10 @@ export interface HealthData {
   subtreeCosts: SubtreeCost[];
   /**
    * Full node set passed through for dep-impact queries and node-label lookups
-   * in widgets. Phase-1 coupling to parseDocs.ts shape; acceptable until a
-   * dedicated label/graph slice is warranted. See spec N4 audit note.
+   * in widgets.
    */
   nodes: DocNode[];
 }
-
-const PRIORITY_ORDER: Record<string, number> = {
-  HIGH: 0,
-  MEDIUM: 1,
-  LOW: 2,
-  TRIVIAL: 3,
-  UNKNOWN: 4,
-};
 
 // Subtree roots for the token-cost placeholder table.
 // Phase-1: hard-coded. The API server will supply real SubtreeCost[] entries.
@@ -103,31 +56,41 @@ const PLACEHOLDER_COSTS: SubtreeCost[] = [
 export function useHealthData(): HealthData {
   const nodes = useDocGraph();
 
+  const { data: issuesData } = useQuery<IssueItem[]>({
+    queryKey: ["health", "issues"] as const,
+    queryFn: async (): Promise<IssueItem[]> => {
+      const res = await fetch("/api/health/issues");
+      if (!res.ok)
+        throw new Error(`/api/health/issues returned ${res.status.toString()}`);
+      const body = (await res.json()) as { issues: IssueItem[] };
+      return body.issues;
+    },
+    placeholderData: () => [],
+    staleTime: 60_000,
+  });
+
+  const issues: IssueItem[] = issuesData ?? [];
+
   return useMemo(() => {
+    // Rebuild issuesByNode map for deriveStaleness (group by nodeId)
     const issuesByNode = new Map<NodeId, IssueItem[]>();
-
-    for (const node of nodes) {
-      if (!node.authored) continue;
-      const raw = rawByNodeId.get(node.id);
-      if (raw === undefined) continue;
-      issuesByNode.set(node.id, parseIssueItems(node.id, raw));
+    for (const issue of issues) {
+      const list = issuesByNode.get(issue.nodeId);
+      if (list) {
+        list.push(issue);
+      } else {
+        issuesByNode.set(issue.nodeId, [issue]);
+      }
     }
-
-    const allIssues = Array.from(issuesByNode.values())
-      .flat()
-      .sort(
-        (a, b) =>
-          (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4),
-      );
 
     const allStaleness = deriveStaleness(nodes, issuesByNode);
     const staleNodes = allStaleness.filter((s) => s.isStale);
 
     return {
-      issues: allIssues,
+      issues,
       staleness: staleNodes,
       subtreeCosts: PLACEHOLDER_COSTS,
       nodes,
     };
-  }, [nodes]);
+  }, [nodes, issues]);
 }

@@ -14,6 +14,10 @@ export { buildDocGraph, idForPath, pathForNodeId } from "./docs/buildDocGraph.js
 export type { BuildDocGraphResult, DocValidationFailure } from "./docs/buildDocGraph.js";
 export type { DocNode } from "./docs/types.js";
 
+// Doc issue types and parser (04-api-server/99-maintenance/01-ui-hook-migration item 0)
+export type { IssueItem, IssuePriority } from "./docs/issues.js";
+export { parseIssueItems } from "./docs/issues.js";
+
 // Core types (canonical home — re-exported by app/src/lib/types.ts)
 export type { NodeId, NodeStatus } from "./coreTypes.js";
 

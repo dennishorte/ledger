@@ -1,18 +1,7 @@
 import { Hono } from "hono";
-import { buildDocGraph, validateDocNode, parseDocNode, idForPath } from "@ledger/parser";
-import { readDocsTree } from "../readDocs.js";
+import { buildDocGraph, validateDocNode, parseDocNode } from "@ledger/parser";
+import { readDocsTree, findRawDocForNodeId } from "../readDocs.js";
 import type { ServerEnv } from "../server.js";
-
-function findRawDocForNodeId(
-  rawDocs: Record<string, string>,
-  nodeId: string,
-): { path: string; content: string } | null {
-  for (const [path, content] of Object.entries(rawDocs)) {
-    // readDocsTree keys are docs-relative (e.g. "01-leaf.md"); idForPath expects "docs/" prefix
-    if (idForPath(`docs/${path}`) === nodeId) return { path, content };
-  }
-  return null;
-}
 
 export const docsRoute = new Hono<ServerEnv>()
   .get("/", async (c) => {
@@ -20,6 +9,14 @@ export const docsRoute = new Hono<ServerEnv>()
     const rawDocs = await readDocsTree(project.docsRoot);
     const { nodes, validationErrorPaths, validationErrors } = buildDocGraph(rawDocs);
     return c.json({ nodes, validation: { errorPaths: validationErrorPaths, errors: validationErrors } });
+  })
+  .get("/:nodeId{.+}/source", async (c) => {
+    const project = c.get("project");
+    const nodeId = c.req.param("nodeId");
+    const rawDocs = await readDocsTree(project.docsRoot);
+    const entry = findRawDocForNodeId(rawDocs, nodeId);
+    if (!entry) return c.json({ error: "node not found" }, 404);
+    return c.json({ id: nodeId, raw: entry.content });
   })
   .get("/:nodeId{.+}", async (c) => {
     const project = c.get("project");

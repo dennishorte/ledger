@@ -2,7 +2,7 @@
 
 **Node ID:** `04-api-server/99-maintenance/01-ui-hook-migration`
 **Parent:** `04-api-server/99-maintenance` (`docs/04-api-server/99-maintenance/00-maintenance.md`)
-**Status:** APPROVED
+**Status:** IN_PROGRESS
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
