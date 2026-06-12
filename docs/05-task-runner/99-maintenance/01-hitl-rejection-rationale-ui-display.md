@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (DRAFT → APPROVED, spec review applied)
+**Last Updated:** 2026-06-12 (APPROVED → VERIFY, implementation complete + impl-review sign-off)
 
 **Dependencies:** `05-task-runner/03-hitl-gate` (reject endpoint `followUp` field), `05-task-runner/05-ui-hook-migration` (`TaskInspector`, `useRejectTask`)
 
@@ -143,7 +143,21 @@ At the usage site in `TaskInspector.tsx` (lines 214–220), add/strengthen the e
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Implementation review sign-off (2026-06-12)
+
+Verdict: **APPROVED** — no code fixes required.
+
+| Area | Finding | Resolution |
+|------|---------|------------|
+| `useRejectTask.ts` — `RejectVariables.followUp` | `source` is optional in `TaskInput` (defaults to `"operator_injected"`). The UI correctly omits it — no issue. | No change needed. |
+| `TaskInspector.tsx` — `latestStatusReason` comment | Strengthened comment present at usage site per spec requirement (item 1a). | Verified. |
+| `TaskInspector.tsx` — follow-up toggle | Toggle, title input, type select, and disabled-confirm guard all implemented per Design. | Verified. |
+| `DISPATCHABLE_TYPES` set | Superset of spec-enumerated types — valid additive choice; server accepts any `TaskType` for follow-up. | Verified. |
+| `TaskInspector.test.tsx` | Two new test cases present; all 172 tests green. | `pnpm -C app test` ✓ |
+| Typecheck | No errors. | `pnpm -C app typecheck` ✓ |
+| Lint | No warnings. | `pnpm -C app lint` ✓ |
+| `03-hitl-gate.md` open issue | Struck through with pointer to this round. | Verified. |
+| `05-ui-hook-migration.md` open issue | Struck through with pointer to this round. | Verified. |
 
 ---
 
