@@ -151,4 +151,5 @@ export type LogEvent = BaseLogEvent &
         reason?: string;
       }
     | { kind: "error"; message: string; stack?: string }
+    | { kind: "subprocess_killed"; signal: "SIGKILL"; taskId: TaskId }
   );

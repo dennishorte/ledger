@@ -14,4 +14,4 @@ This container holds maintenance rounds for the `06-agent-dispatcher` subtree. P
 
 | ID | Title | Status |
 |----|-------|--------|
-| `06-agent-dispatcher/99-maintenance/01-round-1` | SIGKILL escalation after SIGTERM on cancel | DRAFT |
+| `06-agent-dispatcher/99-maintenance/01-round-1` | SIGKILL escalation after SIGTERM on cancel | VERIFY |

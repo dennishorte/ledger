@@ -133,7 +133,12 @@ export async function loadProjectContext(opts: {
   });
 
   // Wire cancellation registry BEFORE creating the executor (factory reads it).
-  const dispatchCancellation = createCancellationRegistry();
+  // Pass emitEvent so SIGKILL escalations are written to the runner's events table.
+  const dispatchCancellation = createCancellationRegistry({
+    emitEvent: (taskId, event) => {
+      runner.store.appendEvent(taskId, event);
+    },
+  });
 
   const healthScanner = createHealthScanner({
     projectRoot,

@@ -3,7 +3,7 @@
   "$id": "https://ledger.dev/schemas/log-event.schema.json",
   "$comment": "LogEvent discriminated union. Spec: docs/05-task-runner/01-store-schema.md §Design > JSON Schemas. Version 1.",
   "title": "LogEvent",
-  "description": "Append-only log event for a task. Six discriminant kinds. The status_change variant's 'from' field is optional — absent on the seq-0 creation event (Spec Review S4).",
+  "description": "Append-only log event for a task. Seven discriminant kinds. The status_change variant's 'from' field is optional — absent on the seq-0 creation event (Spec Review S4).",
   "type": "object",
   "required": ["id", "taskId", "at", "seq", "kind"],
   "properties": {
@@ -28,7 +28,7 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["reasoning", "tool_call", "tool_result", "artifact", "status_change", "error"]
+      "enum": ["reasoning", "tool_call", "tool_result", "artifact", "status_change", "error", "subprocess_killed"]
     }
   },
   "oneOf": [
@@ -110,6 +110,15 @@
         "stack": { "type": "string" }
       },
       "required": ["kind", "message"]
+    },
+    {
+      "title": "subprocess_killed",
+      "properties": {
+        "kind": { "const": "subprocess_killed" },
+        "signal": { "type": "string", "const": "SIGKILL" },
+        "taskId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["kind", "signal", "taskId"]
     }
   ]
 }

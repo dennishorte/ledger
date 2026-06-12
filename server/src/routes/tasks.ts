@@ -216,7 +216,7 @@ export const tasksRoute = new Hono<ServerEnv>()
       } catch {
         return c.json({ error: "wrong_status", expected: "RUNNING", actual: "raced" }, 409);
       }
-      subprocess.kill("SIGTERM");
+      project.dispatchCancellation.killWithEscalation(id, "SIGTERM");
     } else {
       // BLOCKED or PENDING: no subprocess exists yet — transition directly.
       try {
