@@ -44,6 +44,25 @@ Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md
 
 Add the new node to its parent's children manifest in the same commit.
 
+#### Decomposition checkpoint — before advancing to stage 2
+
+Run these signals against the freshly written DRAFT. If **any** fire, stop and follow
+`.ledger/process/decomposition.md` instead of proceeding to stage 2.
+
+- **Unrelated concerns:** you can name ≥2 prospective child responsibilities with
+  non-overlapping data contracts (different files, types, or endpoints each would own).
+- **Single-implementer breach:** one agent cannot ship the full node in one worktree
+  session without itself having to dispatch sub-agents.
+- **Size already large:** the DRAFT spec is already pushing the token-size threshold
+  (default 12 000 tokens) or the implementation diff is clearly unbounded.
+- **Depth headroom exhausted:** this node already sits at nesting level 4, so any
+  children would exceed the depth cap with no written coordination justification in the
+  parent's Decisions section.
+- **≥3 independent top-level files:** the Design section lists ≥3 files that have no
+  shared type or interface dependency — a strong proxy for hidden multi-responsibility.
+
+If none fire, the node is a leaf. Proceed to stage 2.
+
 ### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
 
 Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. **Commit this transition as its own commit** before dispatching the reviewer — every lifecycle transition produces its own commit (see Patterns below). SPEC_REVIEW is a real lifecycle state per PRD §6.2: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.

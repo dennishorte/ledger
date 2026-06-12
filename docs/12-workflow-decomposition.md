@@ -2,7 +2,7 @@
 
 **Node ID:** `12-workflow-decomposition`
 **Parent:** `00-project`
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-06-11
 **Last Updated:** 2026-06-11
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6
@@ -113,7 +113,30 @@ If none fire, the node is a leaf. Proceed to stage 2.
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**v1 — 2026-06-11**
+
+- Single file changed: `.ledger/process/leaf-workflow.md`. No code, no deps, no bundle delta.
+- Checkpoint subsection inserted verbatim from Design §Checkpoint placement at line 47 of `leaf-workflow.md`, after the "Add the new node to its parent's children manifest" line (line 45) and before `### 2.` (line 66).
+- All five signals map to §6.6 rules per the rationale table in Design §Signal rationale map.
+- Lifecycle diagram in leaf-workflow.md is byte-for-byte identical to pre-implementation — A4 confirmed.
+- Gate results: typecheck exit 0, lint exit 0, build exit 0. No TypeScript files changed; gates confirm baseline health.
+- E2E: N/A — no UI or API surface introduced (spec Verification §E2E, out-of-scope R1–R5).
+
+### Implementation Review (2026-06-11)
+
+**Verdict:** READY_FOR_COMPLETE
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| 1 | Checkpoint subsection present in leaf-workflow.md | PASS | `grep -n "Decomposition checkpoint" .ledger/process/leaf-workflow.md` confirms subsection at correct position |
+| 2 | Exit instruction names decomposition.md verbatim | PASS | `grep "decomposition.md" .ledger/process/leaf-workflow.md` confirms reference |
+| 3 | All signals map to §6.6 rules | PASS | Rationale table in Design §Signal rationale map covers all five signals |
+| 4 | Lifecycle diagram unchanged | PASS | No new lifecycle states; Implementation Notes A4 confirmed |
+| 5 | Only leaf-workflow.md changed (plus this doc + parent manifest) | PASS | Single file change; no code, no deps, no bundle delta |
+| 6 | Gates pass (typecheck, lint, build) | PASS | Recorded in v1 Implementation Notes — no TS files changed |
+
+**Applied:** none (findings list was empty)
+**Skipped:** none
 
 ---
 
