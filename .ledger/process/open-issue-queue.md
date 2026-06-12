@@ -11,16 +11,10 @@ This file is the durable output of the triage stages (0–3) of `open-issue-reso
 
 | # | Slug | Priority | Resolution | Nodes | Issues |
 |---|------|----------|------------|-------|--------|
-| 1 | `dispatcher-sigkill-escalation` | MEDIUM | maintenance-pass | `06-agent-dispatcher/03-claude-code-executor`, `06-agent-dispatcher/05-dispatch-api` | 2 |
+| ~~1~~ | ~~`dispatcher-sigkill-escalation`~~ | ~~MEDIUM~~ | ~~maintenance-pass~~ | ~~`06-agent-dispatcher/03-claude-code-executor`, `06-agent-dispatcher/05-dispatch-api`~~ | ~~2~~ |
 | 2 | `hitl-rejection-rationale-ui-display` | MEDIUM | maintenance-pass | `05-task-runner/03-hitl-gate`, `05-task-runner/05-ui-hook-migration` | 2 |
 
-### `dispatcher-sigkill-escalation`
-**Category:** functional-bug  
-**Execution notes:** Add a per-task `setTimeout` (5–10 s) in `server/src/dispatcher/executor/cancellation.ts` triggered on `kill("SIGTERM")`. Cancel it on clean subprocess exit. On timeout, fire `kill("SIGKILL")` and emit a `subprocess_killed` log event. Strike both issue bullets and add a cross-ref pointer from `05-dispatch-api` to the `03` fix.
-
-Members:
-- `06-agent-dispatcher/03-claude-code-executor` — "No SIGKILL escalation after SIGTERM … *(Priority: MEDIUM)*"
-- `06-agent-dispatcher/05-dispatch-api` — "SIGKILL escalation for hung cancels. Inherited from `03`'s Open Issues … *(Priority: MEDIUM)*"
+### ~~`dispatcher-sigkill-escalation`~~ → resolved by `06-agent-dispatcher/99-maintenance/01-round-1` (2026-06-12)
 
 ### `hitl-rejection-rationale-ui-display`
 **Category:** tech-debt  
@@ -61,3 +55,4 @@ Re-evaluate at next collection pass. A parked group re-enters the active queue w
 | Slug | Resolved | How |
 |------|----------|-----|
 | `executor-stdout-stderr-stale-issue` | 2026-06-12 | doc-only — struck stale MEDIUM bullet in `03-claude-code-executor`; code had already shipped (`lifecycle.ts:92`). Commit `16e07c4`. |
+| `dispatcher-sigkill-escalation` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/01-round-1` — `killWithEscalation` + escalation timer in `cancellation.ts`; `subprocess_killed` LogEvent kind; doc-strikes in `03`/`05`/parent. |

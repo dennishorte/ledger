@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher/99-maintenance/01-round-1`
 **Parent:** `06-agent-dispatcher/99-maintenance` (`docs/06-agent-dispatcher/99-maintenance/00-maintenance.md`)
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (VERIFY)
+**Last Updated:** 2026-06-12 (COMPLETE)
 
 **Dependencies:** `06-agent-dispatcher/03-claude-code-executor` (owns `cancellation.ts` and the subprocess handle); `06-agent-dispatcher/05-dispatch-api` (cross-ref bullet to strike)
 
@@ -135,6 +135,7 @@ A new `LogEvent` kind: `{ kind: "subprocess_killed", signal: "SIGKILL", taskId: 
 - **Spec review verdict (2026-06-12):** APPROVED_WITH_CHANGES. One should-fix applied (SF1: `packages/parser/src/runner/types.ts` and `docs/_schemas/log-event.schema.json` added to the item 1 files-touched list — information was present elsewhere in the spec but absent from the implementer's canonical scope reference). Two nits (N1: `"SIGKILL"` direct-path clarification; N2: `taskId` redundancy in `SubprocessKilledEvent` shape) noted but not applied — cosmetic only, do not affect correctness.
 - **Implementation (2026-06-12):** All six files in the item-1 scope updated. `cancellation.ts` rewritten with `RegistryEntry` map (subprocess + escalationTimer), `killWithEscalation` method, `unref()` on the timer to avoid keeping Node.js alive, and timer cancellation in both `unbind` and bind-overwrite. `context.ts` passes `emitEvent` callback that writes to `runner.store.appendEvent`. `tasks.ts` cancel route switches from `subprocess.kill("SIGTERM")` to `dispatchCancellation.killWithEscalation(id, "SIGTERM")`. `subprocess_killed` kind added to `@ledger/parser/src/runner/types.ts` LogEvent union and `docs/_schemas/log-event.schema.json` oneOf. Tests expanded from 8 to 14 (timer-path: escalation fires, unbind cancels timer, SIGKILL direct path, emitEvent absent safe degradation, false on unknown taskId). Doc bullets struck in `03-claude-code-executor.md`, `05-dispatch-api.md`, `00-agent-dispatcher.md`. Typecheck and server test suite (407 pass / 2 skip) clean.
 - **Implementation review sign-off (2026-06-12):** APPROVED. All verification items pass.
+- **Operator verification sign-off (2026-06-12):** COMPLETE. Full 12-item acceptance matrix run by operator; all PASS. Server test suite 407 pass / 2 skip (43 files). TypeScript typecheck clean. V9/V10/V11 doc-strike cross-refs verified in place. No regressions.
 
   | # | Item | Result |
   |---|------|--------|
