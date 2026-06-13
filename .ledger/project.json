@@ -2,5 +2,17 @@
   "schemaVersion": 1,
   "name": "Ledger",
   "docs": "docs",
-  "agent": "claude-code"
+  "agent": "claude-code",
+  "workflow": {
+    "rootDoc": "00-project",
+    "typesEntrypoint": "app/src/lib/types.ts",
+    "apiPort": 4180,
+    "uiPort": 4179,
+    "gates": [
+      { "label": "typecheck", "command": "pnpm -C {dir}/app typecheck" },
+      { "label": "lint",      "command": "pnpm -C {dir}/app lint" },
+      { "label": "build",     "command": "pnpm -C {dir}/app build" }
+    ],
+    "e2eGate": "pnpm -C {dir}/e2e test"
+  }
 }

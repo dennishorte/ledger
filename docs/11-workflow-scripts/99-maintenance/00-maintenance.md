@@ -21,4 +21,4 @@ Process: `.ledger/process/maintenance-round.md`
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `11-workflow-scripts/99-maintenance/01-portability` | Cross-project portability | — | IN_PROGRESS |
+| `11-workflow-scripts/99-maintenance/01-portability` | Cross-project portability | — | VERIFY |

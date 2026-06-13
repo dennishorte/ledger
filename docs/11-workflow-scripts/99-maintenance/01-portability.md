@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts/99-maintenance/01-portability`
 **Parent:** `11-workflow-scripts/99-maintenance`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-06-13
 **Last Updated:** 2026-06-13
 **Dependencies:** `.ledger/project.json` (extended with `workflow` config block), `docs/_schemas/project-metadata.schema.json`, `.claude/workflows/leaf-workflow.js`, `.claude/workflows/leaf-workflow-finish.js`
@@ -172,7 +172,27 @@ The agent is given both forms in the prompt so it can branch on presence without
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-06-13 — all blocking, should-fix, and selected nit items from the spec.
+
+**Files changed:**
+- `.ledger/project.json` — added `workflow` config block with Ledger defaults (rootDoc, typesEntrypoint, apiPort, uiPort, gates[], e2eGate)
+- `docs/_schemas/project-metadata.schema.json` — added optional `workflow` object definition; all sub-keys optional; `additionalProperties: false` preserved; spec review finding B1
+- `.claude/workflows/leaf-workflow.js` — config loading (parallel config + date agents in Inspect); gate parameterisation via `renderGates()`; R-S7 fix (Stage 6 gates use `worktreePath` not `repoPath`); B3 api-curl fallback (check `test -f` then raw curl with `apiBaseUrl`); R-N2 date resolved via agent call; R-S3 `uiBaseUrl` from config; R-S4 `typesEntrypoint` conditional in Stage 2; R-S5 removed hardcoded TS discipline from Stage 4/6; R-S2 `docsDir` interpolated throughout; R-S1 `rootDoc` from config; `parentDocName` falls back to `rootDoc` for top-level nodes
+- `.claude/workflows/leaf-workflow-finish.js` — config loading (Inspect phase); gate parameterisation in Stage 10 (uses `repoPath`); `repoPath` auto-detect via agent when not supplied in args (removes hardcoded path); R-SYNC global copy step in Stage 10 merge prompt
+
+**Decisions:**
+- D6 (global sync): Moved the `cp` sync commands into the Stage 10 merge agent prompt in `leaf-workflow-finish.js` rather than a separate stage — the merge agent already runs post-commit cleanup steps; adding 2 `cp` lines is lower friction than a new phase
+- `repoPath` in `leaf-workflow-finish.js` was previously hardcoded to `/Users/dennis/code/ledger` (a machine-specific literal); replaced with auto-detect using the same git rev-parse pattern as `leaf-workflow.js`
+
+**Gate results (worktree — pre-existing failures only, not introduced by this change):**
+- typecheck: 0 (pass)
+- lint: 1 (pre-existing: 11 errors in `NodeInspector.test.tsx` + `useLogStream.test.ts`)
+- build: 2 (pre-existing: 2 errors in `LogEventRow.tsx` + `LogFilters.tsx`)
+- e2e: N/A (workflow scripts only; no UI/API surface changes)
+
+**Bundle delta:** N/A — no app bundle changes
+
+**Commit prefix note (R-S6):** Commit prefixes `docs()/impl()/review()` are ledger-specific conventions baked into workflow script prompt strings. Full parameterisation is deferred (D5 in Decisions).
 
 ---
 
