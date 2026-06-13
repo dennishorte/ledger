@@ -74,6 +74,7 @@ const wf = projectCfg.workflow ?? {}
 
 const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
+const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
 const gateCommands = wf.gates ?? []
 
 log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length)
@@ -170,7 +171,7 @@ await agent(
   'Clean up the worktree and branch for node "' + nodeId + '".\n\n' +
   'Steps:\n' +
   '1. Check if any dev server is pointing at ' + worktreePath + ':\n' +
-  '   lsof -iTCP:4179 -sTCP:LISTEN -t 2>/dev/null || true\n' +
+  '   lsof -iTCP:' + uiPort + ' -sTCP:LISTEN -t 2>/dev/null || true\n' +
   '   Only kill if the process is serving from the worktree path.\n\n' +
   '2. Remove the worktree (double -f because Claude Code locks worktrees):\n' +
   '   git -C ' + repoPath + ' worktree remove -f -f ' + worktreePath + '\n\n' +

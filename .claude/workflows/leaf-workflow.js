@@ -391,8 +391,9 @@ if (runImpl) {
 
   if (gateCommands.length > 0) {
     log('Gates: ' + gateCommands.map(function(g) { return g.label + '=' + (implResult[g.label + 'Exit'] ?? '?') }).join(' '))
-    if (implResult.typecheckExit !== 0 || implResult.buildExit !== 0) {
-      log('WARNING: typecheck or build gate failed — reviewer will flag')
+    const anyGateFailed = gateCommands.some(function(g) { return implResult[g.label + 'Exit'] !== 0 })
+    if (anyGateFailed) {
+      log('WARNING: one or more gates failed — reviewer will flag')
     }
   }
 } else {
