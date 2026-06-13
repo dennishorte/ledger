@@ -197,6 +197,7 @@ describe("runScan over the sample-project fixture", () => {
       .map((f) => f.nodeId)
       .sort();
     // 02-broken is schema_invalid (short-circuited before size); the parent + underscore docs are skipped
-    expect(sized).toEqual(["01-leaf", "subdir/03-nested"]);
+    // 04-issues.md fixture was added for health-endpoint tests — included here
+    expect(sized).toEqual(["01-leaf", "04-issues", "subdir/03-nested"]);
   });
 });

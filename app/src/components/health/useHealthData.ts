@@ -69,9 +69,9 @@ export function useHealthData(): HealthData {
     staleTime: 60_000,
   });
 
-  const issues: IssueItem[] = issuesData ?? [];
-
   return useMemo(() => {
+    const issues: IssueItem[] = issuesData ?? [];
+
     // Rebuild issuesByNode map for deriveStaleness (group by nodeId)
     const issuesByNode = new Map<NodeId, IssueItem[]>();
     for (const issue of issues) {
@@ -92,5 +92,5 @@ export function useHealthData(): HealthData {
       subtreeCosts: PLACEHOLDER_COSTS,
       nodes,
     };
-  }, [nodes, issues]);
+  }, [nodes, issuesData]);
 }

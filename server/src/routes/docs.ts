@@ -10,7 +10,7 @@ export const docsRoute = new Hono<ServerEnv>()
     const { nodes, validationErrorPaths, validationErrors } = buildDocGraph(rawDocs);
     return c.json({ nodes, validation: { errorPaths: validationErrorPaths, errors: validationErrors } });
   })
-  .get("/:nodeId{.+}/source", async (c) => {
+  .get("/:nodeId{.+[^/]}/source", async (c) => {
     const project = c.get("project");
     const nodeId = c.req.param("nodeId");
     const rawDocs = await readDocsTree(project.docsRoot);

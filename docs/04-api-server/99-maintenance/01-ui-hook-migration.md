@@ -2,7 +2,7 @@
 
 **Node ID:** `04-api-server/99-maintenance/01-ui-hook-migration`
 **Parent:** `04-api-server/99-maintenance` (`docs/04-api-server/99-maintenance/00-maintenance.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
@@ -220,6 +220,21 @@ Reviewer confirmed APPROVED_WITH_CHANGES; fixes applied before promoting to APPR
 - **S3 (Should-fix, fixed):** `DocSource` type compatibility with the item-1 endpoint shape (`{ id: NodeId; raw: string }`) is now confirmed inline in Item 3 prose — the `as DocSource` cast is safe.
 - **N1 (Nit, fixed):** `subtreeCosts: PLACEHOLDER_COSTS` unchanged status now explicitly noted in Item 4.
 - **N2 (Nit, fixed):** `staleTime: 60_000` for the issues query now noted inline in Item 4 (was only in D5).
+
+---
+
+**Implementation review — 2026-06-12 — NEEDS_REVISIONS → fixes applied**
+
+Reviewer confirmed three blocking findings; all resolved:
+
+- **B1 (Blocking, fixed):** `server/test/docs.test.ts` had no coverage for `GET /api/docs/:nodeId/source` (200 or 404). `server/test/health.test.ts` had no coverage for `GET /api/health/issues` (list shape, sort order, empty-node case). Both required by Requirements §5. Added 3 source tests + 4 issues tests; server suite goes 413 → 420 passing.
+- **B2 (Blocking, fixed):** `app/src/components/docs/useDocSource.test.tsx` and `app/src/components/health/useHealthData.test.tsx` did not exist. Added both with 4 tests each covering 200, 404/5xx, empty, and disabled-query paths.
+- **B3 (Blocking, fixed):** `useHealthData.ts:72` declared `const issues: IssueItem[] = issuesData ?? []` outside `useMemo` but referenced it in the dependency array — `??` produces a new array reference on every render when `issuesData` is undefined, causing `useMemo` to thrash during loading. Fix: moved `const issues` inside `useMemo`, dependency changed from `[nodes, issues]` to `[nodes, issuesData]`.
+
+Incidental fixes during B1:
+- `GET /api/docs/:nodeId/source` route pattern fixed from `/:nodeId{.+}/source` to `/:nodeId{.+[^/]}/source` — the `.+` regex was greedy and consumed the `/source` suffix as part of the nodeId, causing every `/source` request to fall through to the `/:nodeId{.+}` catch-all (404). Verified via Hono routing test.
+- `GET /api/health/issues` was mistakenly placed in `healthRoute` (mounted at `/api/_health`) rather than `scansRoute` (mounted at `/api/health`). Moved to `scansRoute`.
+- Added `server/__fixtures__/sample-project/docs/04-issues.md` fixture with HIGH/MEDIUM/LOW issues for endpoint test coverage; updated `server/test/scanner.test.ts` size-findings assertion to include `04-issues`.
 
 ---
 

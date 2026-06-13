@@ -96,6 +96,37 @@ describe("GET /api/docs/:nodeId", () => {
   });
 });
 
+describe("GET /api/docs/:nodeId/source", () => {
+  it("returns 200 with id and raw for a known nodeId", async () => {
+    const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
+    const app = createServer(project);
+    const res = await app.request("/api/docs/01-leaf/source");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { id: string; raw: string };
+    expect(body.id).toBe("01-leaf");
+    expect(typeof body.raw).toBe("string");
+    expect(body.raw.length).toBeGreaterThan(0);
+  });
+
+  it("returns 404 with error: node not found for an unknown nodeId", async () => {
+    const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
+    const app = createServer(project);
+    const res = await app.request("/api/docs/nonexistent-node/source");
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("node not found");
+  });
+
+  it("handles multi-segment nodeIds in /source", async () => {
+    const project = await loadProjectContext({ projectPath: fixturePath, port: 0 });
+    const app = createServer(project);
+    const res = await app.request("/api/docs/subdir/03-nested/source");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { id: string; raw: string };
+    expect(body.id).toBe("subdir/03-nested");
+  });
+});
+
 describe("loadProjectContext path containment (Spec Review S4)", () => {
   it("rejects a docs field containing path-traversal segments", async () => {
     await expect(
