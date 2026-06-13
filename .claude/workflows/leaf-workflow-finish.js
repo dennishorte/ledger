@@ -49,25 +49,31 @@ if (!repoPath) {
   repoPath = repoResult.path
 }
 
-// Load project config
-const projectCfgResult = await agent(
-  'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
-  'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
-  'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
-  'Otherwise return the full parsed JSON object.\n' +
-  'Return the result as a JSON object.',
-  {
-    schema: {
-      type: 'object',
-      properties: {
-        docs: { type: 'string' },
-        workflow: { type: 'object' },
+// Load project config and resolve date in parallel
+const [projectCfgResult, dateResult] = await Promise.all([
+  agent(
+    'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
+    'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
+    'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
+    'Otherwise return the full parsed JSON object.\n' +
+    'Return the result as a JSON object.',
+    {
+      schema: {
+        type: 'object',
+        properties: {
+          docs: { type: 'string' },
+          workflow: { type: 'object' },
+        },
       },
-    },
-    label: 'load-config',
-    phase: 'Inspect',
-  }
-)
+      label: 'load-config',
+      phase: 'Inspect',
+    }
+  ),
+  agent(
+    'Run: date +%Y-%m-%d\nReturn the result as a JSON object with key "date".',
+    { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect' }
+  ),
+])
 
 const projectCfg = projectCfgResult ?? {}
 const wf = projectCfg.workflow ?? {}
@@ -76,8 +82,9 @@ const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
 const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
 const gateCommands = wf.gates ?? []
+const runDate      = dateResult.date
 
-log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length)
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' date=' + runDate)
 
 // Gate interpolation helper
 function renderGates(cmds, dir) {
@@ -117,12 +124,12 @@ if (runPromote) {
     'In the worktree at "' + worktreePath + '", promote node "' + nodeId + '" to COMPLETE.\n\n' +
     'Single commit:\n' +
     '1. In "' + worktreePath + '/' + docsDir + '/' + nodeId + '.md":\n' +
-    '   - Change **Status:** VERIFY to **Status:** COMPLETE (v1, TODAY_DATE)\n' +
+    '   - Change **Status:** VERIFY to **Status:** COMPLETE (v1, ' + runDate + ')\n' +
     '   - If there is a sample-tree table, update the row for ' + nodeId + ' to [COMPLETE]\n\n' +
     '2. In "' + worktreePath + '/' + docsDir + '/' + parentDocName + '.md":\n' +
-    '   - Update the children manifest row for ' + nodeId + ' to COMPLETE (v1, TODAY_DATE)\n\n' +
+    '   - Update the children manifest row for ' + nodeId + ' to COMPLETE (v1, ' + runDate + ')\n\n' +
     '3. git -C ' + worktreePath + ' add -A\n' +
-    '4. git -C ' + worktreePath + ' commit -m "docs(' + leafId + '): VERIFY → COMPLETE (v1, TODAY_DATE)"\n\n' +
+    '4. git -C ' + worktreePath + ' commit -m "docs(' + leafId + '): VERIFY → COMPLETE (v1, ' + runDate + ')"\n\n' +
     'Only status bumps in this commit — no other changes.',
     { label: 'promote', phase: 'Promote' }
   )
@@ -146,10 +153,10 @@ if (runMerge) {
     '  git -C ' + repoPath + ' merge --no-ff --no-commit ' + branchName + '\n\n' +
     'Step 2 — Apply cross-doc sync BEFORE committing:\n' +
     '  a) In "' + repoPath + '/CLAUDE.md":\n' +
-    '     Find the line in the backend build-order paragraph that references "' + nodeId + '" or "' + leafId + '".\n' +
-    '     Update it to COMPLETE (v1, TODAY_DATE).\n\n' +
-    '  b) In "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §14 manifest:\n' +
-    '     Update the ' + nodeId + ' row Status column to COMPLETE (v1, TODAY_DATE).\n\n' +
+    '     Find any line referencing "' + nodeId + '" or "' + leafId + '" and update it to COMPLETE (v1, ' + runDate + ').\n' +
+    '     If no such line exists, skip this step.\n\n' +
+    '  b) In "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md":\n' +
+    '     Find the ' + nodeId + ' row in any manifest/table and update the Status column to COMPLETE (v1, ' + runDate + ').\n\n' +
     '  c) Check any sibling spec with a sample-tree picture that shows ' + nodeId + ' — update those rows too.\n\n' +
     mergeGates +
     'Step 4 — If all gates pass:\n' +
