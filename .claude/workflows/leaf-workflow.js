@@ -16,20 +16,22 @@ export const meta = {
 }
 
 // ── Args (globals injected by the Workflow framework) ─────────────────────────
-// Defensive coercion: named-workflow invocations may deliver args as a JSON
-// string instead of an object. Plain-string args (single-value case) are left
-// as-is and will fail the !nodeId guard below with a clear message.
-const _args = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
+// Accepts: object, JSON string, or plain string (plain string → nodeId).
+let _args = {}
+if (typeof args === 'string') {
+  try { _args = JSON.parse(args) } catch (_) { _args = { nodeId: args } }
+} else if (args && typeof args === 'object') {
+  _args = args
+}
 
 const nodeId = _args.nodeId
-const repoPath = _args.repoPath ?? '/Users/dennis/code/ledger'
+let repoPath = _args.repoPath ?? null
 const skipSpecReview = _args.skipSpecReview ?? false
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
 }
 
-const specPath = repoPath + '/docs/' + nodeId + '.md'
 const nodeParts = nodeId.split('/')
 const leafId = nodeParts[nodeParts.length - 1]
 const parentPrefix = nodeParts.slice(0, -1).join('/')
@@ -130,6 +132,18 @@ const WORKTREE_SCHEMA = {
 // ── Stage 0: Inspect ──────────────────────────────────────────────────────────
 
 phase('Inspect')
+
+// Auto-detect repoPath from git root when not supplied in args
+if (!repoPath) {
+  const repoResult = await agent(
+    'Run: git rev-parse --show-toplevel\nReturn the absolute path as a JSON object with key "path".',
+    { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect' }
+  )
+  repoPath = repoResult.path
+}
+
+const specPath = repoPath + '/docs/' + nodeId + '.md'
+
 const docStatus = await agent(
   'Read the file at "' + specPath + '". ' +
   'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false }. ' +
@@ -149,10 +163,11 @@ if (currentStatus === 'COMPLETE') {
 }
 
 // Derive stage-skip flags from lifecycle state
+// PLANNED is treated as pre-DRAFT (doc exists, spec not yet reviewed/approved)
 const runDraft = currentStatus === 'NOT_FOUND'
-const runSpecReview = (currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT') &&
+const runSpecReview = (currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT' || currentStatus === 'PLANNED') &&
   !skipSpecReview && !docStatus.specReviewDone
-const runApprove = currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT' ||
+const runApprove = currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT' || currentStatus === 'PLANNED' ||
   currentStatus === 'SPEC_REVIEW'
 const runImpl = runApprove || currentStatus === 'APPROVED'
 const runRebase = runImpl || currentStatus === 'IN_PROGRESS'
