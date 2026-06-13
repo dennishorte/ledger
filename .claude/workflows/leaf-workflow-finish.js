@@ -18,19 +18,11 @@ const _args = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 const nodeId = _args.nodeId
 const worktreePath = _args.worktreePath
 const branchName = _args.branchName
-const repoPath = _args.repoPath ?? '/Users/dennis/code/ledger'
+let repoPath = _args.repoPath ?? null
 
 if (!nodeId || !worktreePath || !branchName) {
   return { status: 'manual-needed', message: 'nodeId, worktreePath, and branchName are all required.' }
 }
-
-const specPath = repoPath + '/docs/' + nodeId + '.md'
-const nodeParts = nodeId.split('/')
-const leafId = nodeParts[nodeParts.length - 1]
-const parentPrefix = nodeParts.slice(0, -1).join('/')
-const parentDocName = parentPrefix
-  ? parentPrefix + '/00-' + parentPrefix.split('/').pop()
-  : '00-project'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +39,59 @@ const STATUS_SCHEMA = {
 // ── Stage 0: Inspect ──────────────────────────────────────────────────────────
 
 phase('Inspect')
+
+// Auto-detect repoPath from main worktree when not supplied in args
+if (!repoPath) {
+  const repoResult = await agent(
+    'Run: git -C "' + worktreePath + '" rev-parse --show-toplevel\nReturn the absolute path as a JSON object with key "path".',
+    { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect' }
+  )
+  repoPath = repoResult.path
+}
+
+// Load project config
+const projectCfgResult = await agent(
+  'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
+  'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
+  'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
+  'Otherwise return the full parsed JSON object.\n' +
+  'Return the result as a JSON object.',
+  {
+    schema: {
+      type: 'object',
+      properties: {
+        docs: { type: 'string' },
+        workflow: { type: 'object' },
+      },
+    },
+    label: 'load-config',
+    phase: 'Inspect',
+  }
+)
+
+const projectCfg = projectCfgResult ?? {}
+const wf = projectCfg.workflow ?? {}
+
+const docsDir      = projectCfg.docs ?? 'docs'
+const rootDoc      = wf.rootDoc ?? '00-project'
+const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
+const gateCommands = wf.gates ?? []
+
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length)
+
+// Gate interpolation helper
+function renderGates(cmds, dir) {
+  return cmds.map(function(g) { return g.command.replace('{dir}', dir) }).join('\n')
+}
+
+const specPath = repoPath + '/' + docsDir + '/' + nodeId + '.md'
+const nodeParts = nodeId.split('/')
+const leafId = nodeParts[nodeParts.length - 1]
+const parentPrefix = nodeParts.slice(0, -1).join('/')
+const parentDocName = parentPrefix
+  ? parentPrefix + '/00-' + parentPrefix.split('/').pop()
+  : rootDoc
+
 const docInfo = await agent(
   'Read "' + specPath + '". Return the current lifecycle status from **Status:** header.\n' +
   'Also run: git -C ' + repoPath + ' branch --merged main | grep -q "' + branchName + '" && echo merged || echo not-merged\n' +
@@ -71,10 +116,10 @@ if (runPromote) {
   await agent(
     'In the worktree at "' + worktreePath + '", promote node "' + nodeId + '" to COMPLETE.\n\n' +
     'Single commit:\n' +
-    '1. In "' + worktreePath + '/docs/' + nodeId + '.md":\n' +
+    '1. In "' + worktreePath + '/' + docsDir + '/' + nodeId + '.md":\n' +
     '   - Change **Status:** VERIFY to **Status:** COMPLETE (v1, TODAY_DATE)\n' +
     '   - If there is a sample-tree table, update the row for ' + nodeId + ' to [COMPLETE]\n\n' +
-    '2. In "' + worktreePath + '/docs/' + parentDocName + '.md":\n' +
+    '2. In "' + worktreePath + '/' + docsDir + '/' + parentDocName + '.md":\n' +
     '   - Update the children manifest row for ' + nodeId + ' to COMPLETE (v1, TODAY_DATE)\n\n' +
     '3. git -C ' + worktreePath + ' add -A\n' +
     '4. git -C ' + worktreePath + ' commit -m "docs(' + leafId + '): VERIFY → COMPLETE (v1, TODAY_DATE)"\n\n' +
@@ -89,6 +134,12 @@ if (runPromote) {
 
 if (runMerge) {
   phase('Merge')
+
+  const mergeGates = gateCommands.length > 0
+    ? 'Step 3 — Run gates (must all pass before commit):\n' +
+      renderGates(gateCommands, repoPath) + '\n\n'
+    : 'Step 3 — No gates configured; skip gate run.\n\n'
+
   await agent(
     'Merge the worktree branch into main with cross-doc sync for node "' + nodeId + '".\n\n' +
     'Step 1 — Start the merge (no-commit to allow cross-doc edits first):\n' +
@@ -97,16 +148,16 @@ if (runMerge) {
     '  a) In "' + repoPath + '/CLAUDE.md":\n' +
     '     Find the line in the backend build-order paragraph that references "' + nodeId + '" or "' + leafId + '".\n' +
     '     Update it to COMPLETE (v1, TODAY_DATE).\n\n' +
-    '  b) In "' + repoPath + '/docs/00-project.md" §14 manifest:\n' +
+    '  b) In "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §14 manifest:\n' +
     '     Update the ' + nodeId + ' row Status column to COMPLETE (v1, TODAY_DATE).\n\n' +
     '  c) Check any sibling spec with a sample-tree picture that shows ' + nodeId + ' — update those rows too.\n\n' +
-    'Step 3 — Run gates (must all pass before commit):\n' +
-    '  pnpm -C ' + repoPath + '/app typecheck\n' +
-    '  pnpm -C ' + repoPath + '/app lint\n' +
-    '  pnpm -C ' + repoPath + '/app build\n\n' +
+    mergeGates +
     'Step 4 — If all gates pass:\n' +
     '  git -C ' + repoPath + ' commit -m "Merge ' + branchName + ': ' + nodeId + ' → COMPLETE + doc sync"\n\n' +
-    'If any gate fails, report the failure and do NOT commit.',
+    'If any gate fails, report the failure and do NOT commit.\n\n' +
+    'Step 5 — Copy updated workflow scripts to global location:\n' +
+    '  cp "' + repoPath + '/.claude/workflows/leaf-workflow.js" ~/.claude/workflows/leaf-workflow.js\n' +
+    '  cp "' + repoPath + '/.claude/workflows/leaf-workflow-finish.js" ~/.claude/workflows/leaf-workflow-finish.js',
     { label: 'merge', phase: 'Merge' }
   )
 } else {
@@ -120,7 +171,7 @@ await agent(
   'Clean up the worktree and branch for node "' + nodeId + '".\n\n' +
   'Steps:\n' +
   '1. Check if any dev server is pointing at ' + worktreePath + ':\n' +
-  '   lsof -iTCP:4179 -sTCP:LISTEN -t 2>/dev/null || true\n' +
+  '   lsof -iTCP:' + uiPort + ' -sTCP:LISTEN -t 2>/dev/null || true\n' +
   '   Only kill if the process is serving from the worktree path.\n\n' +
   '2. Remove the worktree (double -f because Claude Code locks worktrees):\n' +
   '   git -C ' + repoPath + ' worktree remove -f -f ' + worktreePath + '\n\n' +

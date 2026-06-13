@@ -38,6 +38,61 @@
           "description": "Estimated token count above which a doc triggers a size finding. Default: 12000."
         }
       }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Workflow script configuration. All fields optional; defaults apply when omitted.",
+      "properties": {
+        "rootDoc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stem of the top-level project doc (without .md extension), e.g. \"00-project\". Default: \"00-project\"."
+        },
+        "typesEntrypoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path from the project root to the primary types entrypoint shown to spec reviewers. Omit to skip the types bullet in Stage 2 prompts."
+        },
+        "apiPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port the Ledger API server listens on. Overridden by LEDGER_PORT env var. Default: 4180."
+        },
+        "uiPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port the Ledger UI dev server listens on. Overridden by LEDGER_UI_PORT env var. Default: 4179."
+        },
+        "gates": {
+          "type": "array",
+          "description": "Ordered list of gate commands to run after implementation. Use {dir} as a placeholder; the script replaces it with the appropriate path (worktree or repo root) per stage.",
+          "items": {
+            "type": "object",
+            "required": ["label", "command"],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Short human-readable label (e.g. \"typecheck\", \"lint\", \"build\")."
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Shell command. Use {dir} as a placeholder for the directory path."
+              }
+            }
+          }
+        },
+        "e2eGate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional E2E gate command. Use {dir} as a placeholder. When absent, the E2E stage is skipped with e2eExit: -1."
+        }
+      }
     }
   }
 }

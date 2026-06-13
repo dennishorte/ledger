@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts/99-maintenance/01-portability`
 **Parent:** `11-workflow-scripts/99-maintenance`
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-06-13
 **Last Updated:** 2026-06-13
 **Dependencies:** `.ledger/project.json` (extended with `workflow` config block), `docs/_schemas/project-metadata.schema.json`, `.claude/workflows/leaf-workflow.js`, `.claude/workflows/leaf-workflow-finish.js`
@@ -172,7 +172,53 @@ The agent is given both forms in the prompt so it can branch on presence without
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-06-13 — all blocking, should-fix, and selected nit items from the spec.
+
+**Files changed:**
+- `.ledger/project.json` — added `workflow` config block with Ledger defaults (rootDoc, typesEntrypoint, apiPort, uiPort, gates[], e2eGate)
+- `docs/_schemas/project-metadata.schema.json` — added optional `workflow` object definition; all sub-keys optional; `additionalProperties: false` preserved; spec review finding B1
+- `.claude/workflows/leaf-workflow.js` — config loading (parallel config + date agents in Inspect); gate parameterisation via `renderGates()`; R-S7 fix (Stage 6 gates use `worktreePath` not `repoPath`); B3 api-curl fallback (check `test -f` then raw curl with `apiBaseUrl`); R-N2 date resolved via agent call; R-S3 `uiBaseUrl` from config; R-S4 `typesEntrypoint` conditional in Stage 2; R-S5 removed hardcoded TS discipline from Stage 4/6; R-S2 `docsDir` interpolated throughout; R-S1 `rootDoc` from config; `parentDocName` falls back to `rootDoc` for top-level nodes
+- `.claude/workflows/leaf-workflow-finish.js` — config loading (Inspect phase); gate parameterisation in Stage 10 (uses `repoPath`); `repoPath` auto-detect via agent when not supplied in args (removes hardcoded path); R-SYNC global copy step in Stage 10 merge prompt
+
+**Decisions:**
+- D6 (global sync): Moved the `cp` sync commands into the Stage 10 merge agent prompt in `leaf-workflow-finish.js` rather than a separate stage — the merge agent already runs post-commit cleanup steps; adding 2 `cp` lines is lower friction than a new phase
+- `repoPath` in `leaf-workflow-finish.js` was previously hardcoded to `/Users/dennis/code/ledger` (a machine-specific literal); replaced with auto-detect using the same git rev-parse pattern as `leaf-workflow.js`
+
+**Gate results (worktree — pre-existing failures only, not introduced by this change):**
+- typecheck: 0 (pass)
+- lint: 1 (pre-existing: 11 errors in `NodeInspector.test.tsx` + `useLogStream.test.ts`)
+- build: 2 (pre-existing: 2 errors in `LogEventRow.tsx` + `LogFilters.tsx`)
+- e2e: N/A (workflow scripts only; no UI/API surface changes)
+
+**Bundle delta:** N/A — no app bundle changes
+
+**Commit prefix note (R-S6):** Commit prefixes `docs()/impl()/review()` are ledger-specific conventions baked into workflow script prompt strings. Full parameterisation is deferred (D5 in Decisions).
+
+### Implementation Review (2026-06-13)
+
+**Verdict:** READY_FOR_COMPLETE
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| 1 | R-B1 gate parameterisation via `renderGates()` | PASS | `leaf-workflow.js` Inspect loads `wf.gates`; `renderGates(gateCommands, dir)` used at Stages 4/5/6/7; `leaf-workflow-finish.js` Stage 10 merge block uses same helper |
+| 2 | R-B2 e2eGate optional key | PASS | `e2eCommand = wf.e2eGate ?? null`; Stage 5 rebase block skips E2E when null |
+| 3 | R-B3 api-curl fallback to raw curl | PASS | Stage 8 prompt checks `test -f <apiCurlPath>`; falls back to `curl -sS -X POST <apiBaseUrl>/api/tasks` |
+| 4 | R-S1 rootDoc from config | PASS | `rootDoc = wf.rootDoc ?? '00-project'`; `parentDocName` fallback uses `rootDoc` |
+| 5 | R-S2 docsDir interpolated | PASS | `docsDir = projectCfg.docs ?? 'docs'`; all `git add docs/` prompt strings use `docsDir` variable |
+| 6 | R-S3 uiBaseUrl from config/env | PASS | `uiPort = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179`; Stage 8 log uses `uiBaseUrl` |
+| 7 | R-S4 typesEntrypoint conditional | PASS | `typesPath = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null`; Stage 2 prompt omits bullet when null |
+| 8 | R-S5 hardcoded TS rules removed | PASS | Stage 4/6 prompts no longer contain `no any`/`no console.log`/`no TypeScript in .js` inline rules |
+| 9 | R-S7 Stage 6 gates use worktreePath | PASS | Stage 6 impl-review prompt calls `renderGates(gateCommands, worktreePath)` |
+| 10 | R-N2 date resolved via agent call | PASS | Date agent runs in parallel in Inspect phase; `runDate = dateResult.date` used throughout |
+| 11 | R-SYNC global copy step | PASS | Stage 10 merge prompt includes `cp` commands to `~/.claude/workflows/` for both scripts |
+| 12 | finish.js uiPort parameterised (nit) | PASS | `uiPort` derived from env/config; Stage 11 lsof uses `uiPort` variable |
+| 13 | Gate warning check generic (nit) | PASS | Replaced `typecheckExit`/`buildExit` hardcodes with `gateCommands.some(g => implResult[g.label+'Exit'] !== 0)` |
+
+**Applied:**
+- Nit (finish.js port): Derived `uiPort` in `leaf-workflow-finish.js` Inspect block; replaced hardcoded `4179` in Stage 11 lsof check with `uiPort` variable.
+- Nit (gate warning): Replaced `implResult.typecheckExit !== 0 || implResult.buildExit !== 0` check with `gateCommands.some(g => implResult[g.label+'Exit'] !== 0)` — now works for any gate label set.
+
+**Skipped:** none.
 
 ---
 

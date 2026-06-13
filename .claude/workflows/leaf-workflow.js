@@ -32,13 +32,6 @@ if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
 }
 
-const nodeParts = nodeId.split('/')
-const leafId = nodeParts[nodeParts.length - 1]
-const parentPrefix = nodeParts.slice(0, -1).join('/')
-const parentDocName = parentPrefix
-  ? parentPrefix + '/00-' + parentPrefix.split('/').pop()
-  : '00-project'
-
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 const STATUS_SCHEMA = {
@@ -142,7 +135,70 @@ if (!repoPath) {
   repoPath = repoResult.path
 }
 
-const specPath = repoPath + '/docs/' + nodeId + '.md'
+// Load project config and resolve date in parallel
+const [projectCfgResult, dateResult] = await Promise.all([
+  agent(
+    'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
+    'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
+    'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
+    'Otherwise return the full parsed JSON object.\n' +
+    'Return the result as a JSON object.',
+    {
+      schema: {
+        type: 'object',
+        properties: {
+          docs: { type: 'string' },
+          workflow: { type: 'object' },
+        },
+      },
+      label: 'load-config',
+      phase: 'Inspect',
+    }
+  ),
+  agent(
+    'Run: date +%Y-%m-%d\nReturn the result as a JSON object with key "date".',
+    { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect' }
+  ),
+])
+
+const projectCfg = projectCfgResult ?? {}
+const wf = projectCfg.workflow ?? {}
+
+const docsDir      = projectCfg.docs ?? 'docs'
+const rootDoc      = wf.rootDoc ?? '00-project'
+const apiPort      = process.env.LEDGER_PORT ?? wf.apiPort
+const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort
+
+if (!apiPort) {
+  return { status: 'manual-needed', message: 'API port not configured: set LEDGER_PORT env var or add "workflow.apiPort" to .ledger/project.json' }
+}
+if (!uiPort) {
+  return { status: 'manual-needed', message: 'UI port not configured: set LEDGER_UI_PORT env var or add "workflow.uiPort" to .ledger/project.json' }
+}
+
+const apiBaseUrl   = 'http://localhost:' + apiPort
+const uiBaseUrl    = 'http://localhost:' + uiPort
+const gateCommands = wf.gates ?? []
+const e2eCommand   = wf.e2eGate ?? null
+const typesPath    = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null
+const runDate      = dateResult.date
+
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
+
+// Derive doc paths from config
+const nodeParts = nodeId.split('/')
+const leafId = nodeParts[nodeParts.length - 1]
+const parentPrefix = nodeParts.slice(0, -1).join('/')
+const parentDocName = parentPrefix
+  ? parentPrefix + '/00-' + parentPrefix.split('/').pop()
+  : rootDoc
+
+const specPath = repoPath + '/' + docsDir + '/' + nodeId + '.md'
+
+// Gate interpolation helper
+function renderGates(cmds, dir) {
+  return cmds.map(function(g) { return g.command.replace('{dir}', dir) }).join('\n')
+}
 
 const docStatus = await agent(
   'Read the file at "' + specPath + '". ' +
@@ -207,8 +263,8 @@ if (runDraft) {
   await agent(
     'Author a new spec doc at "' + specPath + '" for node "' + nodeId + '".\n\n' +
     'Read before writing:\n' +
-    '- "' + repoPath + '/docs/00-project.md" §§1–6 (PRD schema and lifecycle)\n' +
-    '- Parent doc: "' + repoPath + '/docs/' + parentDocName + '.md" (if it exists)\n' +
+    '- "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §§1–6 (PRD schema and lifecycle)\n' +
+    '- Parent doc: "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" (if it exists)\n' +
     '- A recently modified sibling .md in the same directory (house style)\n\n' +
     'Required sections per PRD §6.1 in this order:\n' +
     '1. Front-matter: Node ID, Parent, Status: DRAFT, Created, Last Updated, Dependencies\n' +
@@ -219,8 +275,8 @@ if (runDraft) {
     '6. Implementation Notes: `*(none yet — pre-implementation)*`\n' +
     '7. Verification (acceptance checks; name E2E files if UI/API surface exists)\n' +
     '8. Children: None\n\n' +
-    'After writing, add this node to the parent manifest at "' + repoPath + '/docs/' + parentDocName + '.md".\n' +
-    'Commit: git -C ' + repoPath + ' add docs/' + nodeId + '.md docs/' + parentDocName + '.md\n' +
+    'After writing, add this node to the parent manifest at "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+    'Commit: git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
     '        git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT spec"',
     { label: 'draft', phase: 'Draft' }
   )
@@ -241,23 +297,24 @@ if (skipSpecReview) {
   // Bump DRAFT → SPEC_REVIEW transition commit
   await agent(
     'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
-    'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/docs/' + parentDocName + '.md".\n' +
-    'git -C ' + repoPath + ' add docs/' + nodeId + '.md docs/' + parentDocName + '.md\n' +
+    'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
     'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
     'Return "done".',
     { label: 'bump-spec-review', phase: 'Spec Review' }
   )
 
   // Independent review — clean context
+  const typesLine = typesPath ? '- "' + typesPath + '" (existing types)\n' : ''
   specReview = await agent(
     'You are an independent spec reviewer in a fresh context. Read these files:\n' +
     '- "' + specPath + '" (spec under review)\n' +
-    '- "' + repoPath + '/docs/00-project.md" §§1–6 (PRD)\n' +
-    '- "' + repoPath + '/docs/' + parentDocName + '.md" (parent doc)\n' +
+    '- "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §§1–6 (PRD)\n' +
+    '- "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" (parent doc)\n' +
     '- "' + repoPath + '/.ledger/process/verification-signoff.md" (review format)\n' +
     '- "' + repoPath + '/CLAUDE.md" (constraints)\n' +
-    '- "' + repoPath + '/app/src/lib/types.ts" (existing types)\n\n' +
-    'Evaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing, MVP scoping, internal consistency, house-style.\n\n' +
+    typesLine +
+    '\nEvaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing, MVP scoping, internal consistency, house-style.\n\n' +
     'Return REVIEW_SCHEMA per verification-signoff.md.\n' +
     'One matrix row per PRD-coverage item and per Requirements bullet.\n' +
     'Every PASS needs concrete evidence (file:line or section ref). "Looks correct" is FAIL.\n' +
@@ -282,12 +339,12 @@ if (runApprove) {
   await agent(
     'Apply these mechanical spec-review findings to "' + specPath + '":\n' +
     JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
-    'Add a "## Spec Review (TODAY_DATE)" section BETWEEN "## Open Issues" and "## Implementation Notes":\n' +
+    'Add a "## Spec Review (' + runDate + ')" section BETWEEN "## Open Issues" and "## Implementation Notes":\n' +
     '| # | Finding | Resolution |\n' +
     '|---|---------|------------|\n' +
     '(one row per finding; mechanical → "applied"; skipped → reason)\n\n' +
-    'Bump **Status:** to APPROVED. Update the parent manifest row in "' + repoPath + '/docs/' + parentDocName + '.md" to APPROVED.\n' +
-    'git -C ' + repoPath + ' add docs/' + nodeId + '.md docs/' + parentDocName + '.md\n' +
+    'Bump **Status:** to APPROVED. Update the parent manifest row in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" to APPROVED.\n' +
+    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
     'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): SPEC_REVIEW → APPROVED"',
     { label: 'approve', phase: 'Approve' }
   )
@@ -299,6 +356,16 @@ if (runApprove) {
 
 if (runImpl) {
   phase('Implement')
+
+  const gatesText = gateCommands.length > 0
+    ? '  Run gates and record exit codes:\n' +
+      gateCommands.map(function(g) { return '    ' + g.command.replace('{dir}', '<worktree path from pwd>') }).join('\n') + '\n'
+    : '  No gates configured (gateCommands=[]).\n'
+
+  const e2eText = e2eCommand
+    ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + e2eCommand.replace('{dir}', '<worktree path from pwd>') + '\n'
+    : '  E2E: not configured — set e2eExit: -1.\n'
+
   const implResult = await agent(
     'You are the implementing agent for node "' + nodeId + '".\n' +
     'Source of truth: read "' + specPath + '" in full before touching any file.\n' +
@@ -309,13 +376,10 @@ if (runImpl) {
     '  git add; git commit -m "impl(' + leafId + '): APPROVED → IN_PROGRESS"\n' +
     '  Nothing else in this commit.\n\n' +
     '4b. IMPLEMENTATION:\n' +
-    '  Implement per the spec. No TypeScript in .js files. No `any`. No `console.log`. No dead code.\n' +
-    '  Run gates and record exit codes:\n' +
-    '    pnpm -C ' + repoPath + '/app typecheck\n' +
-    '    pnpm -C ' + repoPath + '/app lint\n' +
-    '    pnpm -C ' + repoPath + '/app build\n' +
-    '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: pnpm -C ' + repoPath + '/e2e test\n\n' +
-    '4c. EXIT COMMIT:\n' +
+    '  Implement per the spec.\n' +
+    gatesText +
+    e2eText +
+    '\n4c. EXIT COMMIT:\n' +
     '  Fill Implementation Notes: deps added, decisions, bundle delta, gate results, deviations.\n' +
     '  Bump **Status:** IN_PROGRESS → VERIFY in spec + parent manifest.\n' +
     '  git add -A; git commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
@@ -332,10 +396,13 @@ if (runImpl) {
   worktreePath = implResult.worktreePath
   branchName = implResult.branchName
   log('Worktree: ' + worktreePath + ' on ' + branchName)
-  log('Gates: typecheck=' + implResult.typecheckExit + ' lint=' + implResult.lintExit + ' build=' + implResult.buildExit)
 
-  if (implResult.typecheckExit !== 0 || implResult.buildExit !== 0) {
-    log('WARNING: typecheck or build gate failed — reviewer will flag')
+  if (gateCommands.length > 0) {
+    log('Gates: ' + gateCommands.map(function(g) { return g.label + '=' + (implResult[g.label + 'Exit'] ?? '?') }).join(' '))
+    const anyGateFailed = gateCommands.some(function(g) { return implResult[g.label + 'Exit'] !== 0 })
+    if (anyGateFailed) {
+      log('WARNING: one or more gates failed — reviewer will flag')
+    }
   }
 } else {
   log('Implement not needed (status=' + currentStatus + ')')
@@ -350,14 +417,18 @@ if (!worktreePath || !branchName) {
 
 if (runRebase) {
   phase('Rebase')
+
+  const rebaseGates = gateCommands.length > 0
+    ? '  - Run:\n' + renderGates(gateCommands, worktreePath).split('\n').map(function(c) { return '    ' + c }).join('\n') + '\n'
+    : '  - No gates configured; skip gate run.\n'
+
   const rebaseResult = await agent(
     'Rebase the implementation worktree for node "' + nodeId + '" onto current main.\n\n' +
     'Steps:\n' +
     '1. git -C ' + repoPath + ' fetch --quiet 2>/dev/null || true\n' +
     '2. git -C ' + worktreePath + ' rebase main\n\n' +
     'If the rebase succeeds:\n' +
-    '  - Run: pnpm -C ' + worktreePath + '/app typecheck\n' +
-    '  - Run: pnpm -C ' + worktreePath + '/app build\n' +
+    rebaseGates +
     '  - Return { success: true, details: "rebase clean", conflicts: [] }\n\n' +
     'If there are conflicts:\n' +
     '  - Do NOT run git rebase --abort (preserve state for operator)\n' +
@@ -387,6 +458,12 @@ let implReview = null
 
 if (runImplReview) {
   phase('Impl Review')
+
+  const implReviewGates = gateCommands.length > 0
+    ? 'Run gates and record exit codes as evidence:\n' +
+      renderGates(gateCommands, worktreePath) + '\n\n'
+    : 'No gates configured — omit gate evidence from review.\n\n'
+
   implReview = await agent(
     'You are an independent implementation reviewer in a fresh context.\n\n' +
     'Required reading (ALL before forming any judgement):\n' +
@@ -394,13 +471,9 @@ if (runImplReview) {
     '2. Run: git -C ' + worktreePath + ' diff main..HEAD — read the full diff\n' +
     '3. "' + repoPath + '/.ledger/process/verification-signoff.md" — review format\n' +
     '4. "' + repoPath + '/CLAUDE.md" — hard constraints\n\n' +
-    'Run gates and record exit codes as evidence:\n' +
-    '  pnpm -C ' + repoPath + '/app typecheck\n' +
-    '  pnpm -C ' + repoPath + '/app lint\n' +
-    '  pnpm -C ' + repoPath + '/app build\n\n' +
+    implReviewGates +
     'Evaluation criteria (leaf-workflow.md stage 6):\n' +
     '- Spec conformance (Spec Review closures addressed?)\n' +
-    '- Code discipline: no TypeScript annotations in .js files, no `any`, no `console.log`, no dead code\n' +
     '- Schema correctness: meta is a pure literal; agent() calls use schema: where structure is needed\n' +
     '- Stage coverage and commit messages match leaf-workflow.md intent\n' +
     '- Build/lint/typecheck exit codes cited as evidence\n' +
@@ -446,19 +519,23 @@ if (runFixes && implReview) {
 
   const mechanicalFindings = implReview.findings.filter(function(f) { return f.isMechanical })
 
+  const fixGates = gateCommands.length > 0
+    ? 'If any code was changed, re-run:\n' +
+      renderGates(gateCommands, worktreePath) + '\n\n'
+    : ''
+
   await agent(
     'Apply these mechanical implementation review findings in the worktree at "' + worktreePath + '":\n' +
     JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
-    'Add a "### Implementation Review (TODAY_DATE)" subsection to Implementation Notes in "' +
-    worktreePath + '/docs/' + nodeId + '.md":\n\n' +
+    'Add a "### Implementation Review (' + runDate + ')" subsection to Implementation Notes in "' +
+    worktreePath + '/' + docsDir + '/' + nodeId + '.md":\n\n' +
     '**Verdict:** ' + implReview.verdict + '\n\n' +
     '| # | Item | Verdict | Evidence |\n' +
     '|---|------|---------|----------|\n' +
     '(one row per sign-off matrix entry)\n\n' +
     '**Applied:** list isMechanical fixes\n' +
     '**Skipped:** list any skipped findings with reason\n\n' +
-    'If any code was changed, re-run:\n' +
-    '  pnpm -C ' + worktreePath + '/app typecheck && pnpm -C ' + worktreePath + '/app build\n\n' +
+    fixGates +
     'git -C ' + worktreePath + ' add -A\n' +
     'git -C ' + worktreePath + ' commit -m "review(' + leafId + '): apply impl-review fixes + audit"',
     { label: 'apply-fixes', phase: 'Fixes' }
@@ -478,20 +555,26 @@ const taskPayload = JSON.stringify({
     nodeId: nodeId,
     worktreePath: worktreePath,
     branchName: branchName,
-    nextStep: 'Run pnpm -C e2e test, walk browser acceptance items, then approve or reject.',
+    nextStep: 'Walk browser acceptance items, then approve or reject.',
   },
 })
 
+const apiCurlPath = repoPath + '/.claude/scripts/api-curl'
+
 const gateResult = await agent(
   'Create a human_review task in the Ledger task runner.\n\n' +
-  'Run: ' + repoPath + '/.claude/scripts/api-curl -X POST /api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
+  'Check if "' + apiCurlPath + '" exists with: test -f "' + apiCurlPath + '" && echo exists || echo missing\n\n' +
+  'If it exists, run:\n' +
+  '  ' + apiCurlPath + ' -X POST /api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
+  'If it is missing, fall back to raw curl:\n' +
+  '  curl -sS -X POST ' + apiBaseUrl + '/api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
   'Return the id field from the response JSON. If the server is unreachable, return "server-offline".',
   { schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, label: 'create-gate', phase: 'Gate' }
 )
 
 const humanReviewTaskId = gateResult.id
 log('Gate task: ' + humanReviewTaskId)
-log('Open http://localhost:4179 → Tasks to approve/reject')
+log('Open ' + uiBaseUrl + ' → Tasks to approve/reject')
 
 return {
   nodeId,
