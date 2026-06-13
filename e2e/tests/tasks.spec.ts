@@ -1,4 +1,4 @@
-import { test, expect, seedTask, waitForTaskStatus } from "../fixtures/index.js";
+import { test, expect } from "../fixtures/index.js";
 
 test.describe("Tasks panel — smoke", () => {
   test("loads without crashing", async ({ page }) => {
@@ -10,36 +10,34 @@ test.describe("Tasks panel — smoke", () => {
 
 test.describe("Tasks panel — HITL approve flow", () => {
   test("seeded human_review task reaches AWAITING_HUMAN_REVIEW", async ({
-    request,
+    seedTask,
+    waitForTaskStatus,
   }) => {
-    const task = await seedTask(request, {
+    const task = await seedTask({
       type: "human_review",
       title: "e2e: HITL status check",
       source: "operator_injected",
     });
     expect(task.id).toBeTruthy();
 
-    const advanced = await waitForTaskStatus(
-      request,
-      task.id,
-      "AWAITING_HUMAN_REVIEW",
-    );
+    const advanced = await waitForTaskStatus(task.id, "AWAITING_HUMAN_REVIEW");
     expect(advanced.status).toBe("AWAITING_HUMAN_REVIEW");
   });
 
   test("Approve button appears and approves the task", async ({
     page,
-    request,
+    seedTask,
+    waitForTaskStatus,
   }) => {
     // Unique suffix prevents accumulated tasks from previous runs matching first()
     const uid = Math.random().toString(36).slice(2, 8);
     const title = `e2e: HITL approve ${uid}`;
-    const task = await seedTask(request, {
+    const task = await seedTask({
       type: "human_review",
       title,
       source: "operator_injected",
     });
-    await waitForTaskStatus(request, task.id, "AWAITING_HUMAN_REVIEW");
+    await waitForTaskStatus(task.id, "AWAITING_HUMAN_REVIEW");
 
     await page.goto("/tasks");
     const taskRow = page.locator(`text=${title}`).first();
@@ -55,22 +53,23 @@ test.describe("Tasks panel — HITL approve flow", () => {
 
     // After approval the button disappears (task moves to COMPLETE)
     await expect(approveBtn).toBeHidden({ timeout: 5_000 });
-    const completed = await waitForTaskStatus(request, task.id, "COMPLETE");
+    const completed = await waitForTaskStatus(task.id, "COMPLETE");
     expect(completed.status).toBe("COMPLETE");
   });
 
   test("Reject flow shows rationale textarea and rejects the task", async ({
     page,
-    request,
+    seedTask,
+    waitForTaskStatus,
   }) => {
     const uid = Math.random().toString(36).slice(2, 8);
     const title = `e2e: HITL reject ${uid}`;
-    const task = await seedTask(request, {
+    const task = await seedTask({
       type: "human_review",
       title,
       source: "operator_injected",
     });
-    await waitForTaskStatus(request, task.id, "AWAITING_HUMAN_REVIEW");
+    await waitForTaskStatus(task.id, "AWAITING_HUMAN_REVIEW");
 
     await page.goto("/tasks");
     const taskRow = page.locator(`text=${title}`).first();
@@ -97,7 +96,7 @@ test.describe("Tasks panel — HITL approve flow", () => {
     await confirmBtn.click();
 
     await expect(rejectBtn).toBeHidden({ timeout: 5_000 });
-    const rejected = await waitForTaskStatus(request, task.id, "FAILED");
+    const rejected = await waitForTaskStatus(task.id, "FAILED");
     expect(rejected.status).toBe("FAILED");
   });
 });
