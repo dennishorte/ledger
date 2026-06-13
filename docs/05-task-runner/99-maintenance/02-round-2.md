@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner/99-maintenance/02-round-2`
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-06-12)
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied; APPROVED → IN_PROGRESS → VERIFY → impl-review sign-off)
+**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied; APPROVED → IN_PROGRESS → VERIFY → impl-review sign-off → COMPLETE)
 
 **Dependencies:** `05-task-runner/04-api-endpoints` (EventBus, task routes), `05-task-runner/05-ui-hook-migration` (`useTask`, `useLogStream`), `05-task-runner/02-scheduler` (task creation path)
 
