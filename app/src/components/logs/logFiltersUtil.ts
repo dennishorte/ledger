@@ -16,6 +16,7 @@ export const ALL_KINDS: readonly LogEventKind[] = [
   "artifact",
   "status_change",
   "error",
+  "subprocess_killed",
 ] as const;
 
 /**

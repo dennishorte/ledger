@@ -339,6 +339,22 @@ function ErrorRow({ event }: { event: Extract<LogEvent, { kind: "error" }> }): J
   );
 }
 
+// subprocess_killed
+function SubprocessKilledRow({ event }: { event: Extract<LogEvent, { kind: "subprocess_killed" }> }): JSX.Element {
+  return (
+    <RowShell
+      timestamp={event.at}
+      glyph="!"
+      glyphColor="var(--color-warning)"
+      bannerBg="var(--color-warning-soft)"
+    >
+      <span className="font-semibold text-[color:var(--color-warning)]">
+        subprocess killed ({event.signal})
+      </span>
+    </RowShell>
+  );
+}
+
 // ── Main dispatcher ──────────────────────────────────────────────────────────
 
 interface LogEventRowProps {
@@ -367,5 +383,8 @@ export function LogEventRow({ event }: LogEventRowProps): JSX.Element {
 
     case "error":
       return <ErrorRow event={event} />;
+
+    case "subprocess_killed":
+      return <SubprocessKilledRow event={event} />;
   }
 }

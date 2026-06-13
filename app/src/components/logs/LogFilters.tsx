@@ -22,6 +22,7 @@ const CHIP_LABELS: Record<LogEventKind, string> = {
   artifact: "artifact",
   status_change: "status",
   error: "error",
+  subprocess_killed: "killed",
 };
 
 interface LogFiltersProps {

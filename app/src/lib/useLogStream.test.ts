@@ -96,7 +96,7 @@ function makeTask(id: string): Task {
 }
 
 function makeLogEvent(seq: number): LogEvent {
-  return {
+  const ev: LogEvent = {
     id: `evt-${String(seq)}`,
     taskId: "runner-uuid",
     seq,
@@ -104,7 +104,8 @@ function makeLogEvent(seq: number): LogEvent {
     kind: "status_change",
     from: "PENDING",
     to: "RUNNING",
-  } as LogEvent;
+  };
+  return ev;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -150,7 +151,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
     expect(es.url).toBe(`/api/tasks/${encodeURIComponent(runnerId)}/stream`);
     expect(result.current.status).toBe("live");
   });
@@ -171,7 +173,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
 
     act(() => {
       es.emitMessage(makeLogEvent(0));
@@ -203,7 +206,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
     expect(es.closed).toBe(false);
 
     unmount();
@@ -225,7 +229,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
     expect(es.url).toBe(
       `/api/transcripts/${encodeURIComponent(transcriptId)}/stream`,
     );
@@ -247,7 +252,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
     const ev = makeLogEvent(0);
 
     act(() => {
@@ -279,7 +285,8 @@ describe("useLogStream — runner-stream branch", () => {
       expect(FakeEventSource.instances.length).toBeGreaterThan(0);
     });
 
-    const es = FakeEventSource.instances[0]!;
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error("No FakeEventSource instance");
 
     act(() => {
       es.emitClose();

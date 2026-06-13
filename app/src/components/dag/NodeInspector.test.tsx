@@ -58,7 +58,7 @@ describe("NodeInspector Dispatch button visibility", () => {
     // useDocSource fires GET /api/docs/:nodeId/source on every render.
     // Provide a default mock so the spy doesn't interfere with dispatch-specific assertions.
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("/source")) {
         return Promise.resolve(jsonResponse({ id: "test-node", raw: "# Test" }, 200));
       }
@@ -163,7 +163,7 @@ describe("NodeInspector Dispatch button visibility", () => {
     // Only the source fetch may have fired; dispatch must NOT have been called.
     const dispatchCalls = vi.mocked(globalThis.fetch).mock.calls.filter(
       ([input]) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         return url.includes("/api/dispatch/");
       }
     );
@@ -186,7 +186,7 @@ describe("NodeInspector Dispatch button visibility", () => {
     };
 
     vi.mocked(globalThis.fetch).mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("/api/dispatch/")) {
         return Promise.resolve(jsonResponse({ task: newTask }));
       }
@@ -210,7 +210,7 @@ describe("NodeInspector Dispatch button visibility", () => {
     // Verify fetch was called with the dispatch URL
     const dispatchCalls = vi.mocked(globalThis.fetch).mock.calls.filter(
       ([input]) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         return url.includes("/api/dispatch/");
       }
     );
