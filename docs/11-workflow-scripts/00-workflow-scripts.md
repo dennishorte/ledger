@@ -4,7 +4,7 @@
 **Parent:** `00-project`
 **Status:** COMPLETE (v1, 2026-06-10)
 **Created:** 2026-06-10
-**Last Updated:** 2026-06-10
+**Last Updated:** 2026-06-13
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
 
 ---
@@ -265,7 +265,7 @@ git branch -d <branchName>
 | D4 | `isolation: "worktree"` for stage 4 only | Stage 4 is the only stage that writes code. Stages 1, 3, and 7 edit the spec doc (no collision risk during normal serial execution). |
 | D5 | Plain JavaScript, no TypeScript | Workflow scripts are parsed as JS; TypeScript annotations cause parse failures per the framework runtime. |
 | D6 | `meta` must be a pure literal | Framework requirement. Computed meta (variables, spread, function calls) breaks workflow registration at parse time. |
-| D7 | `repoPath` defaults to `/Users/dennis/code/ledger` | This repo. Operators on other machines pass `repoPath` explicitly. The default eliminates boilerplate for the primary use case. |
+| D7 | `repoPath` defaults to auto-detection via `git rev-parse --show-toplevel` | Removed the hardcoded `/Users/dennis/code/ledger` default. The script now detects the repo root at runtime so the scripts are portable to other projects without requiring explicit `repoPath`. |
 | D8 | No settings.json registration for workflow scripts | `.claude/workflows/*.js` files are auto-discovered by the Claude Code Workflow tool from the `.claude/workflows/` directory. Adding an `allowedTools` entry for them does nothing; the existing `permissions.allow` in settings.json governs Bash tool patterns only. |
 
 ---
@@ -392,4 +392,6 @@ E2E: No new Playwright tests required — this node adds no UI surface. "Passes 
 
 ## Children
 
-None. Single responsibility (workflow automation scripts), single implementer, bounded scope — leaf per §6.6.
+| ID | Title | Status |
+|----|-------|--------|
+| `11-workflow-scripts/99-maintenance` | Maintenance | APPROVED |
