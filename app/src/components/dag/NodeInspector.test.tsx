@@ -55,7 +55,15 @@ function jsonResponse(body: unknown, status = 201): Response {
 
 describe("NodeInspector Dispatch button visibility", () => {
   beforeEach(() => {
-    vi.spyOn(globalThis, "fetch");
+    // useDocSource fires GET /api/docs/:nodeId/source on every render.
+    // Provide a default mock so the spy doesn't interfere with dispatch-specific assertions.
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.includes("/source")) {
+        return Promise.resolve(jsonResponse({ id: "test-node", raw: "# Test" }, 200));
+      }
+      return Promise.resolve(jsonResponse({}, 200));
+    });
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -152,7 +160,14 @@ describe("NodeInspector Dispatch button visibility", () => {
     fireEvent.click(cancelBtn);
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+    // Only the source fetch may have fired; dispatch must NOT have been called.
+    const dispatchCalls = vi.mocked(globalThis.fetch).mock.calls.filter(
+      ([input]) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        return url.includes("/api/dispatch/");
+      }
+    );
+    expect(dispatchCalls).toHaveLength(0);
   });
 
   it("Confirm in dialog calls POST /api/dispatch/:nodeId and shows success banner", async () => {
@@ -170,9 +185,13 @@ describe("NodeInspector Dispatch button visibility", () => {
       createdAt: "2026-01-01T00:00:00Z",
     };
 
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
-      jsonResponse({ task: newTask }),
-    );
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.includes("/api/dispatch/")) {
+        return Promise.resolve(jsonResponse({ task: newTask }));
+      }
+      return Promise.resolve(jsonResponse({ id: "leaf-node", raw: "# Test" }, 200));
+    });
 
     render(<NodeInspector node={node} allNodes={[node]} />, { wrapper: makeWrapper() });
 
@@ -188,8 +207,14 @@ describe("NodeInspector Dispatch button visibility", () => {
       expect(screen.queryByText(/dispatched as task/i)).not.toBeNull();
     });
 
-    // Verify fetch called the right URL
-    const calls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(calls[0]?.[0]).toBe("/api/dispatch/leaf-node");
+    // Verify fetch was called with the dispatch URL
+    const dispatchCalls = vi.mocked(globalThis.fetch).mock.calls.filter(
+      ([input]) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        return url.includes("/api/dispatch/");
+      }
+    );
+    expect(dispatchCalls).toHaveLength(1);
+    expect(dispatchCalls[0]?.[0]).toBe("/api/dispatch/leaf-node");
   });
 });

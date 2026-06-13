@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server/99-maintenance/01-ui-hook-migration`
 **Parent:** `04-api-server/99-maintenance` (`docs/04-api-server/99-maintenance/00-maintenance.md`)
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-06-12 (COMPLETE)
 
 **Dependencies:** `04-api-server/03-server-package` (COMPLETE — `GET /api/docs/:nodeId` endpoint live)
 
@@ -235,6 +235,26 @@ Incidental fixes during B1:
 - `GET /api/docs/:nodeId/source` route pattern fixed from `/:nodeId{.+}/source` to `/:nodeId{.+[^/]}/source` — the `.+` regex was greedy and consumed the `/source` suffix as part of the nodeId, causing every `/source` request to fall through to the `/:nodeId{.+}` catch-all (404). Verified via Hono routing test.
 - `GET /api/health/issues` was mistakenly placed in `healthRoute` (mounted at `/api/_health`) rather than `scansRoute` (mounted at `/api/health`). Moved to `scansRoute`.
 - Added `server/__fixtures__/sample-project/docs/04-issues.md` fixture with HIGH/MEDIUM/LOW issues for endpoint test coverage; updated `server/test/scanner.test.ts` size-findings assertion to include `04-issues`.
+
+---
+
+**Verification sign-off — 2026-06-12 — VERIFY → COMPLETE**
+
+Blocking bug B4 found during stage-8 verification: `NodeInspector.test.tsx` used `vi.spyOn(globalThis, "fetch")` without a default mock response; after `useDocSource` was migrated to TanStack Query, every `NodeInspector` render fires `GET /api/docs/:nodeId/source`, which (a) caused the "Cancel" test's `not.toHaveBeenCalled()` assertion to fail and (b) consumed the `mockResolvedValueOnce` intended for the dispatch call. Fix applied to `app/src/components/dag/NodeInspector.test.tsx`: `beforeEach` now installs a URL-routing `mockImplementation` that returns `{ id, raw }` for source requests and `{}` for everything else; "Cancel" test updated to filter for dispatch calls; "Confirm" test overrides with a URL-routing implementation to ensure dispatch call gets the task response. App suite 186/186 passing after fix.
+
+| # | Item | Result |
+|---|------|--------|
+| TC1 | `pnpm -C app typecheck` | PASS |
+| TC2 | `pnpm -C server typecheck` | PASS |
+| V1 | `/source` route returns `{ id, raw }` | PASS |
+| V2 | `/source` route before catch-all | PASS |
+| V3 | `GET /api/health/issues` in `scansRoute` | PASS |
+| V4 | `useDocSource` is TanStack Query | PASS |
+| V5 | `useHealthData` has no `import.meta.glob` | PASS |
+| V6 | B3: `const issues` inside `useMemo` | PASS |
+| V7 | Server test suite 420 passing | PASS |
+| V8 | App test suite 186/186 | PASS (after B4 fix) |
+| V9 | Open Issues struck through | COMPLETE at stage 10 |
 
 ---
 

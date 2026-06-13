@@ -61,4 +61,4 @@ Round numbering is sequential (`01-ui-hook-migration`, `02-round-2`, …). Per-r
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `04-api-server/99-maintenance/01-ui-hook-migration` | Migrate useDocSource and useHealthData from build-time glob to live API | `04-api-server/03-server-package` COMPLETE | DRAFT |
+| `04-api-server/99-maintenance/01-ui-hook-migration` | Migrate useDocSource and useHealthData from build-time glob to live API | `04-api-server/03-server-package` COMPLETE | COMPLETE |
