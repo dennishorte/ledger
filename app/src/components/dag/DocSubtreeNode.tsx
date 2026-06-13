@@ -55,8 +55,8 @@ export function DocSubtreeNode({ data }: NodeProps): JSX.Element {
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-left transition-colors hover:opacity-80"
         >
           <StatusChip status={parentNode.status} />
-          <span className="font-mono text-[11px] text-[color:var(--color-muted)]">
-            {parentNode.id}
+          <span className="font-mono text-[11px] text-[color:var(--color-muted)]" title={parentNode.id}>
+            {parentNode.id.includes("/") ? parentNode.id.split("/").pop() : parentNode.id}
           </span>
           {parentNode.title ? (
             <span className="truncate text-[11px] text-[color:var(--color-fg)]">

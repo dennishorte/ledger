@@ -72,7 +72,7 @@ export function DocCollapsedSubtreeNode({ data }: NodeProps): JSX.Element {
               className="truncate font-mono text-[11px] text-[color:var(--color-muted)]"
               title={parentNode.id}
             >
-              {parentNode.id}
+              {parentNode.id.includes("/") ? parentNode.id.split("/").pop() : parentNode.id}
             </span>
           </div>
           {parentNode.title ? (

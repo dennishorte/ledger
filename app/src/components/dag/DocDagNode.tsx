@@ -41,7 +41,7 @@ export function DocDagNode({
           )}
           title={node.id}
         >
-          {node.id}
+          {node.id.includes("/") ? node.id.split("/").pop() : node.id}
         </span>
         <StatusChip status={node.status} />
       </div>
