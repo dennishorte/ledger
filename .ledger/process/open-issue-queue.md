@@ -15,9 +15,9 @@ This file is the durable output of the triage stages (0–3) of `open-issue-reso
 | ~~2~~ | ~~`hitl-rejection-rationale-ui-display`~~ | ~~MEDIUM~~ | ~~maintenance-pass~~ | ~~`05-task-runner/03-hitl-gate`, `05-task-runner/05-ui-hook-migration`~~ | ~~2~~ |
 | 3 | `ui-hook-migration-remaining-consumers` | MEDIUM | maintenance-pass | `04-api-server/05-ui-hook-migration`, `04-api-server/00-api-server` | Migrate `useDocSource` and `useHealthData` to the live API (two active call sites in `WorkflowProgressSection` and `DocViewerPanel`). |
 | 4 | `task-runner-ui-trivial-polish` | LOW | maintenance-pass | `05-task-runner/05-ui-hook-migration` | Round-2 UI polish pass: 40+ LOW/TRIVIAL items across 5 siblings; maintenance-round infrastructure confirmed working. |
-| 5 | `dispatcher-executor-trivial-polish` | TRIVIAL | maintenance-pass | `06-agent-dispatcher/03-claude-code-executor` | Trivial polish items; bundle into a maintenance round. |
-| 6 | `dispatch-api-trivial-polish` | TRIVIAL | maintenance-pass | `06-agent-dispatcher/05-dispatch-api` | Trivial polish items; bundle into a maintenance round. |
-| 7 | `prompt-templates-trivial-polish` | TRIVIAL | maintenance-pass | `06-agent-dispatcher/04-prompt-templates` | Trivial polish items; bundle into a maintenance round. |
+| ~~5~~ | ~~`dispatcher-executor-trivial-polish`~~ | ~~TRIVIAL~~ | ~~maintenance-pass~~ | ~~`06-agent-dispatcher/03-claude-code-executor`~~ | ~~Trivial polish items; bundle into a maintenance round.~~ |
+| ~~6~~ | ~~`dispatch-api-trivial-polish`~~ | ~~TRIVIAL~~ | ~~maintenance-pass~~ | ~~`06-agent-dispatcher/05-dispatch-api`~~ | ~~Trivial polish items; bundle into a maintenance round.~~ |
+| ~~7~~ | ~~`prompt-templates-trivial-polish`~~ | ~~TRIVIAL~~ | ~~maintenance-pass~~ | ~~`06-agent-dispatcher/04-prompt-templates`~~ | ~~Trivial polish items; bundle into a maintenance round.~~ |
 
 ### ~~`dispatcher-sigkill-escalation`~~ → resolved by `06-agent-dispatcher/99-maintenance/01-round-1` (2026-06-12)
 
@@ -56,3 +56,6 @@ Re-evaluate at next collection pass. A parked group re-enters the active queue w
 | `executor-stdout-stderr-stale-issue` | 2026-06-12 | doc-only — struck stale MEDIUM bullet in `03-claude-code-executor`; code had already shipped (`lifecycle.ts:92`). Commit `16e07c4`. |
 | `dispatcher-sigkill-escalation` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/01-round-1` — `killWithEscalation` + escalation timer in `cancellation.ts`; `subprocess_killed` LogEvent kind; doc-strikes in `03`/`05`/parent. |
 | `hitl-rejection-rationale-ui-display` | 2026-06-12 | `05-task-runner/99-maintenance/01-hitl-rejection-rationale-ui-display` — protective comment + test at `latestStatusReason` usage; "Queue follow-up task" toggle in `HitlActions`; `useRejectTask` extended with `followUp`; doc-strikes in `03-hitl-gate`/`05-ui-hook-migration`. Commit `b479706`. |
+| `dispatcher-executor-trivial-polish` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/02-round-2` — MCP config type verified (no code change), dispatch banner `<Link>`, `MutationErrorBody` extraction, tool-contract reminder assertion, Mode A lifecycle decision in PRD §6.2. |
+| `dispatch-api-trivial-polish` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/02-round-2` — see above. |
+| `prompt-templates-trivial-polish` | 2026-06-12 | `06-agent-dispatcher/99-maintenance/02-round-2` — see above. |
