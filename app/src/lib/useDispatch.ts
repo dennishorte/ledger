@@ -14,7 +14,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MutationErrorBody } from "./useApproveTask.js";
+import { MutationErrorBody } from "./errors.js";
 import type { Task, NodeId, TaskType, ResourceClaim } from "./types.js";
 
 export interface DispatchVariables {

@@ -3,6 +3,7 @@
 **Node ID:** `06-agent-dispatcher/99-maintenance/02-round-2`
 **Parent:** `06-agent-dispatcher/99-maintenance` (`docs/06-agent-dispatcher/99-maintenance/00-maintenance.md`)
 **Status:** VERIFY
+**Implementation Review:** NEEDS_MINOR_REVISIONS → fixed 2026-06-12
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
@@ -246,8 +247,9 @@ Files touched:
 
 **Item 3 — `MutationErrorBody` extraction:**
 - Created `app/src/lib/errors.ts` with the class definition (class form preserved for `instanceof` compatibility).
-- `useApproveTask.ts`: class definition removed; re-exports `MutationErrorBody` from `./errors.js` for backward compatibility.
+- `useApproveTask.ts`: class definition removed; re-exports `MutationErrorBody` from `./errors.js` for backward compatibility. Import-before-re-export ordering corrected (N1).
 - `useRejectTask.ts`, `useCancelTask.ts`, `NodeInspector.tsx`: imports updated to `@/lib/errors` / `./errors.js`.
+- **Impl-review S1 fix (2026-06-12):** Three callers missed in the initial pass — `TaskInspector.tsx`, `ScanHistoryWidget.tsx`, `useDispatch.ts` — now updated to import from `@/lib/errors` / `./errors.js`. `grep -r "from.*useApproveTask.*MutationErrorBody" app/src` returns zero results.
 - Open-issue bullet struck in `05-dispatch-api.md`.
 
 **Item 4 — Build-time assertion:**

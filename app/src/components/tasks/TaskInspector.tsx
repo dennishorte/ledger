@@ -11,7 +11,7 @@ import { useRejectTask } from "@/lib/useRejectTask";
 import { useCancelTask } from "@/lib/useCancelTask";
 import { cn } from "@/lib/cn";
 import type { Task, TaskType, ResourceClaim } from "@/lib/types";
-import type { MutationErrorBody } from "@/lib/useApproveTask";
+import type { MutationErrorBody } from "@/lib/errors";
 
 interface TaskInspectorProps {
   task: Task;

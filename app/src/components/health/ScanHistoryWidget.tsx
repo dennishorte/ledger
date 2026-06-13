@@ -2,7 +2,7 @@ import { useState, type JSX } from "react";
 import { useHealthScans, type HealthFinding } from "@/lib/useHealthScans";
 import { useRunScan } from "@/lib/useRunScan";
 import { useDispatch } from "@/lib/useDispatch";
-import { MutationErrorBody } from "@/lib/useApproveTask";
+import { MutationErrorBody } from "@/lib/errors";
 
 const MONITOR_LABEL: Record<HealthFinding["monitor"], string> = {
   size: "size",
