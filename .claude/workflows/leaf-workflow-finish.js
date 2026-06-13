@@ -80,7 +80,7 @@ const wf = projectCfg.workflow ?? {}
 
 const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
-const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
+const uiPort       = wf.uiPort ?? 4179
 const gateCommands = wf.gates ?? []
 const runDate      = dateResult.date
 

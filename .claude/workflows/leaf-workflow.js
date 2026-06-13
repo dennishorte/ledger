@@ -166,8 +166,8 @@ const wf = projectCfg.workflow ?? {}
 
 const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
-const apiPort      = process.env.LEDGER_PORT ?? wf.apiPort
-const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
+const apiPort      = wf.apiPort
+const uiPort       = wf.uiPort ?? 4179
 
 if (!apiPort) {
   return { status: 'manual-needed', message: 'API port not configured: set LEDGER_PORT env var or add "workflow.apiPort" to .ledger/project.json' }
