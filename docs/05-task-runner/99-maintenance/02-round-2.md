@@ -4,7 +4,7 @@
 **Parent:** `05-task-runner/99-maintenance` (`docs/05-task-runner/99-maintenance/00-maintenance.md`)
 **Status:** VERIFY
 **Created:** 2026-06-12
-**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied; APPROVED → IN_PROGRESS → VERIFY)
+**Last Updated:** 2026-06-12 (DRAFT → APPROVED; spec review applied; APPROVED → IN_PROGRESS → VERIFY → impl-review sign-off)
 
 **Dependencies:** `05-task-runner/04-api-endpoints` (EventBus, task routes), `05-task-runner/05-ui-hook-migration` (`useTask`, `useLogStream`), `05-task-runner/02-scheduler` (task creation path)
 
@@ -175,6 +175,42 @@ Per-item acceptance checks:
 | 5d | `pnpm -C server typecheck` green; `pnpm test` green. | headless |
 
 **E2E suite:** `pnpm -C e2e test` — no new E2E tests required. All changes are server-internal or hook-level; no new UI surface is introduced. Existing passing tests must not regress.
+
+---
+
+## Implementation Review Sign-off
+
+**Reviewer:** claude-sonnet-4-6 **Date:** 2026-06-12 **Verdict:** READY_FOR_COMPLETE
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| R1 | `bus.publish` throw-isolation: try/catch wraps per-taskId and global subscriber loops | PASS | `server/src/runner/events.ts` — two independent try/catch blocks; `console.error` on each |
+| R1a | Unit test: two subscribers, first throws, second receives; publish does not rethrow | PASS | `server/test/runner/events.test.ts` — `expect(() => { bus.publish(...) }).not.toThrow()` + second-subscriber assertion |
+| R1b | Existing EventBus tests still green | PASS | Runner suite: 87 passed (events + store + scheduler + tasks) |
+| R2 | `isRunnerTaskId` named predicate exported from `app/src/lib/types.ts` with invariant doc-comment | PASS | `app/src/lib/types.ts` — exported function with doc-comment citing UUID/colon invariant and D2 reference |
+| R2a | No bare `id.includes(":")` call sites remain in `app/src/lib/` | PASS | Only occurrence is inside `isRunnerTaskId`'s own implementation body |
+| R2b | `useTask.ts` and `useLogStream.ts` use named predicate | PASS | Both import and call `isRunnerTaskId` |
+| R2c | `pnpm -C app typecheck` green | PASS | Exit 0, no errors |
+| R3 | `useLogStream.test.ts` created with FakeEventSource and runner-stream test cases | PASS | `app/src/lib/useLogStream.test.ts` — 292 lines, `FakeEventSource` class, 6 tests under `useLogStream — runner-stream branch` |
+| R3a | Happy path: EventSource connects to `/api/tasks/:id/stream` for runner IDs | PASS | Asserts `es.url === /api/tasks/${encodeURIComponent(runnerId)}/stream` |
+| R3b | Incoming events appended to stream state | PASS | Emits 2 events, asserts seqs 0 and 1 present |
+| R3c | `EventSource.close()` called on unmount | PASS | Unmount → `expect(es.closed).toBe(true)` |
+| R3d | seq dedup: duplicate seq not appended twice | PASS | Emits same event twice, asserts `seqZeroCount === 1` |
+| R3e | Close event transitions status to `ended` | PASS | `emitClose()` → `expect(result.current.status).toBe("ended")` |
+| R3f | Transcript IDs route to transcript SSE URL | PASS | `session:abc-123` → `/api/transcripts/…/stream` |
+| R3g | App unit test count | PASS | App suite: 176 passed / 2 pre-existing NodeInspector failures (confirmed pre-existing, unrelated to round-2) |
+| R4 | `tasks.ts` returns 422 (not 400) on semantic validation failure | PASS | `server/src/routes/tasks.ts` — `return c.json({ errors: result.errors }, 422)` |
+| R4a | `tasks.test.ts` updated to expect 422 | PASS | Test asserts `expect(res.status).toBe(422)` |
+| R4b | No remaining semantic-validation 400s in `tasks.ts` | PASS | Remaining 400 is `invalid_dependsOn` (referenced entity missing ≠ semantic validation failure per D3) |
+| R5 | `dependsOn` validation in `store.createTask` before transaction | PASS | Loop over `dependsOn`, `stmtLoadTask.get(depId)`, throw if not found |
+| R5a | No task row written on validation failure | PASS | `server/test/runner/store.test.ts` — counts tasks before/after failed `createTask`; asserts `listTasks().length === before` |
+| R5b | Route handler surfaces as 400 `invalid_dependsOn` | PASS | `server/src/routes/tasks.ts`; test asserts `res.status === 400` and `body.error === "invalid_dependsOn"` |
+| R5c | `scheduler.test.ts` tests 10 and 11 updated correctly | PASS | Test 10 asserts throw for missing dep; test 11 uses real RUNNING dep task |
+| A1 | Open Issues struck in originating siblings with forward pointers | PASS | `04-api-endpoints.md`, `05-ui-hook-migration.md`, `02-scheduler.md` — all four bullets struck with round-2 attribution |
+| A2 | No `any`, no `console.log` in production paths (except the D1 `console.error` in events.ts) | PASS | Diff reviewed; no `any` casts, no new `console.log` |
+| A2a | No ESLint disable comments | PASS | Diff contains no `eslint-disable` lines |
+| A3 | Pre-existing NodeInspector test failures confirmed not introduced by this round | PASS | Failures present on HEAD before round-2 commits |
+| A4 | E2E: no new tests required; pre-existing flaky failures (alerts, dag, tasks timing) do not touch round-2 surfaces | PASS | 3 E2E failures confirmed pre-existing on unrelated surfaces; none touch EventBus/task route/hook changes |
 
 ---
 
