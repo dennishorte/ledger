@@ -2,10 +2,10 @@
 
 **Node ID:** `11-workflow-scripts/99-maintenance/01-portability`
 **Parent:** `11-workflow-scripts/99-maintenance`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-06-13
 **Last Updated:** 2026-06-13
-**Dependencies:** `.ledger/project.json` (extended with `workflow` config block), `.claude/workflows/leaf-workflow.js`, `.claude/workflows/leaf-workflow-finish.js`
+**Dependencies:** `.ledger/project.json` (extended with `workflow` config block), `docs/_schemas/project-metadata.schema.json`, `.claude/workflows/leaf-workflow.js`, `.claude/workflows/leaf-workflow-finish.js`
 
 ---
 
@@ -134,6 +134,7 @@ The agent is given both forms in the prompt so it can branch on presence without
 | File | Nature of change |
 |------|-----------------|
 | `.ledger/project.json` | Add `workflow` config block |
+| `docs/_schemas/project-metadata.schema.json` | Add optional `workflow` object definition (all sub-keys optional; `additionalProperties: false` preserved) |
 | `.claude/workflows/leaf-workflow.js` | Config loading; gate parameterisation; S7 fix; B3 api-curl fallback; N2 date; S3/S4/S5 prompt cleanup |
 | `.claude/workflows/leaf-workflow-finish.js` | Config loading; gate parameterisation in Stage 3 |
 | `~/.claude/workflows/leaf-workflow.js` | Sync via `cp` |
@@ -160,6 +161,15 @@ The agent is given both forms in the prompt so it can branch on presence without
 
 ---
 
+## Spec Review (2026-06-13)
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | `project-metadata.schema.json` has `additionalProperties: false` and no `workflow` property — adding the `workflow` key to `.ledger/project.json` without updating the schema breaks schema validation on server load. | applied — `docs/_schemas/project-metadata.schema.json` added to Dependencies and Files Changed; schema update (optional `workflow` object, all sub-keys optional) included in Files Changed. |
+| N1 | No acceptance check for the absent-`project.json` fallback path (all `workflow.*` keys absent or file missing). | applied — A8 added to Verification. |
+
+---
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -177,6 +187,7 @@ Acceptance checks:
 5. **B3 api-curl fallback** — temporarily rename `.claude/scripts/api-curl`; Stage 8 falls back to raw curl and the human_review gate task is created successfully.
 6. **Gate port override** — set `LEDGER_PORT=9999`; Stage 8 POSTs to `http://localhost:9999/api/tasks`.
 7. **Global copy sync** — after merge, `diff ~/.claude/workflows/leaf-workflow.js .claude/workflows/leaf-workflow.js` exits 0.
+8. **Absent workflow key** — with `.ledger/project.json` containing no `workflow` key (or the file entirely absent), Inspect completes without error and all defaults (`rootDoc=00-project`, `docsDir=docs`, `apiPort=4180`, `uiPort=4179`, `gateCommands=[]`, `e2eCommand=null`) are in effect.
 
 E2E: No new Playwright tests required — this node modifies workflow scripts only; no UI or API surface changes.
 
