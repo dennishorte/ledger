@@ -166,8 +166,16 @@ const wf = projectCfg.workflow ?? {}
 
 const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
-const apiPort      = process.env.LEDGER_PORT ?? wf.apiPort ?? 4180
-const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
+const apiPort      = process.env.LEDGER_PORT ?? wf.apiPort
+const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort
+
+if (!apiPort) {
+  return { status: 'manual-needed', message: 'API port not configured: set LEDGER_PORT env var or add "workflow.apiPort" to .ledger/project.json' }
+}
+if (!uiPort) {
+  return { status: 'manual-needed', message: 'UI port not configured: set LEDGER_UI_PORT env var or add "workflow.uiPort" to .ledger/project.json' }
+}
+
 const apiBaseUrl   = 'http://localhost:' + apiPort
 const uiBaseUrl    = 'http://localhost:' + uiPort
 const gateCommands = wf.gates ?? []
