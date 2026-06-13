@@ -14,7 +14,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MutationErrorBody } from "./useApproveTask.js";
+import { MutationErrorBody } from "./errors.js";
 import type { Task, TaskId } from "./types.js";
 import type { TaskDetail } from "./useTask.js";
 

@@ -18,10 +18,10 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Task, TaskId, TaskInput } from "./types.js";
-import { MutationErrorBody } from "./useApproveTask.js";
+import { MutationErrorBody } from "./errors.js";
 import type { TaskDetail } from "./useTask.js";
 
-export type { MutationErrorBody } from "./useApproveTask.js";
+export type { MutationErrorBody } from "./errors.js";
 
 export interface RejectVariables {
   taskId: TaskId;

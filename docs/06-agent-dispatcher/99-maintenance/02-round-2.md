@@ -2,7 +2,7 @@
 
 **Node ID:** `06-agent-dispatcher/99-maintenance/02-round-2`
 **Parent:** `06-agent-dispatcher/99-maintenance` (`docs/06-agent-dispatcher/99-maintenance/00-maintenance.md`)
-**Status:** APPROVED
+**Status:** VERIFY
 **Created:** 2026-06-12
 **Last Updated:** 2026-06-12
 
@@ -230,7 +230,35 @@ Files touched:
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**Implemented:** 2026-06-12.
+
+**Item 1 — MCP config type verification:**
+- `claude --version`: 2.1.172
+- Verification method: `claude mcp add --help` output documents `--transport` accepting `stdio`, `sse`, `http`. The `http` value directly corresponds to `"type": "http"` in the JSON config — it is the CLI flag's string value, not an alias. No code change to `mcpConfig.ts`.
+- Open-issue bullets struck in `03-claude-code-executor.md` (confidence note 2, acceptance check §4) and `00-agent-dispatcher.md`.
+
+**Item 2 — Dispatch success banner `<Link>`:**
+- Added `dispatchedTaskId: string | null` state alongside `dispatchBanner`.
+- `onSuccess` sets both; `onError` and the dispatch-button `onClick` reset `dispatchedTaskId` to `null`.
+- Banner renders a `<Link to={/logs/${dispatchedTaskId}}>` when `dispatchedTaskId !== null`, plain text otherwise.
+- Navigation target: `/logs/:taskId` (existing route, `router.tsx:40`). No new route or URL param needed.
+- Open-issue bullet struck in `05-dispatch-api.md`.
+
+**Item 3 — `MutationErrorBody` extraction:**
+- Created `app/src/lib/errors.ts` with the class definition (class form preserved for `instanceof` compatibility).
+- `useApproveTask.ts`: class definition removed; re-exports `MutationErrorBody` from `./errors.js` for backward compatibility.
+- `useRejectTask.ts`, `useCancelTask.ts`, `NodeInspector.tsx`: imports updated to `@/lib/errors` / `./errors.js`.
+- Open-issue bullet struck in `05-dispatch-api.md`.
+
+**Item 4 — Build-time assertion:**
+- `RUNNER_TOOLS` constant + `"mentions every canonical runner MCP tool name"` test added to existing `server/test/dispatcher/prompts/shared.test.ts` (file already existed; new test block appended to `mcpToolContractReminder` describe).
+- Open-issue bullet struck in `04-prompt-templates.md`.
+
+**Item 5 — Mode A lifecycle decision:**
+- PRD §6.2 gained an explicit `doc_decompose` Mode A paragraph after the parent-completion predicate.
+- `04-prompt-templates.md` D12 row appended with the decision reference. Mode A Open Issues bullet struck.
+
+**No code change to `mcpConfig.ts` or `mcpConfig.test.ts`** (item 1 verified without code change).
 
 ---
 

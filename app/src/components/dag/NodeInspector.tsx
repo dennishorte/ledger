@@ -7,7 +7,7 @@ import { WorkflowProgressSection } from "@/components/dag/WorkflowProgressSectio
 import { useDispatch } from "@/lib/useDispatch";
 import { defaultResourceClaims } from "@/lib/types";
 import type { DocNode, NodeStatus, TaskType, ResourceClaim } from "@/lib/types";
-import type { MutationErrorBody } from "@/lib/useApproveTask";
+import type { MutationErrorBody } from "@/lib/errors";
 
 // Statuses for which the Dispatch button is shown (authored-only check applied separately).
 const DISPATCHABLE_STATUSES = new Set<NodeStatus>(["APPROVED", "VERIFY", "DRAFT"]);
@@ -35,6 +35,7 @@ export function NodeInspector({ node, allNodes }: NodeInspectorProps): JSX.Eleme
   const dispatch = useDispatch();
   const [showDispatchDialog, setShowDispatchDialog] = useState(false);
   const [dispatchBanner, setDispatchBanner] = useState<string | null>(null);
+  const [dispatchedTaskId, setDispatchedTaskId] = useState<string | null>(null);
 
   const showDispatchButton = node.authored && DISPATCHABLE_STATUSES.has(node.status);
   const inferredType = inferTaskType(node.status);
@@ -129,6 +130,7 @@ export function NodeInspector({ node, allNodes }: NodeInspectorProps): JSX.Eleme
           type="button"
           onClick={() => {
             setDispatchBanner(null);
+            setDispatchedTaskId(null);
             setShowDispatchDialog(true);
           }}
           className="inline-flex items-center self-start rounded-md border border-[color:var(--color-border-strong)] px-2 py-1 text-xs text-[color:var(--color-fg)] hover:bg-[color:var(--color-surface-sunken)]"
@@ -140,7 +142,11 @@ export function NodeInspector({ node, allNodes }: NodeInspectorProps): JSX.Eleme
       {/* Success/error inline banner (N4 — inline-banner pattern, no toast library required) */}
       {dispatchBanner !== null && (
         <div className="rounded border border-[color:var(--color-border)] px-2 py-1 text-xs text-[color:var(--color-fg)]">
-          {dispatchBanner}
+          {dispatchedTaskId !== null ? (
+            <Link to={`/logs/${dispatchedTaskId}`}>{dispatchBanner}</Link>
+          ) : (
+            dispatchBanner
+          )}
         </div>
       )}
 
@@ -163,9 +169,11 @@ export function NodeInspector({ node, allNodes }: NodeInspectorProps): JSX.Eleme
                 onSuccess: (data) => {
                   setShowDispatchDialog(false);
                   setDispatchBanner(`Dispatched as task ${data.task.id.slice(0, 8)}…`);
+                  setDispatchedTaskId(data.task.id);
                 },
                 onError: (err) => {
                   setShowDispatchDialog(false);
+                  setDispatchedTaskId(null);
                   const e = err as MutationErrorBody;
                   const body = e.body as { error?: string; hint?: string } | undefined;
                   setDispatchBanner(

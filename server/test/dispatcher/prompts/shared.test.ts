@@ -138,6 +138,25 @@ describe("mcpToolContractReminder", () => {
   it("mentions status_change_not_emittable", () => {
     expect(mcpToolContractReminder()).toContain("status_change_not_emittable");
   });
+
+  // Build-time assertion: reminder covers the canonical runner tool set.
+  // runner.get_task is registered in 02-runner-tools but appears only in the
+  // issue_triage preamble, not in the shared reminder — omitted here intentionally.
+  // If a new tool is added to the reminder, add it to RUNNER_TOOLS here too.
+  // (06-agent-dispatcher/99-maintenance/02-round-2, item 4)
+  const RUNNER_TOOLS = [
+    "runner.emit_event",
+    "runner.complete_task",
+    "runner.fail_task",
+    "runner.await_human_review",
+  ] as const;
+
+  it("mentions every canonical runner MCP tool name", () => {
+    const reminder = mcpToolContractReminder();
+    for (const tool of RUNNER_TOOLS) {
+      expect(reminder, `reminder must mention ${tool}`).toContain(tool);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

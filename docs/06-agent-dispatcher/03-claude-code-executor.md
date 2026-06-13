@@ -430,7 +430,7 @@ Independent spec review was run against this DRAFT in a clean Sonnet context. Ve
 Reviewer's **Confidence notes** (recorded for the stage-4 implementer to spot-check):
 
 1. **`execa@9` API verified.** Reviewer confirmed against the installed tarball's d.ts: `.exited` doesn't exist; `ExecaResult` doesn't exist; `Result` IS exported; `Subprocess` IS exported; `input: string`, `cwd`, `env`, `reject: false` all valid options; `result.exitCode?: number` (optional); `result.signal?: keyof SignalConstants`; `result.stderr: string` (default-captured, but TS may widen to `string | undefined` under generic inference — `?? ""` guard is the safety net). The B1 fix lands the right shapes.
-2. **`--mcp-config` JSON `"type": "http"` value UNVERIFIED.** Inherited from parent's confidence notes — needs `claude --mcp-config <test.json>` round-trip at implementation time to confirm. Possible alternatives: `"streamable-http"`, `"sse"`. The implementer runs a one-line smoke at install time and adjusts.
+2. ~~**`--mcp-config` JSON `"type": "http"` value UNVERIFIED.**~~ → Verified by `06-agent-dispatcher/99-maintenance/02-round-2` (2026-06-12): `claude mcp add --transport http` CLI docs confirm `"type": "http"` is the correct JSON value (`claude 2.1.172`). No code change required.
 3. **`store.getStatus` returns `undefined` (not throws) for missing IDs.** Reviewer cross-checked against `scheduler.ts` line 183's dep-check usage which compares to `"COMPLETE"` without a null guard. The contract is established; the guard in `reconcileExit` is correct defense.
 4. **`BindingRegistry` wiring in `context.ts` is established pattern.** Reviewer confirmed the two-step `ctxPartial as ProjectContext` cast in `02-runner-tools`'s wiring; this leaf follows the same pattern for `dispatchCancellation`.
 5. **`registerExecutor` overwrite warning won't fire.** Reviewer confirmed the eight dispatcher task types are disjoint from the default registry's `noop`/`human_review`.
@@ -468,7 +468,7 @@ Nothing punted; all 3 blocking + 4 should-fix + 4 nits + 5 confidence notes land
 - D11 (`tail(stderr, 200 lines)` two-stage truncation) was already revised out by Spec Review N1 — single-stage `?? ""` is what shipped.
 
 **Operator acceptance-check items requiring manual verification:**
-- §Acceptance check §4: boot the server, `POST /api/tasks` with type `implement`; verify the subprocess spawns and transitions as described. The `"type": "http"` MCP config value needs real-claude round-trip to confirm. If it fails, adjust the `type` field in `mcpConfig.ts` (likely candidate: `"streamable-http"`).
+- ~~§Acceptance check §4: `"type": "http"` MCP config value needs real-claude round-trip.~~ → Verified by `06-agent-dispatcher/99-maintenance/02-round-2` (2026-06-12): `claude mcp add --transport http` CLI docs confirm `"type": "http"` is correct (`claude 2.1.172`). No code change.
 - §Acceptance check §6 (SIGTERM) and §7 (SIGKILL): requires a live task + `ps` + `kill`. Deferred to `05-dispatch-api`'s acceptance pass (the cancel route writes CANCELLED, then delivers SIGTERM — the full cancel flow needs both leaves).
 
 **Gate results (2026-05-29):**

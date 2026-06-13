@@ -22,28 +22,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Task, TaskId } from "./types.js";
 import type { TaskDetail } from "./useTask.js";
+export { MutationErrorBody } from "./errors.js";
+import { MutationErrorBody } from "./errors.js";
 
 export interface ApproveVariables {
   taskId: TaskId;
   dbRowVersion: number;
   note?: string;
-}
-
-/**
- * Structured mutation error carrying the HTTP status + parsed response body.
- * Re-exported so useRejectTask and TaskInspector can share the type (D5).
- * Hook-local concern — not promoted to @/lib/types.
- *
- * Extends Error so `throw` satisfies @typescript-eslint/only-throw-error.
- */
-export class MutationErrorBody extends Error {
-  status: number;
-  body: unknown;
-  constructor(status: number, body: unknown) {
-    super(`HTTP ${String(status)}`);
-    this.status = status;
-    this.body = body;
-  }
 }
 
 async function postApprove({
