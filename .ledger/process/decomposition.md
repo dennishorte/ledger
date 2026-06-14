@@ -34,6 +34,7 @@ Record the contracts — they become the children-manifest dependency declaratio
 The original node keeps its document and becomes a coordinator:
 
 - **Requirements / Design / Decisions** stay, but at the *parent* altitude — the cross-child concerns, shared contracts, and sequencing rationale. Per-child detail moves to the child specs.
+- The parent's **Verification** section must enumerate an acceptance artifact per sequencing tier — something the operator can inspect after each tier's children land, before advancing to the next (a runnable test suite, a curl-able endpoint, or a UI surface). A Verification section that only describes the final-state check ("all children COMPLETE") is incomplete and will be flagged at spec review.
 - Add a **Children** manifest section: one row per child with its `Node ID`, one-line responsibility, declared `Dependencies` on sibling children, and a `Status` column (all start `PLANNED`).
 - Do **not** change the parent's own lifecycle status as a side effect of decomposition. (If a `doc_decompose` agent ran this, it adds a `Decomposed YYYY-MM-DD` subsection to Implementation Notes per the prompt template — see `server/src/dispatcher/prompts/docDecompose.ts`.)
 
@@ -58,6 +59,8 @@ For each child, create `docs/<parent-path>/<id>.md` with the full §6.1 schema (
 ## Step 4 — Sequence and dispatch
 
 Build order follows the declared dependencies: a child cannot reach APPROVED-and-implementable before the children it depends on land their data contracts. Independent children may be dispatched in parallel — but heed the parallel-worktree shared-file gap (`leaf-workflow.md` Known Limitations): only parallelise children whose data contracts genuinely don't overlap, which Step 1 already verified.
+
+Before dispatching, verify two sequencing properties. First, at least one child in the first tier (children with no declared sibling dependencies) must produce an artifact the operator can independently verify — a runnable test suite, a curl-able endpoint, or a UI surface. A schema file or type definition that only pays off downstream does not count. If every meaningful acceptance criterion lives in a final-sequenced child, restructure: extract the verifiable core into an earlier child, or collapse children and resequence. Second, if the plan introduces a user-facing UI panel or a GET endpoint the operator is expected to inspect during verification, that surface must appear no later than the midpoint of the sequencing order. A plan where nothing visible happens until the last merge is a sequencing defect, not a dependency declaration.
 
 From here each child is an ordinary leaf — hand it to the leaf-workflow.
 
