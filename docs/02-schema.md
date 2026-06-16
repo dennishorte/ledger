@@ -129,7 +129,7 @@ The extractor (`parseDocNode.ts`) converts markdown to the candidate JSON. The e
 | Field | Markdown encoding |
 |---|---|
 | `nodeId` | Derived from file path. `docs/00-project.md → root`; `docs/<dir>/00-<slug>.md → <dir>`; otherwise `docs/<rel>.md → <rel without .md>`. The `**Node ID:** \`…\`` line in the body is a redundant secondary source — extractor cross-checks the two; mismatch is a validation error. |
-| `parentId` | The `**Parent:**` front-matter line. Special case: `project root (\`docs/00-project.md\`)` → `"root"`. Otherwise the first backticked id. If absent, the extractor derives from path segments. `nodeId === "root"` ⇒ `parentId: null`. |
+| `parentId` | The `**Parent:**` front-matter line. Special case: `project root (\`docs/00-project.md\`)` → `"root"`. Otherwise the first backticked id. If absent, the extractor derives from path segments. `nodeId === "root"` ⇒ `parentId: null`. **Root children must use the `project root (...)` literal form** — writing `` `00-project` `` alone extracts the string `"00-project"`, which matches no node and orphans the node in the DAG. |
 | `title` | First `# …` heading. |
 | `status` | First whitespace-delimited token of the `**Status:**` line; normalized to uppercase and `-` → `_` before enum matching (consistent with today's `normalizeStatus()`). Case-insensitive input is accepted; enum matching always runs against the normalized form. Mixed-case inputs like `Draft` validate as `DRAFT`. |
 | `statusAnnotation` | The contents of the first `(…)` parenthetical on the `**Status:**` line, if any. Free-form string. |

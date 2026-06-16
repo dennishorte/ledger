@@ -31,7 +31,7 @@ Every state in this diagram is set explicitly in the spec's Status header as the
 
 Create `docs/<path>/<id>.md` following the schema in PRD §6.1. Required sections in this order, matching sibling specs:
 
-- **Front-matter:** Node ID, Parent, Status: DRAFT, Created, Last Updated, Dependencies.
+- **Front-matter:** Node ID, Parent, Status: DRAFT, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
 - **Requirements** (with explicit out-of-scope bullets — the "what we are NOT doing in v1" list is as important as the "what we are").
 - **Design** — data contract / new types, layout (ASCII wireframes where they help), components & files, interaction model, manual acceptance check.
 - **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
