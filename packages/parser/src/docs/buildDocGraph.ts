@@ -27,6 +27,7 @@ const KNOWN_STATUSES: ReadonlySet<NodeStatus> = new Set<NodeStatus>([
   "ISSUE_OPEN",
   "PLANNED",
   "DEFERRED",
+  "DEPRECATED",
 ]);
 
 function normalizeStatus(raw: string | undefined): NodeStatus {
