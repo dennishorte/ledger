@@ -1,7 +1,7 @@
 # E2E Testing — Playwright browser-driven acceptance suite
 
 **Node ID:** `10-e2e-testing`  
-**Parent:** `00-project`  
+**Parent:** project root (`docs/00-project.md`)  
 **Status:** COMPLETE  
 **Created:** 2026-06-09  
 **Last Updated:** 2026-06-09  

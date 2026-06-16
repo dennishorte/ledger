@@ -1,7 +1,7 @@
 # Workflow Decomposition Checkpoint
 
 **Node ID:** `12-workflow-decomposition`
-**Parent:** `00-project`
+**Parent:** project root (`docs/00-project.md`)
 **Status:** COMPLETE (v1, 2026-06-12)
 **Created:** 2026-06-11
 **Last Updated:** 2026-06-12

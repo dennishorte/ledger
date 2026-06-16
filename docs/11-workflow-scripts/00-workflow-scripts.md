@@ -1,7 +1,7 @@
 # Workflow Scripts — automated leaf-workflow execution
 
 **Node ID:** `11-workflow-scripts`
-**Parent:** `00-project`
+**Parent:** project root (`docs/00-project.md`)
 **Status:** COMPLETE (v1, 2026-06-10)
 **Created:** 2026-06-10
 **Last Updated:** 2026-06-13
