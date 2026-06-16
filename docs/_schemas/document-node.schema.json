@@ -47,9 +47,10 @@
         "COMPLETE",
         "ISSUE_OPEN",
         "PLANNED",
-        "DEFERRED"
+        "DEFERRED",
+        "DEPRECATED"
       ],
-      "description": "Normalized lifecycle status (uppercase, hyphens replaced with underscores). DEFERRED is a terminal status (PRD §6.2) for nodes explicitly removed from the active roadmap."
+      "description": "Normalized lifecycle status (uppercase, hyphens replaced with underscores). DEFERRED is a terminal status (PRD §6.2) for nodes explicitly removed from the active roadmap. DEPRECATED is a terminal status for nodes whose shipped feature was subsequently removed."
     },
     "statusAnnotation": {
       "type": "string",
@@ -124,7 +125,8 @@
               "COMPLETE",
               "ISSUE_OPEN",
               "PLANNED",
-              "DEFERRED"
+              "DEFERRED",
+              "DEPRECATED"
             ]
           }
         }

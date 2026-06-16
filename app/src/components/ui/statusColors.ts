@@ -16,4 +16,5 @@ export const STATUS_STYLES: Record<NodeStatus, { bg: string; fg: string }> = {
   ISSUE_OPEN: { bg: "var(--color-danger)", fg: "var(--color-accent-fg)" },
   PLANNED: { bg: "var(--color-surface-sunken)", fg: "var(--color-muted)" },
   DEFERRED: { bg: "var(--color-surface-sunken)", fg: "var(--color-muted)" },
+  DEPRECATED: { bg: "var(--color-surface-sunken)", fg: "var(--color-muted)" },
 };

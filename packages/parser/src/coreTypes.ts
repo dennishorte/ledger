@@ -9,4 +9,5 @@ export type NodeStatus =
   | "COMPLETE"
   | "ISSUE_OPEN"
   | "PLANNED"
-  | "DEFERRED";
+  | "DEFERRED"
+  | "DEPRECATED";

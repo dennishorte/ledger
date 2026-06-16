@@ -158,12 +158,15 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
                                                        ↓
                                               (back to APPROVED or DRAFT)
 
-(any active state) → DEFERRED   (terminal; node removed from active roadmap)
+(any active state) → DEFERRED    (terminal; node removed from active roadmap)
+COMPLETE           → DEPRECATED  (terminal; shipped feature subsequently removed)
 ```
  
 An agent may not begin implementation until a node reaches `APPROVED`. Verification compares generated artifacts against the node's Requirements and Design sections. Failed verification transitions the node to `ISSUE_OPEN` and appends findings to the document.
 
 `DEFERRED` is a terminal status — a deliberate decision that the node is out of scope for the current roadmap. It is distinct from `COMPLETE` (work done) and from `DRAFT` (work pending): it asserts that no further work is planned. The status row should record the version that deferred it and the rationale (e.g. `DEFERRED (v0.5.1) — out of v1 scope. <reason>`). A deferred node may be reactivated by transitioning back to any earlier state.
+
+`DEPRECATED` is a terminal status for nodes whose shipped feature was subsequently removed. It is only reachable from `COMPLETE` — the node must have been fully implemented before it can be deprecated. The status row should record the version and rationale (e.g. `DEPRECATED (v1.3) — feature removed in favour of <replacement>`). Unlike `DEFERRED`, a deprecated node represents completed-and-removed work; it counts toward parent completion (same as `COMPLETE`). Deprecated nodes are rendered dimmed in the DAG.
 
 **Parent nodes** (nodes holding a children manifest) reach `COMPLETE` when every child in their manifest is in a terminal-for-completion state — `COMPLETE` or `DEFERRED` — *excluding* children carrying `**Node Kind:** maintenance-container`. A parent's `COMPLETE` asserts that its declared implementation scope is fully resolved; it does not assert that the subtree is frozen. A `maintenance-container` child holds `APPROVED` as its permanent steady state and continues accepting new maintenance rounds even after its parent completes — it is lifecycle-independent of its parent by design. It does not block, and is not blocked by, its parent's completion. `DEFERRED` is also formally terminal-for-completion (previously load-bearing but undocumented: `07-replay` was DEFERRED and counted toward `01-ui`'s completion before this was written down).
 
