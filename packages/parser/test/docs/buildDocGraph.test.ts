@@ -6,6 +6,20 @@
 
 import { describe, it, expect } from "vitest";
 import { buildDocGraph } from "../../src/docs/buildDocGraph";
+import type { NodeStatus } from "../../src/coreTypes";
+
+const ALL_STATUSES: NodeStatus[] = [
+  "DRAFT",
+  "SPEC_REVIEW",
+  "APPROVED",
+  "IN_PROGRESS",
+  "VERIFY",
+  "COMPLETE",
+  "ISSUE_OPEN",
+  "PLANNED",
+  "DEFERRED",
+  "DEPRECATED",
+];
 
 // Minimal conformant leaf doc markdown
 function makeLeaf(opts: {
@@ -118,4 +132,22 @@ v
   it("no validation errors", () => {
     expect(result.validationErrorPaths).toHaveLength(0);
   });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeStatus — every NodeStatus value must round-trip without falling
+// back to DRAFT. Guards against KNOWN_STATUSES omissions.
+// ---------------------------------------------------------------------------
+
+describe("buildDocGraph — normalizeStatus round-trips all NodeStatus values", () => {
+  for (const status of ALL_STATUSES) {
+    it(`preserves ${status}`, () => {
+      const rawDocs: Record<string, string> = {
+        "01-ui/02-dag.md": makeLeaf({ nodeId: "DAG Panel", parentId: "01-ui", status }),
+      };
+      const result = buildDocGraph(rawDocs);
+      const node = result.nodes.find((n) => n.id === "01-ui/02-dag");
+      expect(node?.status).toBe(status);
+    });
+  }
 });
