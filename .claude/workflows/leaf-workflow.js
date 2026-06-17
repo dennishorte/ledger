@@ -354,23 +354,36 @@ if (runApprove) {
 if (runImpl) {
   phase('Implement')
 
+  // Deterministic worktree location owned by the agent (not by isolation: 'worktree').
+  // Using a named worktree here instead of isolation: 'worktree' prevents the framework
+  // from auto-deleting the worktree when the workflow exits early (e.g. rebase-conflict).
+  const implWorktreePath = repoPath + '/.claude/worktrees/impl-' + leafId
+  const implBranchName = 'worktree-impl-' + leafId
+
   const gatesText = gateCommands.length > 0
     ? '  Run gates and record exit codes:\n' +
-      gateCommands.map(function(g) { return '    ' + g.command.replace('{dir}', '<worktree path from pwd>') }).join('\n') + '\n'
+      gateCommands.map(function(g) { return '    ' + g.command.replace('{dir}', implWorktreePath) }).join('\n') + '\n'
     : '  No gates configured (gateCommands=[]).\n'
 
   const e2eText = e2eCommand
-    ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + e2eCommand.replace('{dir}', '<worktree path from pwd>') + '\n'
+    ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + e2eCommand.replace('{dir}', implWorktreePath) + '\n'
     : '  E2E: not configured — set e2eExit: -1.\n'
 
   const implResult = await agent(
     'You are the implementing agent for node "' + nodeId + '".\n' +
     'Source of truth: read "' + specPath + '" in full before touching any file.\n' +
     'Constraints: read "' + repoPath + '/CLAUDE.md" — these apply without exception.\n\n' +
+    'First, set up an isolated worktree (do NOT work on main directly):\n' +
+    '  Check if "' + implWorktreePath + '" already exists (test -d "' + implWorktreePath + '").\n' +
+    '  If it does NOT exist, create it:\n' +
+    '    git -C ' + repoPath + ' worktree add -b ' + implBranchName + ' ' + implWorktreePath + ' main\n' +
+    '  If it already exists, work in it as-is (it may have prior partial work).\n' +
+    'All subsequent work happens inside "' + implWorktreePath + '".\n\n' +
     'Three commits:\n\n' +
     '4a. ENTRY COMMIT:\n' +
-    '  Bump **Status:** APPROVED → IN_PROGRESS in "' + specPath + '" and the parent manifest row.\n' +
-    '  git add; git commit -m "impl(' + leafId + '): APPROVED → IN_PROGRESS"\n' +
+    '  Bump **Status:** APPROVED → IN_PROGRESS in "' + implWorktreePath + '/' + docsDir + '/' + nodeId + '.md" and the parent manifest row.\n' +
+    '  git -C ' + implWorktreePath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+    '  git -C ' + implWorktreePath + ' commit -m "impl(' + leafId + '): APPROVED → IN_PROGRESS"\n' +
     '  Nothing else in this commit.\n\n' +
     '4b. IMPLEMENTATION:\n' +
     '  Implement per the spec.\n' +
@@ -379,10 +392,10 @@ if (runImpl) {
     '\n4c. EXIT COMMIT:\n' +
     '  Fill Implementation Notes: deps added, decisions, bundle delta, gate results, deviations.\n' +
     '  Bump **Status:** IN_PROGRESS → VERIFY in spec + parent manifest.\n' +
-    '  git add -A; git commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
-    'After all commits, run: pwd && git branch --show-current\n' +
-    'Return worktreePath (from pwd) and branchName (from git branch --show-current), plus gate exit codes.',
-    { schema: IMPL_SCHEMA, label: 'implement', phase: 'Implement', isolation: 'worktree' }
+    '  git -C ' + implWorktreePath + ' add -A\n' +
+    '  git -C ' + implWorktreePath + ' commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
+    'Return worktreePath: "' + implWorktreePath + '" and branchName: "' + implBranchName + '", plus gate exit codes.',
+    { schema: IMPL_SCHEMA, label: 'implement', phase: 'Implement' }
   )
 
   if (!implResult) {
@@ -429,7 +442,8 @@ if (runRebase) {
     '  - Return { success: true, details: "rebase clean", conflicts: [] }\n\n' +
     'If there are conflicts:\n' +
     '  - Do NOT run git rebase --abort (preserve state for operator)\n' +
-    '  - Return { success: false, details: "conflict description", conflicts: ["file1", ...] }',
+    '  - Run: git -C ' + worktreePath + ' diff --name-only --diff-filter=U\n' +
+    '  - Return { success: false, details: "conflict description", conflicts: [<files from above>] }',
     { schema: REBASE_SCHEMA, label: 'rebase', phase: 'Rebase' }
   )
 
