@@ -2,9 +2,9 @@
 
 **Node ID:** `11-workflow-scripts/99-maintenance/01-portability`
 **Parent:** `11-workflow-scripts/99-maintenance`
-**Status:** VERIFY
+**Status:** COMPLETE
 **Created:** 2026-06-13
-**Last Updated:** 2026-06-13
+**Last Updated:** 2026-06-17
 **Dependencies:** `.ledger/project.json` (extended with `workflow` config block), `docs/_schemas/project-metadata.schema.json`, `.claude/workflows/leaf-workflow.js`, `.claude/workflows/leaf-workflow-finish.js`
 
 ---
