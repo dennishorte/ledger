@@ -27,6 +27,8 @@ export interface AlertChannel {
   subscribe(cb: AlertCallback): () => void;
   /** Alerts in the ring buffer with seq > afterSeq (default: all). */
   getRecent(afterSeq?: number): Alert[];
+  /** Remove a task's alert from the ring buffer (e.g. after hard-delete). */
+  evict(taskId: TaskId): void;
 }
 
 export interface AlertChannelOptions {
@@ -102,6 +104,11 @@ export function createAlertChannel(opts: AlertChannelOptions): AlertChannel {
     },
     getRecent(afterSeq = -1) {
       return ring.filter((a) => a.seq > afterSeq);
+    },
+    evict(taskId) {
+      alerted.delete(taskId);
+      const idx = ring.findIndex((a) => a.taskId === taskId);
+      if (idx !== -1) ring.splice(idx, 1);
     },
   };
 }

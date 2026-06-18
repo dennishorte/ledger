@@ -189,6 +189,7 @@ export const tasksRoute = new Hono<ServerEnv>()
     const id = c.req.param("id");
     const deleted = project.runner.store.deleteTask(id);
     if (!deleted) return c.json({ error: "task_not_found" }, 404);
+    project.alerts.evict(id);
     return c.body(null, 204);
   })
   // -------------------------------------------------------------------------
