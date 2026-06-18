@@ -1,12 +1,12 @@
 export const meta = {
   name: 'leaf-workflow-finish',
-  description: 'Promote a VERIFY-ready leaf node to COMPLETE, merge --no-ff with cross-doc sync, and clean up the worktree (stages 9–11 of leaf-workflow.md)',
+  description: 'Promote a VERIFY-ready leaf node to COMPLETE, merge --no-ff with cross-doc sync, post-merge gates, and clean up the worktree (stages 9–11 of leaf-workflow.md)',
   whenToUse: 'Run after the human_review gate task has been approved. Accepts nodeId, worktreePath, and branchName from the leaf-workflow return value.',
   phases: [
     { title: 'Inspect', detail: 'Check current status; skip already-completed stages' },
     { title: 'Promote', detail: 'Bump VERIFY→COMPLETE in worktree; commit' },
-    { title: 'Merge', detail: 'merge --no-ff --no-commit; cross-doc sync; gates; commit' },
-    { title: 'Cleanup', detail: 'git worktree remove + branch delete' },
+    { title: 'Merge', detail: 'merge --no-ff --no-commit; cross-doc sync; gates + pnpm test on merged main; commit' },
+    { title: 'Cleanup', detail: 'git worktree remove + branch delete (skipped on gate failure)' },
   ],
 }
 
@@ -33,6 +33,28 @@ const STATUS_SCHEMA = {
     exists: { type: 'boolean' },
     status: { type: 'string' },
     mergedIntoMain: { type: 'boolean' },
+  },
+}
+
+const MERGE_SCHEMA = {
+  type: 'object',
+  required: ['committed', 'gateResults'],
+  additionalProperties: false,
+  properties: {
+    committed: { type: 'boolean' },
+    gateResults: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['label', 'exit'],
+        additionalProperties: false,
+        properties: {
+          label: { type: 'string' },
+          exit: { type: 'number' },
+          stderrTail: { type: 'string' },
+        },
+      },
+    },
   },
 }
 
@@ -82,6 +104,7 @@ const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
 const uiPort       = wf.uiPort ?? 4179
 const gateCommands = wf.gates ?? []
+const testGate     = wf.testGate ?? null
 const runDate      = dateResult.date
 
 log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' date=' + runDate)
@@ -139,15 +162,21 @@ if (runPromote) {
 
 // ── Stage 10: Merge ───────────────────────────────────────────────────────────
 
+let mergeCommitted = false
+
 if (runMerge) {
   phase('Merge')
 
-  const mergeGates = gateCommands.length > 0
-    ? 'Step 3 — Run gates (must all pass before commit):\n' +
-      renderGates(gateCommands, repoPath) + '\n\n'
+  const mergeGateLines = gateCommands.length > 0
+    ? renderGates(gateCommands, repoPath) + (testGate ? '\n  ' + testGate.replace('{dir}', repoPath) : '')
+    : (testGate ? testGate.replace('{dir}', repoPath) : '')
+
+  const mergeGates = mergeGateLines
+    ? 'Step 3 — Run gates on the merged main tree (must all pass before commit):\n  ' +
+      mergeGateLines + '\n\n'
     : 'Step 3 — No gates configured; skip gate run.\n\n'
 
-  await agent(
+  const mergeResult = await agent(
     'Merge the worktree branch into main with cross-doc sync for node "' + nodeId + '".\n\n' +
     'Step 1 — Start the merge (no-commit to allow cross-doc edits first):\n' +
     '  git -C ' + repoPath + ' merge --no-ff --no-commit ' + branchName + '\n\n' +
@@ -160,19 +189,40 @@ if (runMerge) {
     '  c) Check any sibling spec with a sample-tree picture that shows ' + nodeId + ' — update those rows too.\n\n' +
     mergeGates +
     'Step 4 — If all gates pass:\n' +
-    '  git -C ' + repoPath + ' commit -m "Merge ' + branchName + ': ' + nodeId + ' → COMPLETE + doc sync"\n\n' +
-    'If any gate fails, report the failure and do NOT commit.\n\n' +
-    'Step 5 — Copy updated workflow scripts to global location:\n' +
+    '  git -C ' + repoPath + ' commit -m "Merge ' + branchName + ': ' + nodeId + ' → COMPLETE + doc sync"\n' +
+    '  Return { committed: true, gateResults: [{label, exit, stderrTail}] }\n\n' +
+    'If any gate fails: do NOT commit; do NOT run git merge --abort (preserve state).\n' +
+    '  Return { committed: false, gateResults: [{label, exit, stderrTail}] }\n\n' +
+    'Step 5 — If committed, copy updated workflow scripts to global location:\n' +
     '  cp "' + repoPath + '/.claude/workflows/leaf-workflow.js" ~/.claude/workflows/leaf-workflow.js\n' +
     '  cp "' + repoPath + '/.claude/workflows/leaf-workflow-finish.js" ~/.claude/workflows/leaf-workflow-finish.js',
-    { label: 'merge', phase: 'Merge' }
+    { schema: MERGE_SCHEMA, label: 'merge', phase: 'Merge' }
   )
+
+  if (!mergeResult.committed) {
+    const failing = mergeResult.gateResults.filter(function(g) { return g.exit !== 0 })
+    log('ERROR: post-merge gates failed — ' + failing.map(function(g) { return g.label + ' (exit ' + g.exit + ')' }).join(', '))
+    log('Worktree preserved at ' + worktreePath + ' on branch ' + branchName)
+    return {
+      nodeId,
+      status: 'post-merge-failure',
+      worktreePath,
+      branchName,
+      failingGates: failing,
+      message: 'Post-merge gates failed on merged main. Merge not committed; worktree and branch preserved. ' +
+               'Reconcile the failing gate in the worktree, then re-run leaf-workflow-finish.',
+    }
+  }
+
+  mergeCommitted = true
 } else {
   log('Merge not needed (already merged)')
+  mergeCommitted = true
 }
 
 // ── Stage 11: Cleanup ─────────────────────────────────────────────────────────
 
+// Only reached when merge committed (gate failure returns early above).
 phase('Cleanup')
 await agent(
   'Clean up the worktree and branch for node "' + nodeId + '".\n\n' +
