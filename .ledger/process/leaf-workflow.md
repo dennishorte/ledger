@@ -1,11 +1,13 @@
 # Leaf-node Implementation Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-05-23 (commit-per-transition rule added)
+**Last Updated:** 2026-06-26 (reopen mode added — finishing/extending a COMPLETE node)
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
 
 Parent decomposition — writing the children manifest of a node that doesn't have one yet — is a different procedure and is not covered here.
+
+Reopening a node that has **already reached COMPLETE** — to finish deferred scope or to extend it — is a back-edge the forward stages don't draw. It is covered in **Reopen mode** below. Do not improvise it as an ad-hoc pass; classify it first.
 
 ---
 
@@ -19,9 +21,14 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
                                                 ISSUE_OPEN
                                                      ↓
                                             (back to APPROVED or DRAFT)
+
+COMPLETE ⤺ reopen (post-COMPLETE back-edge — see Reopen mode):
+  Route F  finish deferred-but-specced scope   → IN_PROGRESS  (same version)
+  Route V  extend, scope intrinsic to the node → DRAFT        (version bump, full re-verify)
+  Route N  extend, scope separable             → new sibling/child node (not a reopen)
 ```
 
-Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back.
+Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back. The COMPLETE back-edge (Routes F/V) is entered after a node has shipped; see **Reopen mode**. Routes F and V reuse existing lifecycle tokens — no new state is introduced — so PRD §6.2's forward diagram still holds for any single cycle; the version suffix (v1 vs v2) distinguishes cycles.
 
 ---
 
@@ -231,6 +238,50 @@ Once merged:
 
 ---
 
+## Reopen mode — finishing or extending a COMPLETE node
+
+Stages 1–11 assume a node moves through its lifecycle once. A node that has already reached COMPLETE sometimes needs more work. Stage 8b (ISSUE_OPEN) only covers loop-back *before* COMPLETE; this section covers loop-back *after*. Closing a deferred Open Issue on a COMPLETE node via the triage layer is a different entry point — see `open-issue-resolution.md` — and routes here only when the resolution type is "reopen this node."
+
+### Classify first — finish ≠ extend
+
+"Reopen-and-extend" almost always conflates two operations that earn different gates:
+
+- **Finish** — completing requirements that were already in the approved spec but were deferred or only partially verified at COMPLETE (the "item 9 deferred to routine use" pattern). These already passed spec review; they need no new spec gate.
+- **Extend** — adding requirements that were **never in the spec**. New scope always needs a gate. The only question is whether it gets its own node or rides a re-spec of this one.
+
+Do not run a single blurry pass that mixes the two. New requirements that ride to COMPLETE under the node's already-granted verification have never been confronted by a review — exactly the failure stages 2 and 6 exist to prevent.
+
+### Route F — finish only (same version)
+
+The work closes already-specced, deferred requirements; nothing is added to the requirement set.
+
+1. **Reopen.** Bump Status COMPLETE → IN_PROGRESS (keep the version — this is still v1's scope). Commit the transition on its own; the message names the deferred items being closed and marks it a finish-reopen.
+2. **Scope the delta.** Add a dated **Reopen (YYYY-MM-DD) — finish** subsection to Implementation Notes listing the *delta-acceptance items*: exactly the Requirements / acceptance rows being completed this pass. This list — not the whole node — is what stage 6 review and stage 8 verification check.
+3. **Re-enter at stage 4** (implementer worktree). Run stages 4–11 as normal, but stage 6 and stage 8 are scoped to the delta-acceptance list. Promote VERIFY → COMPLETE (still v1) at stage 9.
+
+### Route V — extend, intrinsic scope (version bump)
+
+The new scope is part of this node's identity and cannot live as a separate node (the `07-health-daemon` v1→v2 case: v2 *replaced* v1's design rather than sitting beside it).
+
+1. **Reopen.** Bump Status COMPLETE → DRAFT. The spec is being revised, so the node re-enters at the spec gate, not the implementation gate. Commit the transition.
+2. **Supersede the spec.** Revise Requirements / Design / Decisions to the new combined set. Keep the prior cycle's audit tables for provenance; add a **Supersede (YYYY-MM-DD): v1 → v2** note stating what v2 adds and *why it could not be a sibling* (that justification is the test for choosing V over N).
+3. **Re-run the full forward flow from stage 1** (or stage 2 if you trust the re-spec cold). The whole node re-verifies against the combined spec — v1's requirements are **not** grandfathered out. A v2 verification covers everything the node now claims. Final Status: COMPLETE (v2, YYYY-MM-DD).
+
+### Route N — extend, separable scope (new node)
+
+The new scope is separable. This is not a reopen at all.
+
+1. Leave the COMPLETE node untouched.
+2. Author a sibling (`<id>.md` beside it) or child (`<id>/NN-<slug>.md`, if it decomposes the parent) with a declared dependency on the original. Run the normal forward flow from stage 1.
+
+Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY scoped to exactly one declared requirement set — the property version-bumps erode. Route V is the exception reserved for scope that genuinely cannot be carved off.
+
+### Decision rule
+
+**Finish → F. Extend that can be a separate node → N. Extend that cannot → V.** When torn between V and N, choose N — a sibling node is cheaper to reason about than a node whose verification spans two requirement sets.
+
+---
+
 ## Patterns to lean on
 
 - **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
@@ -250,6 +301,8 @@ Once merged:
 - **Promotion bundles doc-and-code.** Status header, parent manifest row, sample-tree pictures, top-level summaries — all change together in one commit. Stage 3 (DRAFT→APPROVED) and stage 10 (merge + cross-doc sync) both bundle the ripple-effect edits with the primary state change. Drift in any of them is a smell.
 
 - **Operator sign-off is the COMPLETE gate.** Not the reviewer agent. Not the typecheck. The human walks the acceptance check in the browser. Stage 8b is the explicit answer for "what if the human says no."
+
+- **Finish ≠ extend on a reopen.** A COMPLETE node that needs more work is two operations wearing one phrase. Closing deferred-but-specced requirements (Route F) needs no spec gate; adding never-specced scope needs one — either a sibling node (Route N, preferred) or a re-spec'd version bump (Route V). Never let new requirements ride to COMPLETE under the prior cycle's verification. See **Reopen mode**.
 
 ---
 
