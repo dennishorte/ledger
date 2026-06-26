@@ -65,6 +65,9 @@ Add a `workflow` key. Ledger's own config becomes the canonical example:
     "typesEntrypoint": "app/src/lib/types.ts",
     "apiPort": 4180,
     "uiPort": 4179,
+    "worktreeSetup": [
+      { "label": "link-env", "command": "ln -sf {repo}/.env {dir}/.env" }
+    ],
     "gates": [
       { "label": "typecheck", "command": "pnpm -C {dir}/app typecheck" },
       { "label": "lint",      "command": "pnpm -C {dir}/app lint" },
@@ -75,7 +78,8 @@ Add a `workflow` key. Ledger's own config becomes the canonical example:
 }
 ```
 
-- `{dir}` is the placeholder replaced by the script with the appropriate path (worktree or repo root) at each stage.
+- `{dir}` is the placeholder replaced by the script with the appropriate path (worktree or repo root) at each stage; `{repo}` is the repo root. Both substitute **every** occurrence (`replaceAll`), so a command may reference each token more than once (e.g. a symlink with a source and a destination).
+- `worktreeSetup` is an optional array of `{ label, command }` steps run by the implement-stage agent **immediately after `git worktree add`**, before the entry commit. Use it to populate gitignored artifacts a fresh worktree lacks but gates need (`.env`, native build output, etc.). Steps must be idempotent (`ln -sf`) since the worktree may be reused on re-entry, and their output must not be committed. Omitted → no setup steps.
 - `e2eGate` is a separate optional key; omitted → E2E stage is skipped with `e2eExit: -1`.
 - `LEDGER_PORT` / `LEDGER_UI_PORT` env vars override `apiPort` / `uiPort` when set.
 - All `workflow.*` keys are optional; the script falls back to safe defaults when any key is absent.
@@ -97,6 +101,7 @@ const uiPort       = process.env.LEDGER_UI_PORT ?? wf.uiPort ?? 4179
 const apiBaseUrl   = 'http://localhost:' + apiPort
 const uiBaseUrl    = 'http://localhost:' + uiPort
 const gateCommands = wf.gates ?? []
+const worktreeSetup = wf.worktreeSetup ?? []
 const e2eCommand   = wf.e2eGate ?? null
 const typesPath    = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null
 const runDate      = dateResult.date

@@ -176,11 +176,12 @@ if (!apiPort) {
 const apiBaseUrl   = 'http://localhost:' + apiPort
 const uiBaseUrl    = 'http://localhost:' + uiPort
 const gateCommands = wf.gates ?? []
+const worktreeSetup = wf.worktreeSetup ?? []
 const e2eCommand   = wf.e2eGate ?? null
 const typesPath    = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null
 const runDate      = dateResult.date
 
-log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' setup=' + worktreeSetup.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
 
 // Derive doc paths from config
 const nodeParts = nodeId.split('/')
@@ -192,9 +193,13 @@ const parentDocName = parentPrefix
 
 const specPath = repoPath + '/' + docsDir + '/' + nodeId + '.md'
 
-// Gate interpolation helper
+// Command interpolation: {dir} -> worktree path, {repo} -> repo root.
+// replaceAll (not replace) so multi-token commands (e.g. symlinks) substitute every occurrence.
+function renderCmd(cmd, dir) {
+  return cmd.replaceAll('{dir}', dir).replaceAll('{repo}', repoPath)
+}
 function renderGates(cmds, dir) {
-  return cmds.map(function(g) { return g.command.replace('{dir}', dir) }).join('\n')
+  return cmds.map(function(g) { return renderCmd(g.command, dir) }).join('\n')
 }
 
 const docStatus = await agent(
@@ -362,11 +367,17 @@ if (runImpl) {
 
   const gatesText = gateCommands.length > 0
     ? '  Run gates and record exit codes:\n' +
-      gateCommands.map(function(g) { return '    ' + g.command.replace('{dir}', implWorktreePath) }).join('\n') + '\n'
+      gateCommands.map(function(g) { return '    ' + renderCmd(g.command, implWorktreePath) }).join('\n') + '\n'
     : '  No gates configured (gateCommands=[]).\n'
 
+  const setupText = worktreeSetup.length > 0
+    ? '  After creating the worktree (or confirming it exists), run these project setup steps so gates can pass in the worktree:\n' +
+      worktreeSetup.map(function(s) { return '    ' + renderCmd(s.command, implWorktreePath) }).join('\n') + '\n' +
+      '  These are idempotent (ln -sf etc.); re-running on an existing worktree is safe. Do NOT commit anything they produce.\n'
+    : ''
+
   const e2eText = e2eCommand
-    ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + e2eCommand.replace('{dir}', implWorktreePath) + '\n'
+    ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + renderCmd(e2eCommand, implWorktreePath) + '\n'
     : '  E2E: not configured — set e2eExit: -1.\n'
 
   const implResult = await agent(
@@ -378,6 +389,7 @@ if (runImpl) {
     '  If it does NOT exist, create it:\n' +
     '    git -C ' + repoPath + ' worktree add -b ' + implBranchName + ' ' + implWorktreePath + ' main\n' +
     '  If it already exists, work in it as-is (it may have prior partial work).\n' +
+    setupText +
     'All subsequent work happens inside "' + implWorktreePath + '".\n\n' +
     'Three commits:\n\n' +
     '4a. ENTRY COMMIT:\n' +

@@ -8,6 +8,9 @@
     "typesEntrypoint": "app/src/lib/types.ts",
     "apiPort": 4180,
     "uiPort": 4179,
+    "worktreeSetup": [
+      { "label": "link-env", "command": "ln -sf {repo}/.env {dir}/.env" }
+    ],
     "gates": [
       { "label": "typecheck", "command": "pnpm -C {dir}/app typecheck" },
       { "label": "lint",      "command": "pnpm -C {dir}/app lint" },

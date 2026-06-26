@@ -109,9 +109,13 @@ const runDate      = dateResult.date
 
 log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' date=' + runDate)
 
-// Gate interpolation helper
+// Command interpolation: {dir} -> given path, {repo} -> repo root.
+// replaceAll (not replace) so multi-token commands substitute every occurrence.
+function renderCmd(cmd, dir) {
+  return cmd.replaceAll('{dir}', dir).replaceAll('{repo}', repoPath)
+}
 function renderGates(cmds, dir) {
-  return cmds.map(function(g) { return g.command.replace('{dir}', dir) }).join('\n')
+  return cmds.map(function(g) { return renderCmd(g.command, dir) }).join('\n')
 }
 
 const specPath = repoPath + '/' + docsDir + '/' + nodeId + '.md'
@@ -168,8 +172,8 @@ if (runMerge) {
   phase('Merge')
 
   const mergeGateLines = gateCommands.length > 0
-    ? renderGates(gateCommands, repoPath) + (testGate ? '\n  ' + testGate.replace('{dir}', repoPath) : '')
-    : (testGate ? testGate.replace('{dir}', repoPath) : '')
+    ? renderGates(gateCommands, repoPath) + (testGate ? '\n  ' + renderCmd(testGate, repoPath) : '')
+    : (testGate ? renderCmd(testGate, repoPath) : '')
 
   const mergeGates = mergeGateLines
     ? 'Step 3 — Run gates on the merged main tree (must all pass before commit):\n  ' +
