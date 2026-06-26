@@ -84,6 +84,15 @@ Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`) co
 
 See `.claude/scripts/README.md` for the inventory. If you find yourself running the same prompt-triggering shell incantation twice, add a wrapper.
 
+## Cross-project use — this repo is the framework substrate for other projects
+
+Ledger is multi-tenant. Other projects on this machine **consume** this repo's process playbooks and workflow scripts rather than carrying their own copies. A child project holds only its `docs/` tree, `.ledger/` config + playbooks, and a `dev.sh`; the server/UI/parser packages stay here and run *against* the child's project directory (`dev.sh` invokes `pnpm -C $LEDGER_DIR/server dev <child-dir>` + the app on the child's ports). Consequence: edits to `app/`, `server/`, or `packages/parser/` here affect every registered project; edits to `.ledger/process/*.md` here are the *source* copies that children receive by sync, not by symlink.
+
+- **Registry:** `.ledger/child-projects` — one absolute project path per line (`#` comments allowed). Currently registers `/Users/dennis/code/worldgen`.
+- **Scaffold a new child:** `.claude/scripts/new-project <path> --app-port N --api-port N [--name NAME]` — writes `docs/00-project.md`, `.ledger/project.json`, a templated `CLAUDE.md`, `.gitignore`, `dev.sh`, copies the current `.ledger/process/*.md` playbooks, and appends the path to the registry. Idempotent — existing files are skipped.
+- **Propagate playbook edits:** `.claude/scripts/sync-process [<path> ...]` — copies `.ledger/process/*.md` from here to every registered child (or only the named ones), reporting `ok` (already current) vs `sync` (updated). **Run this after editing any `.ledger/process/` playbook** so children don't drift. This is the "push to registered projects" step — playbooks live here canonically and are pushed outward, never hand-copied per project.
+- **Workflow scripts** (`.claude/workflows/leaf-workflow*.js`) parameterise project specifics via the child's `.ledger/project.json` `workflow` block (gates, ports, `rootDoc`, `docsDir`, `typesEntrypoint`); see `docs/11-workflow-scripts/99-maintenance/01-portability`. Global fallback copies in `~/.claude/workflows/` (for projects without a local `.claude/workflows/`) are refreshed by `leaf-workflow-finish`'s merge stage.
+
 ## Hard constraints worth not forgetting
 
 - **Single cream theme only** — no dark mode, no `data-theme` attribute, no alternate token block.
