@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Inspect', detail: 'Check current status; skip already-completed stages' },
     { title: 'Promote', detail: 'Bump VERIFY→COMPLETE in worktree; commit' },
-    { title: 'Merge', detail: 'merge --no-ff --no-commit; cross-doc sync; gates + pnpm test on merged main; commit' },
+    { title: 'Merge', detail: 'merge --no-ff --no-commit; cross-doc sync; gates + pnpm test on the merged base branch; commit' },
     { title: 'Cleanup', detail: 'git worktree remove + branch delete (skipped on gate failure)' },
   ],
 }
@@ -105,9 +105,10 @@ const rootDoc      = wf.rootDoc ?? '00-project'
 const uiPort       = wf.uiPort ?? 4179
 const gateCommands = wf.gates ?? []
 const testGate     = wf.testGate ?? null
+const baseBranch   = wf.baseBranch ?? 'main'
 const runDate      = dateResult.date
 
-log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' date=' + runDate)
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' baseBranch=' + baseBranch + ' gates=' + gateCommands.length + ' date=' + runDate)
 
 // Command interpolation: {dir} -> given path, {repo} -> repo root.
 // replaceAll (not replace) so multi-token commands substitute every occurrence.
@@ -128,7 +129,7 @@ const parentDocName = parentPrefix
 
 const docInfo = await agent(
   'Read "' + specPath + '". Return the current lifecycle status from **Status:** header.\n' +
-  'Also run: git -C ' + repoPath + ' branch --merged main | grep -q "' + branchName + '" && echo merged || echo not-merged\n' +
+  'Also run: git -C ' + repoPath + ' branch --merged ' + baseBranch + ' | grep -q "' + branchName + '" && echo merged || echo not-merged\n' +
   'Return exists (bool), status (string), mergedIntoMain (true if branch is already merged).',
   { schema: STATUS_SCHEMA, label: 'inspect', phase: 'Inspect' }
 )
@@ -176,12 +177,12 @@ if (runMerge) {
     : (testGate ? renderCmd(testGate, repoPath) : '')
 
   const mergeGates = mergeGateLines
-    ? 'Step 3 — Run gates on the merged main tree (must all pass before commit):\n  ' +
+    ? 'Step 3 — Run gates on the merged ' + baseBranch + ' tree (must all pass before commit):\n  ' +
       mergeGateLines + '\n\n'
     : 'Step 3 — No gates configured; skip gate run.\n\n'
 
   const mergeResult = await agent(
-    'Merge the worktree branch into main with cross-doc sync for node "' + nodeId + '".\n\n' +
+    'Merge the worktree branch into ' + baseBranch + ' (checked out at ' + repoPath + ') with cross-doc sync for node "' + nodeId + '".\n\n' +
     'Step 1 — Start the merge (no-commit to allow cross-doc edits first):\n' +
     '  git -C ' + repoPath + ' merge --no-ff --no-commit ' + branchName + '\n\n' +
     'Step 2 — Apply cross-doc sync BEFORE committing:\n' +

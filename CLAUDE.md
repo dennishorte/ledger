@@ -100,6 +100,7 @@ Ledger is multi-tenant. Other projects on this machine **consume** this repo's p
 - **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`.
 - **Domain types live where they're authoritative.** Doc-tree primitives (`NodeId`, `NodeStatus`, `DocNode`) are canonical in `@ledger/parser/src/coreTypes.ts` (per `04-api-server/02-parser-extraction` D5). Task-runner primitives (`Task`, `LogEvent`, `ResourceClaim`, `TaskInput`, `TaskType`, `TaskStatus`, `TaskSource`) are canonical in `@ledger/parser/src/runner/types.ts` (per `05-task-runner/01-store-schema`, 2026-05-27). `app/src/lib/types.ts` re-exports both so existing `@/lib/types` import sites keep compiling. New backend types added by future sub-leaves go in `@ledger/parser/src/<domain>/types.ts`; new UI-only types stay in `app/src/lib/types.ts`. Re-exports preserved either way.
 - **No mock data** at the shell level; each panel node defines its own data contract.
+- **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — verified empirically. So during any session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out (research, Explore-style sweeps). Route all file-mutating work through the framework's own worktree flow (`leaf-workflow`, which branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `workflow.baseBranch` in `.ledger/project.json` (default `main`).
 
 ## Process notes
 
