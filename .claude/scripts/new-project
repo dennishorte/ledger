@@ -96,7 +96,10 @@ write_file "$PROJECT_PATH/.ledger/project.json" \
   "schemaVersion": 1,
   "name": "'"$PROJECT_NAME"'",
   "docs": "docs",
-  "agent": "claude-code"
+  "agent": "claude-code",
+  "workflow": {
+    "baseBranch": "main"
+  }
 }'
 
 # ── docs/00-project.md ───────────────────────────────────────────────────────
@@ -235,6 +238,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 ## Hard constraints
 
 - **No implementation until a node reaches APPROVED.**
+- **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — so during a session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out. Route all file-mutating work through the `leaf-workflow` playbook (it branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `workflow.baseBranch` in `.ledger/project.json` (default `main`).
 - Every lifecycle transition is its own git commit.
 - Status must be updated in both the node doc AND the parent's children manifest row in the same commit.
 - The doc tree is the source of truth. If code and a doc disagree, either the doc wins or it must be updated to reflect a deliberate change — never silently.

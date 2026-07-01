@@ -8,7 +8,7 @@ export const meta = {
     { title: 'Spec Review', detail: 'Bump DRAFT→SPEC_REVIEW; independent clean-context review' },
     { title: 'Approve', detail: 'Apply mechanical findings; SPEC_REVIEW→APPROVED' },
     { title: 'Implement', detail: 'Isolated worktree; three commits (entry / impl / exit)' },
-    { title: 'Rebase', detail: 'git fetch + rebase worktree onto main' },
+    { title: 'Rebase', detail: 'git fetch + rebase worktree onto the base branch' },
     { title: 'Impl Review', detail: 'Independent clean-context review of rebased diff' },
     { title: 'Fixes', detail: 'Apply mechanical findings; add Implementation Review audit table' },
     { title: 'Gate', detail: 'POST human_review task to the runner' },
@@ -179,9 +179,28 @@ const gateCommands = wf.gates ?? []
 const worktreeSetup = wf.worktreeSetup ?? []
 const e2eCommand   = wf.e2eGate ?? null
 const typesPath    = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null
+const baseBranch   = wf.baseBranch ?? 'main'
 const runDate      = dateResult.date
 
-log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' gates=' + gateCommands.length + ' setup=' + worktreeSetup.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' baseBranch=' + baseBranch + ' gates=' + gateCommands.length + ' setup=' + worktreeSetup.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
+
+// Divergence preflight: warn if local baseBranch is ahead of its remote.
+// This workflow branches worktrees from local baseBranch and is itself unaffected,
+// but the harness's isolation:'worktree' agents fork from origin/baseBranch — so
+// when the local branch is ahead, any such agent works against a stale tree and its
+// branch must not be merged back. Surface the condition; degrade silently if no remote.
+const divergence = await agent(
+  'Run: git -C ' + repoPath + ' rev-parse --verify --quiet origin/' + baseBranch + ' >/dev/null 2>&1 && echo has-remote || echo no-remote\n' +
+  'If the output is "no-remote", return { hasRemote: false, ahead: 0 }.\n' +
+  'If "has-remote", run: git -C ' + repoPath + ' rev-list --count origin/' + baseBranch + '..' + baseBranch + '\n' +
+  '  and return { hasRemote: true, ahead: <the integer that command prints> }.',
+  { schema: { type: 'object', required: ['hasRemote', 'ahead'], additionalProperties: false, properties: { hasRemote: { type: 'boolean' }, ahead: { type: 'number' } } }, label: 'check-divergence', phase: 'Inspect' }
+)
+if (divergence.hasRemote && divergence.ahead > 0) {
+  log('⚠ local ' + baseBranch + ' is ' + divergence.ahead + ' commit(s) ahead of origin/' + baseBranch +
+      '. Harness isolation:\'worktree\' agents fork from origin/' + baseBranch + ' and will be STALE — ' +
+      'use a named worktree or run in-place for any write work. (This workflow is unaffected: it branches from local ' + baseBranch + '.)')
+}
 
 // Derive doc paths from config
 const nodeParts = nodeId.split('/')
@@ -384,10 +403,10 @@ if (runImpl) {
     'You are the implementing agent for node "' + nodeId + '".\n' +
     'Source of truth: read "' + specPath + '" in full before touching any file.\n' +
     'Constraints: read "' + repoPath + '/CLAUDE.md" — these apply without exception.\n\n' +
-    'First, set up an isolated worktree (do NOT work on main directly):\n' +
+    'First, set up an isolated worktree (do NOT work on ' + baseBranch + ' directly):\n' +
     '  Check if "' + implWorktreePath + '" already exists (test -d "' + implWorktreePath + '").\n' +
     '  If it does NOT exist, create it:\n' +
-    '    git -C ' + repoPath + ' worktree add -b ' + implBranchName + ' ' + implWorktreePath + ' main\n' +
+    '    git -C ' + repoPath + ' worktree add -b ' + implBranchName + ' ' + implWorktreePath + ' ' + baseBranch + '\n' +
     '  If it already exists, work in it as-is (it may have prior partial work).\n' +
     setupText +
     'All subsequent work happens inside "' + implWorktreePath + '".\n\n' +
@@ -445,10 +464,10 @@ if (runRebase) {
     : '  - No gates configured; skip gate run.\n'
 
   const rebaseResult = await agent(
-    'Rebase the implementation worktree for node "' + nodeId + '" onto current main.\n\n' +
+    'Rebase the implementation worktree for node "' + nodeId + '" onto current ' + baseBranch + '.\n\n' +
     'Steps:\n' +
     '1. git -C ' + repoPath + ' fetch --quiet 2>/dev/null || true\n' +
-    '2. git -C ' + worktreePath + ' rebase main\n\n' +
+    '2. git -C ' + worktreePath + ' rebase ' + baseBranch + '\n\n' +
     'If the rebase succeeds:\n' +
     rebaseGates +
     '  - Return { success: true, details: "rebase clean", conflicts: [] }\n\n' +
@@ -491,7 +510,7 @@ if (runImplReview) {
     'You are an independent implementation reviewer in a fresh context.\n\n' +
     'Required reading (ALL before forming any judgement):\n' +
     '1. "' + specPath + '" — spec including Spec Review audit table\n' +
-    '2. Run: git -C ' + worktreePath + ' diff main..HEAD — read the full diff\n' +
+    '2. Run: git -C ' + worktreePath + ' diff ' + baseBranch + '..HEAD — read the full diff\n' +
     '3. "' + repoPath + '/.ledger/process/verification-signoff.md" — review format\n' +
     '4. "' + repoPath + '/CLAUDE.md" — hard constraints\n\n' +
     implReviewGates +

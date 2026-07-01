@@ -4,6 +4,7 @@
   "docs": "docs",
   "agent": "claude-code",
   "workflow": {
+    "baseBranch": "main",
     "rootDoc": "00-project",
     "typesEntrypoint": "app/src/lib/types.ts",
     "apiPort": 4180,
