@@ -141,7 +141,7 @@ phase('Inspect')
 if (!repoPath) {
   const repoResult = await callAgent(
     'Run: git rev-parse --show-toplevel\nReturn the absolute path as a JSON object with key "path".',
-    { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect' }
+    { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect', model: 'sonnet', effort: 'low' }
   )
   repoPath = repoResult.path
 }
@@ -164,11 +164,12 @@ const [projectCfgResult, dateResult] = await Promise.all([
       },
       label: 'load-config',
       phase: 'Inspect',
+      model: 'sonnet', effort: 'low',
     }
   ),
   callAgent(
     'Run: date +%Y-%m-%d\nReturn the result as a JSON object with key "date".',
-    { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect' }
+    { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect', model: 'sonnet', effort: 'low' }
   ),
 ])
 
@@ -205,7 +206,7 @@ const divergence = await callAgent(
   'If the output is "no-remote", return { hasRemote: false, ahead: 0 }.\n' +
   'If "has-remote", run: git -C ' + repoPath + ' rev-list --count origin/' + baseBranch + '..' + baseBranch + '\n' +
   '  and return { hasRemote: true, ahead: <the integer that command prints> }.',
-  { schema: { type: 'object', required: ['hasRemote', 'ahead'], additionalProperties: false, properties: { hasRemote: { type: 'boolean' }, ahead: { type: 'number' } } }, label: 'check-divergence', phase: 'Inspect' }
+  { schema: { type: 'object', required: ['hasRemote', 'ahead'], additionalProperties: false, properties: { hasRemote: { type: 'boolean' }, ahead: { type: 'number' } } }, label: 'check-divergence', phase: 'Inspect', model: 'sonnet', effort: 'low' }
 )
 if (divergence.hasRemote && divergence.ahead > 0) {
   log('⚠ local ' + baseBranch + ' is ' + divergence.ahead + ' commit(s) ahead of origin/' + baseBranch +
@@ -274,7 +275,7 @@ if (currentStatus === 'IN_PROGRESS' || currentStatus === 'VERIFY') {
     'Run: git -C ' + repoPath + ' branch --list "*' + leafId + '*"\n' +
     'Identify the worktree for branch matching "' + leafId + '". ' +
     'Return worktreePath and branchName; use null for both if not found.',
-    { schema: WORKTREE_SCHEMA, label: 'find-worktree', phase: 'Inspect' }
+    { schema: WORKTREE_SCHEMA, label: 'find-worktree', phase: 'Inspect', model: 'sonnet', effort: 'low' }
   )
   worktreePath = wtInfo.worktreePath
   branchName = wtInfo.branchName
@@ -333,7 +334,7 @@ if (skipSpecReview) {
     'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
     'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
     'Return "done".',
-    { label: 'bump-spec-review', phase: 'Spec Review' }
+    { label: 'bump-spec-review', phase: 'Spec Review', model: 'sonnet', effort: 'low' }
   )
 
   // Independent review — clean context
@@ -622,7 +623,7 @@ const gateResult = await callAgent(
   'If it is missing, fall back to raw curl:\n' +
   '  curl -sS -X POST ' + apiBaseUrl + '/api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
   'Return the id field from the response JSON. If the server is unreachable, return "server-offline".',
-  { schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, label: 'create-gate', phase: 'Gate' }
+  { schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, label: 'create-gate', phase: 'Gate', model: 'sonnet', effort: 'low' }
 )
 
 const humanReviewTaskId = gateResult.id
