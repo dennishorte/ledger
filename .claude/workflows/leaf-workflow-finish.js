@@ -20,8 +20,20 @@ const worktreePath = _args.worktreePath
 const branchName = _args.branchName
 let repoPath = _args.repoPath ?? null
 
+const defaultModel = _args.model ?? 'sonnet'
+const defaultEffort = _args.effort ?? 'medium'
+
 if (!nodeId || !worktreePath || !branchName) {
   return { status: 'manual-needed', message: 'nodeId, worktreePath, and branchName are all required.' }
+}
+
+// Wraps agent() so every call in this workflow inherits args.model / args.effort
+// unless the call site already pins its own (e.g. a future cheap/expensive override).
+async function callAgent(prompt, opts) {
+  const merged = Object.assign({}, opts)
+  if (defaultModel && merged.model === undefined) merged.model = defaultModel
+  if (defaultEffort && merged.effort === undefined) merged.effort = defaultEffort
+  return agent(prompt, merged)
 }
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -64,7 +76,7 @@ phase('Inspect')
 
 // Auto-detect repoPath from main worktree when not supplied in args
 if (!repoPath) {
-  const repoResult = await agent(
+  const repoResult = await callAgent(
     'Run: git -C "' + worktreePath + '" rev-parse --show-toplevel\nReturn the absolute path as a JSON object with key "path".',
     { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect' }
   )
@@ -73,7 +85,7 @@ if (!repoPath) {
 
 // Load project config and resolve date in parallel
 const [projectCfgResult, dateResult] = await Promise.all([
-  agent(
+  callAgent(
     'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
     'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
     'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
@@ -91,7 +103,7 @@ const [projectCfgResult, dateResult] = await Promise.all([
       phase: 'Inspect',
     }
   ),
-  agent(
+  callAgent(
     'Run: date +%Y-%m-%d\nReturn the result as a JSON object with key "date".',
     { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect' }
   ),
@@ -127,7 +139,7 @@ const parentDocName = parentPrefix
   ? parentPrefix + '/00-' + parentPrefix.split('/').pop()
   : rootDoc
 
-const docInfo = await agent(
+const docInfo = await callAgent(
   'Read "' + specPath + '". Return the current lifecycle status from **Status:** header.\n' +
   'Also run: git -C ' + repoPath + ' branch --merged ' + baseBranch + ' | grep -q "' + branchName + '" && echo merged || echo not-merged\n' +
   'Return exists (bool), status (string), mergedIntoMain (true if branch is already merged).',
@@ -148,7 +160,7 @@ const runMerge = !docInfo.mergedIntoMain
 
 if (runPromote) {
   phase('Promote')
-  await agent(
+  await callAgent(
     'In the worktree at "' + worktreePath + '", promote node "' + nodeId + '" to COMPLETE.\n\n' +
     'Single commit:\n' +
     '1. In "' + worktreePath + '/' + docsDir + '/' + nodeId + '.md":\n' +
@@ -181,7 +193,7 @@ if (runMerge) {
       mergeGateLines + '\n\n'
     : 'Step 3 — No gates configured; skip gate run.\n\n'
 
-  const mergeResult = await agent(
+  const mergeResult = await callAgent(
     'Merge the worktree branch into ' + baseBranch + ' (checked out at ' + repoPath + ') with cross-doc sync for node "' + nodeId + '".\n\n' +
     'Step 1 — Start the merge (no-commit to allow cross-doc edits first):\n' +
     '  git -C ' + repoPath + ' merge --no-ff --no-commit ' + branchName + '\n\n' +
@@ -229,7 +241,7 @@ if (runMerge) {
 
 // Only reached when merge committed (gate failure returns early above).
 phase('Cleanup')
-await agent(
+await callAgent(
   'Clean up the worktree and branch for node "' + nodeId + '".\n\n' +
   'Steps:\n' +
   '1. Check if any dev server is pointing at ' + worktreePath + ':\n' +

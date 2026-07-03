@@ -27,9 +27,20 @@ if (typeof args === 'string') {
 const nodeId = _args.nodeId
 let repoPath = _args.repoPath ?? null
 const skipSpecReview = _args.skipSpecReview ?? false
+const defaultModel = _args.model ?? undefined
+const defaultEffort = _args.effort ?? undefined
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
+}
+
+// Wraps agent() so every call in this workflow inherits args.model / args.effort
+// unless the call site already pins its own (e.g. a future cheap/expensive override).
+async function callAgent(prompt, opts) {
+  const merged = Object.assign({}, opts)
+  if (defaultModel && merged.model === undefined) merged.model = defaultModel
+  if (defaultEffort && merged.effort === undefined) merged.effort = defaultEffort
+  return agent(prompt, merged)
 }
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -128,7 +139,7 @@ phase('Inspect')
 
 // Auto-detect repoPath from git root when not supplied in args
 if (!repoPath) {
-  const repoResult = await agent(
+  const repoResult = await callAgent(
     'Run: git rev-parse --show-toplevel\nReturn the absolute path as a JSON object with key "path".',
     { schema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, label: 'detect-repo', phase: 'Inspect' }
   )
@@ -137,7 +148,7 @@ if (!repoPath) {
 
 // Load project config and resolve date in parallel
 const [projectCfgResult, dateResult] = await Promise.all([
-  agent(
+  callAgent(
     'Read the file at "' + repoPath + '/.ledger/project.json".\n' +
     'If it does not exist, return { "docs": "docs", "workflow": {} }.\n' +
     'If it exists but has no "workflow" key, return the object with "workflow" set to {}.\n' +
@@ -155,7 +166,7 @@ const [projectCfgResult, dateResult] = await Promise.all([
       phase: 'Inspect',
     }
   ),
-  agent(
+  callAgent(
     'Run: date +%Y-%m-%d\nReturn the result as a JSON object with key "date".',
     { schema: { type: 'object', required: ['date'], properties: { date: { type: 'string' } } }, label: 'get-date', phase: 'Inspect' }
   ),
@@ -189,7 +200,7 @@ log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' baseBranch=' + base
 // but the harness's isolation:'worktree' agents fork from origin/baseBranch — so
 // when the local branch is ahead, any such agent works against a stale tree and its
 // branch must not be merged back. Surface the condition; degrade silently if no remote.
-const divergence = await agent(
+const divergence = await callAgent(
   'Run: git -C ' + repoPath + ' rev-parse --verify --quiet origin/' + baseBranch + ' >/dev/null 2>&1 && echo has-remote || echo no-remote\n' +
   'If the output is "no-remote", return { hasRemote: false, ahead: 0 }.\n' +
   'If "has-remote", run: git -C ' + repoPath + ' rev-list --count origin/' + baseBranch + '..' + baseBranch + '\n' +
@@ -221,7 +232,7 @@ function renderGates(cmds, dir) {
   return cmds.map(function(g) { return renderCmd(g.command, dir) }).join('\n')
 }
 
-const docStatus = await agent(
+const docStatus = await callAgent(
   'Read the file at "' + specPath + '". ' +
   'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false }. ' +
   'If it exists, read the **Status:** line for the lifecycle status, ' +
@@ -258,7 +269,7 @@ let branchName = null
 
 if (currentStatus === 'IN_PROGRESS' || currentStatus === 'VERIFY') {
   phase('Inspect')
-  const wtInfo = await agent(
+  const wtInfo = await callAgent(
     'Run: git -C ' + repoPath + ' worktree list --porcelain\n' +
     'Run: git -C ' + repoPath + ' branch --list "*' + leafId + '*"\n' +
     'Identify the worktree for branch matching "' + leafId + '". ' +
@@ -281,7 +292,7 @@ if (currentStatus === 'IN_PROGRESS' || currentStatus === 'VERIFY') {
 
 if (runDraft) {
   phase('Draft')
-  await agent(
+  await callAgent(
     'Author a new spec doc at "' + specPath + '" for node "' + nodeId + '".\n\n' +
     'Read before writing:\n' +
     '- "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §§1–6 (PRD schema and lifecycle)\n' +
@@ -316,7 +327,7 @@ if (skipSpecReview) {
   phase('Spec Review')
 
   // Bump DRAFT → SPEC_REVIEW transition commit
-  await agent(
+  await callAgent(
     'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
     'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
     'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
@@ -327,7 +338,7 @@ if (skipSpecReview) {
 
   // Independent review — clean context
   const typesLine = typesPath ? '- "' + typesPath + '" (existing types)\n' : ''
-  specReview = await agent(
+  specReview = await callAgent(
     'You are an independent spec reviewer in a fresh context. Read these files:\n' +
     '- "' + specPath + '" (spec under review)\n' +
     '- "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §§1–6 (PRD)\n' +
@@ -357,7 +368,7 @@ if (skipSpecReview) {
 if (runApprove) {
   phase('Approve')
   const mechanicalFindings = specReview ? specReview.findings.filter(function(f) { return f.isMechanical }) : []
-  await agent(
+  await callAgent(
     'Apply these mechanical spec-review findings to "' + specPath + '":\n' +
     JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
     'Add a "## Spec Review (' + runDate + ')" section BETWEEN "## Open Issues" and "## Implementation Notes":\n' +
@@ -399,7 +410,7 @@ if (runImpl) {
     ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + renderCmd(e2eCommand, implWorktreePath) + '\n'
     : '  E2E: not configured — set e2eExit: -1.\n'
 
-  const implResult = await agent(
+  const implResult = await callAgent(
     'You are the implementing agent for node "' + nodeId + '".\n' +
     'Source of truth: read "' + specPath + '" in full before touching any file.\n' +
     'Constraints: read "' + repoPath + '/CLAUDE.md" — these apply without exception.\n\n' +
@@ -463,7 +474,7 @@ if (runRebase) {
     ? '  - Run:\n' + renderGates(gateCommands, worktreePath).split('\n').map(function(c) { return '    ' + c }).join('\n') + '\n'
     : '  - No gates configured; skip gate run.\n'
 
-  const rebaseResult = await agent(
+  const rebaseResult = await callAgent(
     'Rebase the implementation worktree for node "' + nodeId + '" onto current ' + baseBranch + '.\n\n' +
     'Steps:\n' +
     '1. git -C ' + repoPath + ' fetch --quiet 2>/dev/null || true\n' +
@@ -506,7 +517,7 @@ if (runImplReview) {
       renderGates(gateCommands, worktreePath) + '\n\n'
     : 'No gates configured — omit gate evidence from review.\n\n'
 
-  implReview = await agent(
+  implReview = await callAgent(
     'You are an independent implementation reviewer in a fresh context.\n\n' +
     'Required reading (ALL before forming any judgement):\n' +
     '1. "' + specPath + '" — spec including Spec Review audit table\n' +
@@ -566,7 +577,7 @@ if (runFixes && implReview) {
       renderGates(gateCommands, worktreePath) + '\n\n'
     : ''
 
-  await agent(
+  await callAgent(
     'Apply these mechanical implementation review findings in the worktree at "' + worktreePath + '":\n' +
     JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
     'Add a "### Implementation Review (' + runDate + ')" subsection to Implementation Notes in "' +
@@ -603,7 +614,7 @@ const taskPayload = JSON.stringify({
 
 const apiCurlPath = repoPath + '/.claude/scripts/api-curl'
 
-const gateResult = await agent(
+const gateResult = await callAgent(
   'Create a human_review task in the Ledger task runner.\n\n' +
   'Check if "' + apiCurlPath + '" exists with: test -f "' + apiCurlPath + '" && echo exists || echo missing\n\n' +
   'If it exists, run:\n' +
