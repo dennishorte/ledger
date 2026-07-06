@@ -1,7 +1,7 @@
 # Leaf-node Implementation Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-06-26 (reopen mode added — finishing/extending a COMPLETE node)
+**Last Updated:** 2026-07-06 (compute-heavy gating checkpoint added — split long-running probes between implementer wiring and operator/main-session execution)
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
 
@@ -44,7 +44,7 @@ Create `docs/<path>/<id>.md` following the schema in PRD §6.1. Required section
 - **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
 - **Open Issues** — priority-tagged (HIGH / MEDIUM / LOW / TRIVIAL).
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
-- **Verification** — what the verifier confirms before promoting to COMPLETE. For any node that introduces or changes UI panels or API endpoints, this section must name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface.
+- **Verification** — what the verifier confirms before promoting to COMPLETE. For any node that introduces or changes UI panels or API endpoints, this section must name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface. If the gating deliverable is a long-running probe/simulation/benchmark, see the compute-heavy gating checkpoint below and state the expected runtime here.
 - **Children** — None, unless decomposing further.
 
 Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md` (the gold standard) and `01-ui/06-health.md` (a recent thorough DRAFT).
@@ -69,6 +69,25 @@ Run these signals against the freshly written DRAFT. If **any** fire, stop and f
   shared type or interface dependency — a strong proxy for hidden multi-responsibility.
 
 If none fire, the node is a leaf. Proceed to stage 2.
+
+#### Compute-heavy gating checkpoint — before advancing to stage 2
+
+A separate check from decomposition: does the node's acceptance criterion depend on a
+long-running probe, simulation, or benchmark (rough wall-clock >~15 min to execute)?
+
+If yes, record it in the Verification section (expected runtime, plus a note that
+execution is an operator/main-session step — not part of the implementer's worktree
+turn) and flag it for stage 4's dispatch brief below. A dispatched subagent's
+background jobs die when its own turn ends; a probe that outlives the turn never lands
+its artifact, and the node stalls in IN_PROGRESS with a verdict that never arrives.
+Observed empirically: probes under ~20 min completed cleanly inside the implementer's
+turn, a ~35 min probe left its node's verdict never landing, and an 81 min probe was
+force-closed mid-implementation.
+
+Do not shrink the probe to fit the dispatch budget — that quietly weakens the
+acceptance criterion instead of fixing the dispatch problem. If the spec needs N steps
+to demonstrate the property, run N steps; route the run to stage 4b's compute-heavy
+exception instead.
 
 ### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
 
@@ -109,7 +128,8 @@ Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
 - Process steps — **two commits**, one per status transition:
   - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
   - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → add or update E2E tests (see below) → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
-  - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event.
+    - **Compute-heavy exception.** If the compute-heavy gating checkpoint fired at stage 1, 4b stops once the probe/harness is wired and runnable — the implementer commits the harness, not a completed run, and notes in Implementation Notes that the probe result is pending operator execution. The operator then runs the real probe from the main session (background job, re-invoked on completion) and records the verdict in Implementation Notes before 4c. Do not claim VERIFY on a probe result the implementer's own turn could not have witnessed completing — that includes a background job it kicked off and then reported "done" without waiting for.
+  - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event. For a compute-heavy node, this commit does not land until the operator's probe verdict (above) is recorded.
 - Reporting: bundle delta vs a named baseline, files changed, `pnpm -C e2e test` exit code and pass/skip/fail counts, acceptance-check items the agent could not verify in its headless environment.
 
 **E2E test requirement.** Every node that introduces or modifies a UI panel or a user-facing API endpoint must ship corresponding additions to `e2e/tests/`. The minimum bar per panel is a smoke test (page loads, landmark heading visible, at least one data item renders). Interaction flows (approve/reject, dispatch, scan trigger, alert dismiss) get their own tests. Tests that require a live `ANTHROPIC_API_KEY` or real agent dispatch are out of scope for the suite — note them as `test.skip` with a reason string. Run `pnpm -C e2e test` inside the worktree before reporting done; a red suite blocks the exit commit.
@@ -311,6 +331,8 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 - **Parallel-worktree shared-file conflicts.** When two worktrees touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. Stage 5's rebase surfaces the conflict, but resolving it is manual operator work and the second-to-merge worktree may need to rebase against changes it didn't anticipate. Today's mitigation: when dispatching parallel implementers, pick nodes whose data contracts don't overlap. The eventual fix is PRD §6.3's resource-claim model — the task DAG refuses to schedule conflicting writes. Tracked as an open issue in PRD §11.
 
 - **Worktree staleness during long runs.** A worktree dispatched against main HEAD at time T can drift if main advances substantially before the implementer finishes. Stage 5's rebase pulls it back into alignment, but if main has changed the very file the implementer rewrote, the rebase can be substantial. Today: keep dispatches scoped tight so they finish in minutes, not hours.
+
+- **Subagent turn budget vs. long-running gating probes.** A dispatched implementer's background jobs die when its own turn ends — there is no "detached" background process that outlives the subagent, unlike the operator's main session, which survives a background job and gets re-invoked on completion. Nodes whose acceptance criterion is a long simulation/benchmark can stall (verdict never lands) or force-close mid-implementation if the probe is run inside the implementer's turn. Mitigation: the stage-1 compute-heavy gating checkpoint and stage 4b's compute-heavy exception split the work — implementer wires the probe, operator runs it. Do not fix this by shrinking the probe to fit the budget.
 
 ---
 
