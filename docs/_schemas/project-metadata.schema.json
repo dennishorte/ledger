@@ -44,6 +44,11 @@
       "additionalProperties": false,
       "description": "Workflow script configuration. All fields optional; defaults apply when omitted.",
       "properties": {
+        "baseBranch": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Integration branch the workflow scripts branch from and merge into (worktree add, rebase, diff, branch --merged, merge). Default: \"main\"."
+        },
         "rootDoc": {
           "type": "string",
           "minLength": 1,
