@@ -82,6 +82,14 @@ function allBacktickIds(value: string): string[] {
   return ids;
 }
 
+/**
+ * True when a field value is a single id-like token (`35`, `00-project`,
+ * `01-ui/02-dag`) rather than prose — usable as a parent reference.
+ */
+export function isBareIdToken(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value.trim());
+}
+
 /** Extract the first # heading. */
 function extractTitle(md: string): string {
   return md.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
@@ -196,6 +204,10 @@ export function parseDocNode(docsRelPath: string, raw: string): unknown {
       const backtick = firstBacktickId(parentField);
       if (backtick) {
         parentId = backtick;
+      } else if (isBareIdToken(parentField)) {
+        // Bare reference like `**Parent:** 35` — kept verbatim; buildDocGraph
+        // resolves it against sibling node ids (exact or `35-slug` prefix).
+        parentId = parentField.trim();
       } else {
         // Derive from path
         const segments = nodeId.split("/");

@@ -1,5 +1,5 @@
 import type { NodeId, NodeStatus } from "../coreTypes.js";
-import { parseDocNode } from "../schema/parseDocNode.js";
+import { parseDocNode, isBareIdToken } from "../schema/parseDocNode.js";
 import { validateDocNode } from "../schema/validateDocNode.js";
 import type { ValidationError } from "../schema/validateDocNode.js";
 import type { DocNode } from "./types.js";
@@ -168,6 +168,8 @@ function parseOne(key: string, md: string): ParsedDoc | null {
       const parentBacktick = backtickedId(parentField);
       if (parentBacktick) {
         parentId = parentBacktick;
+      } else if (parentField && isBareIdToken(parentField)) {
+        parentId = parentField.trim();
       } else {
         const segments = absId.split("/");
         parentId = segments.length > 1 ? segments.slice(0, -1).join("/") : "root";
@@ -184,6 +186,44 @@ function parseOne(key: string, md: string): ParsedDoc | null {
     source: key,
     validated: false,
   };
+}
+
+/**
+ * Resolve a parent reference that is not itself a known node id.
+ *
+ * Docs commonly declare parents as bare short ids — `**Parent:** 35` — where
+ * `35` names the sibling doc `35-time-stepping-plate-tectonics.md`. The
+ * reference resolves against the referencing node's own directory scope:
+ * a direct sibling whose id segment equals the reference or extends it as
+ * `<ref>-slug` / `<ref>.slug`. Resolution requires a unique match; anything
+ * ambiguous or unmatched falls back to the path-derived parent, preserving
+ * the pre-existing behavior (top-level file → root).
+ */
+function resolveParentRef(
+  ref: NodeId | null,
+  selfId: NodeId,
+  knownIds: ReadonlySet<NodeId>,
+): NodeId | null {
+  if (ref === null || ref === "root" || knownIds.has(ref)) return ref;
+
+  // Historical spellings of the project root.
+  const normalized = ref.replace(/^docs\//, "").replace(/\.md$/, "");
+  if (normalized === "00-project") return "root";
+
+  const dir = selfId.includes("/") ? selfId.slice(0, selfId.lastIndexOf("/") + 1) : "";
+  const matches: NodeId[] = [];
+  for (const id of knownIds) {
+    if (!id.startsWith(dir)) continue;
+    const rest = id.slice(dir.length);
+    if (rest.includes("/") || id === selfId) continue;
+    if (rest === ref || rest.startsWith(`${ref}-`) || rest.startsWith(`${ref}.`)) {
+      matches.push(id);
+    }
+  }
+  if (matches.length === 1 && matches[0] !== undefined) return matches[0];
+
+  const segments = selfId.split("/");
+  return segments.length > 1 ? segments.slice(0, -1).join("/") : "root";
 }
 
 function resolveChildId(parentAbsId: NodeId, relId: string): NodeId {
@@ -269,11 +309,13 @@ export function buildDocGraph(rawDocs: Record<string, string>): BuildDocGraphRes
     }
   }
 
+  const knownIds = new Set<NodeId>(parsed.map((p) => p.absId));
+
   const byId = new Map<NodeId, DocNode>();
   for (const p of parsed) {
     byId.set(p.absId, {
       id: p.absId,
-      parentId: p.parentId,
+      parentId: resolveParentRef(p.parentId, p.absId, knownIds),
       title: p.title,
       status: p.status,
       dependsOn: [],
