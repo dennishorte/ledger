@@ -135,6 +135,99 @@ v
 });
 
 // ---------------------------------------------------------------------------
+// Bare parent references — `**Parent:** 35` (no backticks) must resolve
+// against sibling node ids by exact or `35-slug`/`35.slug` prefix match.
+// ---------------------------------------------------------------------------
+
+// Leaf doc with a raw (non-backticked) Parent field value.
+function makeLeafBareParent(parentValue: string): string {
+  return makeLeaf({ nodeId: "X" }).replace(
+    "**Created:**",
+    `**Parent:** ${parentValue}\n**Created:**`,
+  );
+}
+
+describe("buildDocGraph — bare parent reference resolution", () => {
+  it("resolves a bare numeric parent to the unique prefix-matching top-level sibling", () => {
+    const rawDocs: Record<string, string> = {
+      "35-time-stepping.md": makeLeaf({ nodeId: "Tectonics" }),
+      "66-felsic-sink.md": makeLeafBareParent("35"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "66-felsic-sink");
+    expect(node?.parentId).toBe("35-time-stepping");
+  });
+
+  it("resolves an exact bare id match", () => {
+    const rawDocs: Record<string, string> = {
+      "35-time-stepping.md": makeLeaf({ nodeId: "Tectonics" }),
+      "66-felsic-sink.md": makeLeafBareParent("35-time-stepping"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "66-felsic-sink");
+    expect(node?.parentId).toBe("35-time-stepping");
+  });
+
+  it("resolves `00-project` to root", () => {
+    const rawDocs: Record<string, string> = {
+      "20-world-dup.md": makeLeafBareParent("00-project"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "20-world-dup");
+    expect(node?.parentId).toBe("root");
+  });
+
+  it("falls back to path-derived parent when the reference is ambiguous", () => {
+    const rawDocs: Record<string, string> = {
+      "35-time-stepping.md": makeLeaf({ nodeId: "Tectonics A" }),
+      "35-other.md": makeLeaf({ nodeId: "Tectonics B" }),
+      "66-felsic-sink.md": makeLeafBareParent("35"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "66-felsic-sink");
+    expect(node?.parentId).toBe("root");
+  });
+
+  it("falls back to path-derived parent when the reference matches nothing", () => {
+    const rawDocs: Record<string, string> = {
+      "66-felsic-sink.md": makeLeafBareParent("99"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "66-felsic-sink");
+    expect(node?.parentId).toBe("root");
+  });
+
+  it("resolves within the referencing node's own directory scope", () => {
+    const rawDocs: Record<string, string> = {
+      "29-validation/25-precipitation.md": makeLeaf({ nodeId: "Precipitation" }),
+      "29-validation/26-child.md": makeLeafBareParent("25"),
+      "25-top-level.md": makeLeaf({ nodeId: "Unrelated" }),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "29-validation/26-child");
+    expect(node?.parentId).toBe("29-validation/25-precipitation");
+  });
+
+  it("resolves an unresolvable backticked parent that names the project root doc", () => {
+    const rawDocs: Record<string, string> = {
+      "20-world-dup.md": makeLeaf({ nodeId: "World Dup", parentId: "docs/00-project.md" }),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "20-world-dup");
+    expect(node?.parentId).toBe("root");
+  });
+
+  it("prose parent field still falls back to path-derived parent", () => {
+    const rawDocs: Record<string, string> = {
+      "20-world-dup.md": makeLeafBareParent("to be decided later"),
+    };
+    const result = buildDocGraph(rawDocs);
+    const node = result.nodes.find((n) => n.id === "20-world-dup");
+    expect(node?.parentId).toBe("root");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // normalizeStatus — every NodeStatus value must round-trip without falling
 // back to DRAFT. Guards against KNOWN_STATUSES omissions.
 // ---------------------------------------------------------------------------
