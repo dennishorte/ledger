@@ -4,7 +4,7 @@
 **Parent:** project root (`docs/00-project.md`)
 **Status:** COMPLETE (v1, 2026-06-10)
 **Created:** 2026-06-10
-**Last Updated:** 2026-06-13
+**Last Updated:** 2026-07-12
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
 
 ---
@@ -394,4 +394,5 @@ E2E: No new Playwright tests required — this node adds no UI surface. "Passes 
 
 | ID | Title | Status |
 |----|-------|--------|
+| `11-workflow-scripts/01-post-implementation-gate` | Post-Implementation Gate — optional operator pause after implementation | SPEC_REVIEW |
 | `11-workflow-scripts/99-maintenance` | Maintenance | APPROVED |
