@@ -2,10 +2,10 @@
 
 **Node ID:** `11-workflow-scripts/01-post-implementation-gate`
 **Parent:** `11-workflow-scripts`
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-07-12
 **Last Updated:** 2026-07-12
-**Dependencies:** `.claude/workflows/leaf-workflow.js` (`11-workflow-scripts` R1, D1), `.ledger/process/leaf-workflow.md` (stages 4–5), `docs/_schemas/project-metadata.schema.json` (`workflow` block), `server/src/runner/types.ts` (`TaskType` `"human_review"`), POST `/api/tasks` (`05-task-runner/04-api-endpoints`), `.claude/scripts/sync-process` (propagates the updated `leaf-workflow.md` to registered children)
+**Dependencies:** `.claude/workflows/leaf-workflow.js` (`11-workflow-scripts` R1, D1), `.ledger/process/leaf-workflow.md` (stages 4–5), `docs/_schemas/project-metadata.schema.json` (`workflow` block), `packages/parser/src/runner/types.ts` (`TaskType` `"human_review"`), POST `/api/tasks` (`05-task-runner/04-api-endpoints`), POST `/api/tasks/:id/reject` with OCC + rationale (`05-task-runner/03-hitl-gate`), `.claude/scripts/sync-process` (propagates the updated `leaf-workflow.md` to registered children)
 
 ---
 
@@ -115,7 +115,7 @@ No lifecycle state other than `IN_PROGRESS` is touched while the gate loops — 
     "worktreePath": "<worktreePath>",
     "branchName": "<branchName>",
     "artifactPath": "<generated artifact path>",
-    "round": "<N>",
+    "round": <N>,
     "nextStep": "Open the artifact, then approve or reject (with a reason). Either way, resume with { resumeAfterGate: true, worktreePath, branchName, postImplReviewTaskId }."
   }
 }
@@ -200,9 +200,23 @@ Insert inside the existing "### 4. APPROVED → IN_PROGRESS → VERIFY — imple
 
 ## Open Issues
 
-- **MEDIUM — worldgen's actual render/visualization command is not yet known.** This spec's config example (`pnpm -C {dir}/ui render-preview ...`) is a placeholder. Implementation blocks on the operator confirming what command worldgen actually exposes (or building one) before Stage 4d can be wired to something real.
+- **MEDIUM — worldgen's actual render/visualization command is not yet known.** This spec's config example (`pnpm -C {dir}/ui render-preview ...`) is a placeholder. Implementation blocks on the operator confirming what command worldgen actually exposes (or building one) before the Post-Impl Gate can be wired to something real.
 - **LOW — pre-existing, unrelated schema gap noticed while drafting this spec.** `workflow.worktreeSetup` is documented in root `CLAUDE.md` and read by `leaf-workflow.js` Stage 4, but is absent from `project-metadata.schema.json`'s `workflow.properties`. Since `workflow` has `additionalProperties: false`, a `project.json` that sets `worktreeSetup` today would fail schema validation. Same bug class as the `baseBranch` fix in `6b1ab94`. Not this node's bug to fix — flagging for a separate maintenance pass.
 - **LOW — no cap on reject-loop rounds.** A persistently-rejected gate loops indefinitely (round 2, 3, 4, ...) with no escape hatch to `manual-needed` after N consecutive rejections. Worth adding once real usage shows whether runaway loops are a practical concern; not blocking for v1 since the operator can always abandon the node manually (it just sits `IN_PROGRESS` with an open task).
+
+---
+
+## Spec Review (2026-07-12)
+
+**Verdict:** NEEDS_MINOR_REVISIONS (0 blocking / 2 should-fix / 3 nit, all mechanical; all applied). Full sign-off matrix covered R1–R9, R5b, PRD §6.1/§6.2 compliance, the ISSUE_OPEN-exclusion reasoning (independently verified against `tasks` table schema, `NodeInspector.tsx`, `useTaskFilters.ts`, scanner monitors — no code path assumes one `human_review` task per node), and the compute-heavy-exception analogy (D6) — both hold up under scrutiny.
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | Dependencies line cited nonexistent `server/src/runner/types.ts`; omitted `05-task-runner/03-hitl-gate` (owner of `POST /:id/reject`, which D7/R5b rely on) | applied — corrected to `packages/parser/src/runner/types.ts`; added `05-task-runner/03-hitl-gate` citation |
+| S2 | R7 (leaf-workflow.md doc update + `sync-process`) had no corresponding Acceptance-check item | applied — added A7 |
+| S3 | Stray "Stage 4d" label in Open Issues, inconsistent with the doc's established "Post-Impl Gate" naming everywhere else | applied — reworded to "the Post-Impl Gate" |
+| S4 | `round` field quoted as a string placeholder (`"<N>"`) in the illustrative JSON task payload, inconsistent with its numeric type elsewhere in the doc | applied — unquoted to `<N>` |
+| S5 | *(FYI, not chargeable to this node)* parent `00-workflow-scripts.md`'s Stage-8 pseudocode uses a stale `payload:` shape that doesn't match the real `leaf-workflow.js` code | not applicable to this node — flagged for a future `11-workflow-scripts` maintenance pass |
 
 ---
 
@@ -224,6 +238,7 @@ Acceptance checks (all require a live Workflow tool invocation — operator gate
 - A4: Re-invoking the same way after the task is **rejected** (with a rationale) dispatches a patch agent in the same worktree, produces a new commit, regenerates the artifact, and returns `awaiting-post-impl-approval` with `round: 2` and a new `postImplReviewTaskId` — the spec doc's Status stays `IN_PROGRESS` throughout (no `ISSUE_OPEN` transition).
 - A5: Re-invoking while the task is still pending (no approve/reject recorded) returns `{ status: "manual-needed" }` rather than guessing.
 - A6: `project-metadata.schema.json` validates a `project.json` containing `workflow.postImplementationGate` (positive case) and still validates existing unmodified `project.json` files (regression, both ledger's and worldgen's pre-change copies).
+- A7: `.ledger/process/leaf-workflow.md` contains the new 4b½ section (diff-sketch content landed verbatim or near-verbatim); `.claude/scripts/sync-process` has been run and reports `sync` (not `ok`, i.e. an actual update) for every registered child.
 
 Expected runtime: the configured command's runtime is project-specific. Not treated as compute-heavy (leaf-workflow.md's compute-heavy gating checkpoint) unless worldgen's render step exceeds ~15 minutes wall-clock — to be confirmed once the real command (Open Issues, above) is known.
 

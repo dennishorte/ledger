@@ -394,5 +394,5 @@ E2E: No new Playwright tests required — this node adds no UI surface. "Passes 
 
 | ID | Title | Status |
 |----|-------|--------|
-| `11-workflow-scripts/01-post-implementation-gate` | Post-Implementation Gate — optional operator pause after implementation | SPEC_REVIEW |
+| `11-workflow-scripts/01-post-implementation-gate` | Post-Implementation Gate — optional operator pause after implementation | APPROVED |
 | `11-workflow-scripts/99-maintenance` | Maintenance | APPROVED |
