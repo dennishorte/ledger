@@ -2,9 +2,9 @@
 
 **Node ID:** `11-workflow-scripts/01-post-implementation-gate`
 **Parent:** `11-workflow-scripts`
-**Status:** VERIFY
+**Status:** COMPLETE (v1, 2026-07-13)
 **Created:** 2026-07-12
-**Last Updated:** 2026-07-12
+**Last Updated:** 2026-07-13
 **Dependencies:** `.claude/workflows/leaf-workflow.js` (`11-workflow-scripts` R1, D1), `.ledger/process/leaf-workflow.md` (stages 4–5), `docs/_schemas/project-metadata.schema.json` (`workflow` block), `packages/parser/src/runner/types.ts` (`TaskType` `"human_review"`), POST `/api/tasks` (`05-task-runner/04-api-endpoints`), POST `/api/tasks/:id/reject` with OCC + rationale (`05-task-runner/03-hitl-gate`), `.claude/scripts/sync-process` (propagates the updated `leaf-workflow.md` to registered children)
 
 ---
