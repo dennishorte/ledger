@@ -96,6 +96,24 @@
           "type": "string",
           "minLength": 1,
           "description": "Optional E2E gate command. Use {dir} as a placeholder. When absent, the E2E stage is skipped with e2eExit: -1."
+        },
+        "postImplementationGate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command"],
+          "properties": {
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Shell command that generates an artifact for operator review from the implementation worktree. Use {dir} as a placeholder for the worktree path and {nodeId} for the node id. Run after Stage 4 (Implement), before Stage 5 (Rebase)."
+            },
+            "artifactPath": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional path (may use {dir}/{nodeId} placeholders) to the artifact command produces. When omitted, the agent running command reports the path it produced."
+            }
+          },
+          "description": "Optional operator pause after implementation: runs command in the impl worktree and creates a human_review task pointing at the resulting artifact before Stage 5 (Rebase) proceeds. Absent by default — no behavior change. The artifact's nature (image, report, log) is entirely up to the configured command."
         }
       }
     }

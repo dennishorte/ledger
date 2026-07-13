@@ -2,7 +2,7 @@
 
 **Node ID:** `11-workflow-scripts/01-post-implementation-gate`
 **Parent:** `11-workflow-scripts`
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-07-12
 **Last Updated:** 2026-07-12
 **Dependencies:** `.claude/workflows/leaf-workflow.js` (`11-workflow-scripts` R1, D1), `.ledger/process/leaf-workflow.md` (stages 4–5), `docs/_schemas/project-metadata.schema.json` (`workflow` block), `packages/parser/src/runner/types.ts` (`TaskType` `"human_review"`), POST `/api/tasks` (`05-task-runner/04-api-endpoints`), POST `/api/tasks/:id/reject` with OCC + rationale (`05-task-runner/03-hitl-gate`), `.claude/scripts/sync-process` (propagates the updated `leaf-workflow.md` to registered children)
@@ -227,7 +227,37 @@ Operator caught a scoping error after APPROVED, before stage 4 dispatch: R9 and 
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. No new npm packages; the change is confined to `.claude/workflows/leaf-workflow.js`, the JSON schema, the process doc, and parser test fixtures.
+
+### Files changed
+
+- `.claude/workflows/leaf-workflow.js` — args parsing gains `resumeAfterGate` / `worktreePath` / `branchName` / `postImplReviewTaskId` read-through; config section reads `workflow.postImplementationGate`; new `POST_IMPL_GATE_SCHEMA`; new `renderPostImplCmd` (adds `{nodeId}` interpolation on top of `renderCmd`'s `{dir}`/`{repo}`) and `runPostImplGate(round, wtPath, brName)` helper (runs the configured command, resolves the artifact path — either statically configured or agent-reported via `POST_IMPL_GATE_SCHEMA` — then POSTs the round's `human_review` task); new resume-after-gate branch inserted right after config/doc-path derivation and before the doc-status read, dispatching on the fetched task's status (`COMPLETE` → deferred 4c commit then falls through to Stage 5 onward via a synthetic `currentStatus = 'IN_PROGRESS'`; `FAILED` → patch agent + re-run gate + new round, returns `awaiting-post-impl-approval`; anything else → `manual-needed`); Stage 4's `fourCText` is now built conditionally (deferred-commit variant when a gate is configured, byte-identical original variant otherwise) and the post-4b/pre-4c gate-trigger block (round 1) is nested inside the `if (runImpl)` branch, returning early with `awaiting-post-impl-approval` when a gate is configured; the worktree-recovery search block (IN_PROGRESS/VERIFY re-entry) is now guarded with `&& !resumeAfterGate` since resume already supplies `worktreePath`/`branchName` directly; `meta.phases` gains a `Post-Impl Gate` entry between `Implement` and `Rebase`.
+- `docs/_schemas/project-metadata.schema.json` — added `workflow.properties.postImplementationGate` (required `command`, optional `artifactPath`, both `minLength: 1`, `additionalProperties: false`) verbatim per the spec's Schema diff.
+- `.ledger/process/leaf-workflow.md` — inserted the "4b½. Post-implementation gate" subsection between the 4b and 4c bullets in stage 4, per the spec's diff sketch (landed verbatim).
+- `packages/parser/test/project/validateProjectMetadata.test.ts` + new fixture `packages/parser/test/project/fixtures/post-implementation-gate.json` — positive-case test that a `project.json` with `workflow.postImplementationGate.command` set validates via `validateProjectMetadata`, plus a regression assertion that the existing `conformant.json` fixture (no `postImplementationGate`) still validates. Covers A6 with real automated coverage instead of only a live Workflow-tool path.
+- `app/src/lib/deriveWorkflow.ts` — incidental one-line fix, not part of this node's scope (see Deviations below).
+
+### Decisions / deviations from spec
+
+- **4a/4c commit-message prefix kept as `impl(...)`, not `docs(...)`.** The task briefing described the established convention as `docs(${leafId}): ...`, but the actual pre-existing Stage 4 code in `leaf-workflow.js` uses `impl(${leafId}): APPROVED → IN_PROGRESS` / `impl(${leafId}): IN_PROGRESS → VERIFY` (implementation-bearing transitions use `impl(`, distinct from the pure doc-transition commits in stages 1–3 and the parent's stage-9 promote, which do use `docs(`). Per R8/A1 (byte-for-byte identical behavior when no gate is configured), the non-gate `fourCText` branch and the new deferred-commit / gate-configured intermediate commit both keep `impl(` for consistency with the sibling case. The new reject-loop patch commit correctly uses `fix(${leafId}): address post-impl gate feedback (round N)` per R5b's literal spec.
+- **Deferred 4c splits into two sub-commits when a gate is configured.** Rather than leaving Implementation Notes and code uncommitted across the early-return boundary (risky — the workflow invocation ends entirely at that point), the gate-configured path has the implementer commit code + Implementation Notes immediately after 4b (`impl(${leafId}): implementation complete, pending post-impl gate`, Status left at IN_PROGRESS), then a separate small commit later bumps only the Status header to VERIFY once the gate is approved (`impl(${leafId}): IN_PROGRESS → VERIFY`). This keeps the worktree's on-disk state always fully committed between invocations of the script, which a single "leave it dirty and resume" design would not.
+- **Round number carried on the task, not tracked by the orchestrator.** `runPostImplGate`'s created task's `input.round` is the only durable record of which round a task belongs to; the resume branch's `GET /api/tasks/:id` agent call reads `task.input.round` back out (defaulting to 1) rather than the orchestrator maintaining separate state. This matches D7's "derive behavior from live state" idiom already used elsewhere in the script (e.g. deriving stage-skip flags from the doc's Status header rather than an operator-supplied stage number).
+- **Incidental fix, out of this node's scope: `app/src/lib/deriveWorkflow.ts:45`.** `pnpm -C app build` (not `typecheck`, which passes — the discrepancy is `tsc -b`'s project-reference rebuild picking up the parser's freshly-built `NodeStatus` union vs. `tsc --noEmit`'s non-composite check) failed on main HEAD (confirmed via `git stash` + direct build in the primary repo, independent of this worktree) with `TS2366: Function lacks ending return statement` in `statusToRank`'s switch — the `NodeStatus` union gained a `"DEPRECATED"` member (`f3d1a57`, already on `main` before this node's work started) that the switch didn't handle. Added the missing `case "DEPRECATED": return 5` (terminal status, mirroring `DEFERRED`'s and `statusColors.ts`'s treatment). This is unrelated to `postImplementationGate` — verified pre-existing by reverting only the schema edit and re-running; the failure was identical. Bundled per the established precedent of fixing small unrelated build breaks found during gate runs (see `11-workflow-scripts`'s own vite.config.ts lint fix and the `07-health-daemon` reconciliation's `doc_decompose`/`TaskTypeBadge` fix, both documented in root `CLAUDE.md`).
+- **Pre-existing, NOT fixed here (left as documented Open Issue, per this node's own spec):** `workflow.worktreeSetup` is read by `leaf-workflow.js` and set in ledger's own `.ledger/project.json`, but absent from `project-metadata.schema.json`'s `workflow.properties` (`additionalProperties: false` on `workflow`). This causes `validateProjectMetadata` to reject ledger's own real `project.json`, which in turn fails `app/src/lib/project/loadProjectMetadata.test.ts`'s module-singleton test (5 failures) and blocks the E2E `webServer` from booting (`ledger: invalid project metadata ... /workflow: must NOT have additional properties`). Confirmed pre-existing and unrelated to `postImplementationGate` (same failures reproduced with the schema edit reverted via `git stash`). This is exactly the spec's own second Open Issue — explicitly flagged there as "Not this node's bug to fix — flagging for a separate maintenance pass" — so left untouched here.
+
+### Gate results
+
+- `pnpm -C packages/parser build`: exit 0
+- `pnpm -C packages/parser test` (via `pnpm test` fanout): 11 files / 147 tests passed, including the 2 new `workflow.postImplementationGate` cases in `validateProjectMetadata.test.ts`
+- `pnpm -C server test`: 42 files passed / 1 skipped (43), 420 tests passed / 2 skipped (422), 0 failed
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0
+- `pnpm -C app build`: exit 0 (after the incidental `deriveWorkflow.ts` fix above; failed with exit 2 before it, both on this worktree and on unmodified `main`)
+- `pnpm -C app test`: 20 files passed / 1 failed (21), 181 tests passed / 5 failed (186) — all 5 failures pre-existing in `loadProjectMetadata.test.ts`, root-caused to the `workflow.worktreeSetup` schema gap above, unrelated to this node
+- `pnpm test` (full fanout, `--no-bail`): overall exit 1, driven entirely by the two pre-existing/out-of-scope issues above (app's `loadProjectMetadata` singleton test + e2e's `webServer` boot failure); every gate within this node's actual scope (parser build, parser tests, server tests, app typecheck/lint/build) is green
+- E2E: `e2eExit: -1` — this node introduces no UI panel or user-facing API endpoint (same as the parent `11-workflow-scripts` node); no new Playwright tests required. (Separately, the E2E suite's `webServer` currently cannot boot at all due to the pre-existing schema gap above — unrelated to this node.)
 
 ---
 
