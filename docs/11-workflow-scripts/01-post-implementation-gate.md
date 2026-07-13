@@ -25,7 +25,7 @@
 - R6: `docs/_schemas/project-metadata.schema.json` gains a `postImplementationGate` property under `workflow` (required `command`, optional `artifactPath`), following the existing `gates`/`e2eGate` validation pattern.
 - R7: `.ledger/process/leaf-workflow.md` gains a documented optional section describing this gate and its position inside stage 4 (before 4c), including the reject-loop behavior, so doc and code agree per CLAUDE.md's "doc and code must agree" rule. `sync-process` must be run after landing this so worldgen's synced copy picks it up.
 - R8: The feature is config-gated and off by default. This is the mechanism by which any single project (worldgen first) opts in without touching ledger's own `project.json` or any other registered child project's config.
-- R9: Worldgen's `.ledger/project.json` gets a `workflow.postImplementationGate.command` entry pointing at whatever visualization/render command worldgen exposes for a given node's output. See Open Issues — this command's existence/shape is not yet confirmed.
+- R9: This node's own stage-4/stage-8 acceptance checks (A2–A5) exercise the full gate → reject-loop → approve → resume path against a trivial fixture command (e.g. `echo`/write-a-dummy-file) configured in a scratch or test `project.json` — not against worldgen's real render output. The mechanism is content-agnostic by construction (D4), so nothing about implementing or verifying it depends on worldgen having a real command yet.
 
 ### Out of scope (v1)
 
@@ -35,6 +35,7 @@
 - A round cap or escape hatch to `manual-needed` after N consecutive rejections — see Open Issues.
 - A new `TaskType` enum value — reuses `human_review` with a distinguishing payload field (`artifactPath`, `round`) rather than adding e.g. `post_implementation_review` to the runner's type union.
 - Any built-in notion of *what* the gate is for. This node ships one generic mechanism (run a command, pause, surface an artifact path); "visualization" is worldgen's chosen use of it, not a first-class concept in the schema or the script.
+- Wiring worldgen's real render/visualization command into worldgen's own `.ledger/project.json`. That is a downstream adoption step worldgen takes *after* this node ships COMPLETE, not a deliverable of this node — this node's job is the generic mechanism, not any particular project's use of it.
 
 ---
 
@@ -200,7 +201,7 @@ Insert inside the existing "### 4. APPROVED → IN_PROGRESS → VERIFY — imple
 
 ## Open Issues
 
-- **MEDIUM — worldgen's actual render/visualization command is not yet known.** This spec's config example (`pnpm -C {dir}/ui render-preview ...`) is a placeholder. Implementation blocks on the operator confirming what command worldgen actually exposes (or building one) before the Post-Impl Gate can be wired to something real.
+- **LOW — worldgen's actual render/visualization command is not yet known.** This spec's config example (`pnpm -C {dir}/ui render-preview ...`) is a placeholder. This does **not** block implementation or verification of this node — the mechanism is content-agnostic by design (D4/D8 below), so stage 4's acceptance checks (A2–A5) exercise it with a trivial fixture command (e.g. `echo`/write-a-dummy-file). Wiring worldgen's real command into worldgen's own `.ledger/project.json` is a separate, later, worldgen-side config change that happens after this node ships — not a dependency of it.
 - **LOW — pre-existing, unrelated schema gap noticed while drafting this spec.** `workflow.worktreeSetup` is documented in root `CLAUDE.md` and read by `leaf-workflow.js` Stage 4, but is absent from `project-metadata.schema.json`'s `workflow.properties`. Since `workflow` has `additionalProperties: false`, a `project.json` that sets `worktreeSetup` today would fail schema validation. Same bug class as the `baseBranch` fix in `6b1ab94`. Not this node's bug to fix — flagging for a separate maintenance pass.
 - **LOW — no cap on reject-loop rounds.** A persistently-rejected gate loops indefinitely (round 2, 3, 4, ...) with no escape hatch to `manual-needed` after N consecutive rejections. Worth adding once real usage shows whether runaway loops are a practical concern; not blocking for v1 since the operator can always abandon the node manually (it just sits `IN_PROGRESS` with an open task).
 
@@ -218,6 +219,10 @@ Insert inside the existing "### 4. APPROVED → IN_PROGRESS → VERIFY — imple
 | S4 | `round` field quoted as a string placeholder (`"<N>"`) in the illustrative JSON task payload, inconsistent with its numeric type elsewhere in the doc | applied — unquoted to `<N>` |
 | S5 | *(FYI, not chargeable to this node)* parent `00-workflow-scripts.md`'s Stage-8 pseudocode uses a stale `payload:` shape that doesn't match the real `leaf-workflow.js` code | not applicable to this node — flagged for a future `11-workflow-scripts` maintenance pass |
 
+### Post-Approval Correction (2026-07-12)
+
+Operator caught a scoping error after APPROVED, before stage 4 dispatch: R9 and the Open Issues/Verification/runtime language wrongly framed "worldgen's real render command is unknown" as blocking this node's own implementation. It doesn't — the gate is content-agnostic by construction (D4), so this node's own stage-4/stage-8 acceptance checks exercise it with a trivial fixture command, never worldgen's real one. Corrected: R9 rewritten to state the fixture-command testing approach; a new out-of-scope bullet makes explicit that wiring worldgen's actual command into worldgen's `project.json` is a downstream adoption step, not this node's deliverable; the Open Issue's severity dropped MEDIUM → LOW and reworded to match; A2 and the expected-runtime note updated to reference the fixture command instead of worldgen's unknown one. No Requirements/Design/Decisions substance changed — this narrows an incorrect blocking dependency, it doesn't add scope, so it doesn't warrant a new spec-review cycle.
+
 ---
 
 ## Implementation Notes
@@ -233,14 +238,14 @@ No UI panel or API endpoint changes — reuses the existing POST `/api/tasks` en
 Acceptance checks (all require a live Workflow tool invocation — operator gate):
 
 - A1: With `workflow.postImplementationGate` absent (ledger's own `project.json`, unchanged), `leaf-workflow.js` runs 4b straight to the 4c exit commit with no behavior change — regression check.
-- A2: With `workflow.postImplementationGate.command` set (worldgen), the script runs the command in the impl worktree after 4b, creates a `human_review` task with `artifactPath`/`round: 1` populated, and returns `status: "awaiting-post-impl-approval"` without landing the 4c exit commit.
+- A2: With `workflow.postImplementationGate.command` set to a trivial fixture command (e.g. `echo`/write-a-dummy-file — no dependency on worldgen's real render step, see R9), the script runs the command in the impl worktree after 4b, creates a `human_review` task with `artifactPath`/`round: 1` populated, and returns `status: "awaiting-post-impl-approval"` without landing the 4c exit commit.
 - A3: Re-invoking with `resumeAfterGate: true` plus the returned `worktreePath`/`branchName`/`postImplReviewTaskId`, after the task is **approved**, lands the deferred 4c commit and proceeds through Stage 5–8 normally.
 - A4: Re-invoking the same way after the task is **rejected** (with a rationale) dispatches a patch agent in the same worktree, produces a new commit, regenerates the artifact, and returns `awaiting-post-impl-approval` with `round: 2` and a new `postImplReviewTaskId` — the spec doc's Status stays `IN_PROGRESS` throughout (no `ISSUE_OPEN` transition).
 - A5: Re-invoking while the task is still pending (no approve/reject recorded) returns `{ status: "manual-needed" }` rather than guessing.
 - A6: `project-metadata.schema.json` validates a `project.json` containing `workflow.postImplementationGate` (positive case) and still validates existing unmodified `project.json` files (regression, both ledger's and worldgen's pre-change copies).
 - A7: `.ledger/process/leaf-workflow.md` contains the new 4b½ section (diff-sketch content landed verbatim or near-verbatim); `.claude/scripts/sync-process` has been run and reports `sync` (not `ok`, i.e. an actual update) for every registered child.
 
-Expected runtime: the configured command's runtime is project-specific. Not treated as compute-heavy (leaf-workflow.md's compute-heavy gating checkpoint) unless worldgen's render step exceeds ~15 minutes wall-clock — to be confirmed once the real command (Open Issues, above) is known.
+Expected runtime: this node's own gate command is a trivial fixture (seconds), well under the compute-heavy gating checkpoint's ~15-minute threshold. Whatever real command a given project later configures (e.g. worldgen's render step) is that project's own concern to check against the checkpoint when it adopts this gate — not something this node's implementation or verification depends on.
 
 ---
 
