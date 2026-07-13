@@ -285,6 +285,18 @@ None. No new npm packages; the change is confined to `.claude/workflows/leaf-wor
 - Should-fix (`isMechanical: true`, applied via rewording rather than executing literally): A7/R7's `sync-process` — running the script now would silently no-op (main hasn't merged this branch yet, so it has nothing new to push); corrected the acceptance check to scope this to stage 10 instead of claiming it's done or blocking on a premature run.
 - Nit (`isMechanical: false`, not applied — pre-existing, inherited, out of this node's diff): the gate-creation prompt's "return the id field" wording is slightly imprecise against the real `{task:{id,...}}` response shape; low behavioral risk, inherited verbatim from the already-shipped Stage 8 pattern. Left for a future maintenance pass if that block is touched again.
 
+### Live API round-trip verification (2026-07-13)
+
+Beyond the ajv-level schema check (Implementation Notes above) and the reviewer's independent ajv re-derivation (Implementation Review above), the underlying task-runner contract was exercised against a **real running server** — not simulated. Booted `pnpm -C server dev /Users/dennis/code/worldgen` (ledger's own `.ledger/project.json` currently can't boot a server at all, due to the unrelated pre-existing `worktreeSetup` schema gap documented in Open Issues — worldgen's config validates cleanly and served as a stand-in test harness for the task-runner API itself, which is project-agnostic).
+
+- `POST /api/tasks` with the exact corrected payload shape (`resourceClaims: [{kind:"node", nodeId, mode:"write"}]`, `reviewPayload: {summary, diffRef}`) → **201, task created**, `status: "AWAITING_HUMAN_REVIEW"` (task id `82b1e7c6-...`).
+- `GET /api/tasks/:id` → confirmed `{task, events}` shape matches exactly what the resume branch's status-check agent expects.
+- `POST /api/tasks/:id/reject` with a rationale → task transitions to `FAILED`; `GET` afterward shows an event with `kind: "error"`, `message: "rejected_with_details"`, `stack: "<the rationale text>"` — the exact shape the reject-loop's patch-agent briefing reads.
+- A second task, `POST /api/tasks/:id/approve` → transitions to `COMPLETE` — the exact status the resume branch's approve path checks for.
+- Server shut down cleanly afterward (`kill-port 4180`). Two harmless test tasks (one `FAILED`, one `COMPLETE`, titled "TEST post-impl-gate payload conformance...") remain in worldgen's local, gitignored `.ledger/runner.db` — not committed anywhere, safe to ignore or clear.
+
+This closes the gap that let the original bug ship undetected in the first place (no acceptance item for either gate had ever run against a live server). What remains genuinely un-exercised is the full `leaf-workflow.js` Workflow-tool orchestration end-to-end (the actual `agent()`/`phase()` control flow calling these endpoints itself) — that's stage 8's live Workflow-tool invocation, which is the operator's own gate to run, not something to simulate here.
+
 ---
 
 ## Verification
