@@ -8,6 +8,7 @@ export const meta = {
     { title: 'Spec Review', detail: 'Bump DRAFT→SPEC_REVIEW; independent clean-context review' },
     { title: 'Approve', detail: 'Apply mechanical findings; SPEC_REVIEW→APPROVED' },
     { title: 'Implement', detail: 'Isolated worktree; three commits (entry / impl / exit)' },
+    { title: 'Post-Impl Gate', detail: 'Optional pause after implementation to review a generated artifact (project-configured)' },
     { title: 'Rebase', detail: 'git fetch + rebase worktree onto the base branch' },
     { title: 'Impl Review', detail: 'Independent clean-context review of rebased diff' },
     { title: 'Fixes', detail: 'Apply mechanical findings; add Implementation Review audit table' },
@@ -29,6 +30,14 @@ let repoPath = _args.repoPath ?? null
 const skipSpecReview = _args.skipSpecReview ?? false
 const defaultModel = _args.model ?? undefined
 const defaultEffort = _args.effort ?? undefined
+const resumeAfterGate = _args.resumeAfterGate ?? false
+const resumeWorktreePathArg = _args.worktreePath ?? null
+const resumeBranchNameArg = _args.branchName ?? null
+const resumePostImplReviewTaskId = _args.postImplReviewTaskId ?? null
+// The task record has no generic input/round field (task-input.schema.json has no
+// such property) — round is tracked by the caller across resume calls, not read back
+// from the task. Defaults to 1 so a bare first resume call still behaves sensibly.
+const resumeRoundArg = _args.round ?? 1
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
@@ -133,6 +142,18 @@ const WORKTREE_SCHEMA = {
   },
 }
 
+// Output of the Post-Impl Gate's command-run agent call, used only when
+// postImplementationGate.artifactPath is NOT statically configured — the agent
+// running the command has to report back where the artifact landed.
+const POST_IMPL_GATE_SCHEMA = {
+  type: 'object',
+  required: ['artifactPath'],
+  additionalProperties: false,
+  properties: {
+    artifactPath: { type: 'string' },
+  },
+}
+
 // ── Stage 0: Inspect ──────────────────────────────────────────────────────────
 
 phase('Inspect')
@@ -190,11 +211,12 @@ const uiBaseUrl    = 'http://localhost:' + uiPort
 const gateCommands = wf.gates ?? []
 const worktreeSetup = wf.worktreeSetup ?? []
 const e2eCommand   = wf.e2eGate ?? null
+const postImplementationGateCommand = wf.postImplementationGate ?? null
 const typesPath    = wf.typesEntrypoint ? repoPath + '/' + wf.typesEntrypoint : null
 const baseBranch   = wf.baseBranch ?? 'main'
 const runDate      = dateResult.date
 
-log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' baseBranch=' + baseBranch + ' gates=' + gateCommands.length + ' setup=' + worktreeSetup.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' date=' + runDate)
+log('Config: docsDir=' + docsDir + ' rootDoc=' + rootDoc + ' baseBranch=' + baseBranch + ' gates=' + gateCommands.length + ' setup=' + worktreeSetup.length + ' e2e=' + (e2eCommand ? 'yes' : 'no') + ' postImplGate=' + (postImplementationGateCommand ? 'yes' : 'no') + ' date=' + runDate)
 
 // Divergence preflight: warn if local baseBranch is ahead of its remote.
 // This workflow branches worktrees from local baseBranch and is itself unaffected,
@@ -223,6 +245,7 @@ const parentDocName = parentPrefix
   : rootDoc
 
 const specPath = repoPath + '/' + docsDir + '/' + nodeId + '.md'
+const apiCurlPath = repoPath + '/.claude/scripts/api-curl'
 
 // Command interpolation: {dir} -> worktree path, {repo} -> repo root.
 // replaceAll (not replace) so multi-token commands (e.g. symlinks) substitute every occurrence.
@@ -232,23 +255,191 @@ function renderCmd(cmd, dir) {
 function renderGates(cmds, dir) {
   return cmds.map(function(g) { return renderCmd(g.command, dir) }).join('\n')
 }
+// Post-Impl Gate commands additionally support {nodeId}.
+function renderPostImplCmd(cmd, dir) {
+  return renderCmd(cmd, dir).replaceAll('{nodeId}', nodeId)
+}
 
-const docStatus = await callAgent(
-  'Read the file at "' + specPath + '". ' +
-  'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false }. ' +
-  'If it exists, read the **Status:** line for the lifecycle status, ' +
-  'return specReviewDone: true if a "## Spec Review" section exists, ' +
-  'implReviewDone: true if Implementation Notes contains an "### Implementation Review" subsection.',
-  { schema: STATUS_SCHEMA, label: 'inspect', phase: 'Inspect' }
-)
+// Runs postImplementationGate.command for one round in the given worktree, then
+// POSTs a human_review task pointing at the resulting artifact. Shared by the
+// normal-flow first round (after 4b) and the reject-loop's next round (R5b).
+async function runPostImplGate(round, wtPath, brName) {
+  const gateCmd = renderPostImplCmd(postImplementationGateCommand.command, wtPath)
+  const configuredArtifactPath = postImplementationGateCommand.artifactPath
+    ? renderPostImplCmd(postImplementationGateCommand.artifactPath, wtPath)
+    : null
 
-const currentStatus = docStatus.status
+  let artifactPath
+  if (configuredArtifactPath) {
+    await callAgent(
+      'Run this command inside the implementation worktree at "' + wtPath + '":\n  ' + gateCmd + '\n' +
+      'Return "done".',
+      { label: 'post-impl-gate-run-r' + round, phase: 'Post-Impl Gate' }
+    )
+    artifactPath = configuredArtifactPath
+  } else {
+    const gateRunResult = await callAgent(
+      'Run this command inside the implementation worktree at "' + wtPath + '":\n  ' + gateCmd + '\n' +
+      'Report the absolute path to the artifact the command produced.',
+      { schema: POST_IMPL_GATE_SCHEMA, label: 'post-impl-gate-run-r' + round, phase: 'Post-Impl Gate' }
+    )
+    artifactPath = gateRunResult.artifactPath
+  }
 
-log('Node ' + nodeId + ': status=' + currentStatus)
+  // task-input.schema.json has no generic nodeId/input field (additionalProperties:
+  // false) — the sanctioned vehicles are resourceClaims (structured) and reviewPayload
+  // (human_review-specific: summary + diffRef). worktreePath/branchName/round are not
+  // read back from the task by the resume path (see resumeRoundArg above); reviewPayload
+  // here is purely for the operator to read in the Tasks panel.
+  const taskPayload = JSON.stringify({
+    type: 'human_review',
+    title: 'Operator gate: ' + nodeId + ' post-implementation artifact ready for review (round ' + round + ')',
+    resourceClaims: [{ kind: 'node', nodeId: nodeId, mode: 'write' }],
+    reviewPayload: {
+      summary: 'Node ' + nodeId + ' (round ' + round + '). Worktree: ' + wtPath + '. Branch: ' + brName + '. ' +
+        'Open the artifact, then approve or reject (with a reason). Either way, resume with ' +
+        '{ resumeAfterGate: true, worktreePath: "' + wtPath + '", branchName: "' + brName + '", ' +
+        'postImplReviewTaskId: <this task\'s id>, round: ' + round + ' }.',
+      diffRef: artifactPath,
+    },
+  })
 
-if (currentStatus === 'COMPLETE') {
-  log('Already COMPLETE — nothing to do')
-  return { nodeId, status: 'already-complete' }
+  const gateResult = await callAgent(
+    'Create a human_review task in the Ledger task runner.\n\n' +
+    'Check if "' + apiCurlPath + '" exists with: test -f "' + apiCurlPath + '" && echo exists || echo missing\n\n' +
+    'If it exists, run:\n' +
+    '  ' + apiCurlPath + ' -X POST /api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
+    'If it is missing, fall back to raw curl:\n' +
+    '  curl -sS -X POST ' + apiBaseUrl + '/api/tasks -H \'Content-Type: application/json\' -d \'' + taskPayload + '\'\n\n' +
+    'Return the id field from the response JSON. If the server is unreachable, return "server-offline".',
+    { schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, label: 'create-post-impl-gate-r' + round, phase: 'Post-Impl Gate', model: 'sonnet', effort: 'low' }
+  )
+
+  return { postImplReviewTaskId: gateResult.id, artifactPath: artifactPath }
+}
+
+let worktreePath = null
+let branchName = null
+let docStatus = null
+let currentStatus = null
+
+// ── Resume-after-gate branch (bypasses Stages 0–4b: the worktree already exists) ──
+
+if (resumeAfterGate) {
+  phase('Post-Impl Gate')
+
+  if (!resumeWorktreePathArg || !resumeBranchNameArg || !resumePostImplReviewTaskId) {
+    return { status: 'manual-needed', message: 'resumeAfterGate requires worktreePath, branchName, and postImplReviewTaskId' }
+  }
+
+  const gateTask = await callAgent(
+    'Fetch the current state of task "' + resumePostImplReviewTaskId + '".\n\n' +
+    'Check if "' + apiCurlPath + '" exists with: test -f "' + apiCurlPath + '" && echo exists || echo missing\n\n' +
+    'If it exists, run:\n' +
+    '  ' + apiCurlPath + ' /api/tasks/' + resumePostImplReviewTaskId + '\n\n' +
+    'If it is missing, fall back to raw curl:\n' +
+    '  curl -sS ' + apiBaseUrl + '/api/tasks/' + resumePostImplReviewTaskId + '\n\n' +
+    'The response is shaped { task, events }. Return:\n' +
+    '  status: task.status (one of PENDING, RUNNING, BLOCKED, AWAITING_HUMAN_REVIEW, COMPLETE, FAILED, CANCELLED)\n' +
+    '  rationale: if task.status is "FAILED", find the entry in the events array with kind "error" and ' +
+    'message "rejected_with_details", and return its "stack" field (the full rejection rationale text). ' +
+    'Otherwise return "".\n' +
+    'If the server is unreachable, return { status: "server-offline", rationale: "" }.',
+    {
+      schema: {
+        type: 'object',
+        required: ['status', 'rationale'],
+        additionalProperties: false,
+        properties: { status: { type: 'string' }, rationale: { type: 'string' } },
+      },
+      label: 'check-post-impl-gate',
+      phase: 'Post-Impl Gate',
+      model: 'sonnet', effort: 'low',
+    }
+  )
+
+  log('Post-Impl Gate task ' + resumePostImplReviewTaskId + ': status=' + gateTask.status + ' round=' + resumeRoundArg)
+
+  if (gateTask.status === 'COMPLETE') {
+    // Approved — land the deferred Stage 4c exit commit, then proceed to Stage 5 onward
+    // exactly as if no gate were configured.
+    await callAgent(
+      'In the worktree at "' + resumeWorktreePathArg + '", the post-implementation gate for node "' + nodeId +
+      '" (round ' + resumeRoundArg + ') was approved. Land the deferred Stage 4c exit commit:\n' +
+      '  In "' + resumeWorktreePathArg + '/' + docsDir + '/' + nodeId + '.md", note under Implementation Notes ' +
+      'that the post-implementation gate was approved (round ' + resumeRoundArg + ').\n' +
+      '  Bump **Status:** IN_PROGRESS → VERIFY in the spec and the parent manifest row at "' +
+      resumeWorktreePathArg + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+      '  git -C ' + resumeWorktreePathArg + ' add -A\n' +
+      '  git -C ' + resumeWorktreePathArg + ' commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n' +
+      'Return "done".',
+      { label: 'post-impl-gate-deferred-exit-commit', phase: 'Post-Impl Gate' }
+    )
+
+    worktreePath = resumeWorktreePathArg
+    branchName = resumeBranchNameArg
+    currentStatus = 'IN_PROGRESS'
+    docStatus = { exists: true, status: 'IN_PROGRESS', specReviewDone: true, implReviewDone: false }
+  } else if (gateTask.status === 'FAILED') {
+    // Rejected — patch agent in the same worktree, re-run the gate command, new round's task.
+    if (!postImplementationGateCommand) {
+      return {
+        status: 'manual-needed',
+        message: 'Task ' + resumePostImplReviewTaskId + ' was rejected but workflow.postImplementationGate is not configured — cannot re-run the gate command.',
+      }
+    }
+
+    await callAgent(
+      'You are a patch agent continuing implementation for node "' + nodeId + '" in the existing worktree at "' +
+      resumeWorktreePathArg + '" (do NOT create a new worktree or branch — this is a continuation of the same implementation, not a fresh dispatch).\n\n' +
+      'The post-implementation gate artifact for round ' + resumeRoundArg + ' was REJECTED by the operator with this rationale:\n\n' +
+      '"""\n' + gateTask.rationale + '\n"""\n\n' +
+      'Read "' + specPath + '" for context. Address the feedback in the worktree, then commit:\n' +
+      '  git -C ' + resumeWorktreePathArg + ' add -A\n' +
+      '  git -C ' + resumeWorktreePathArg + ' commit -m "fix(' + leafId + '): address post-impl gate feedback (round ' + resumeRoundArg + ')"\n' +
+      'Return "done".',
+      { label: 'post-impl-gate-patch', phase: 'Post-Impl Gate' }
+    )
+
+    const nextRound = resumeRoundArg + 1
+    const nextGate = await runPostImplGate(nextRound, resumeWorktreePathArg, resumeBranchNameArg)
+
+    log('Post-Impl Gate: round ' + nextRound + ' task ' + nextGate.postImplReviewTaskId + ' artifact ' + nextGate.artifactPath)
+
+    return {
+      nodeId,
+      status: 'awaiting-post-impl-approval',
+      worktreePath: resumeWorktreePathArg,
+      branchName: resumeBranchNameArg,
+      postImplReviewTaskId: nextGate.postImplReviewTaskId,
+      artifactPath: nextGate.artifactPath,
+      round: nextRound,
+      nextStep: 'Open the artifact, then approve or reject (with a reason) the human_review task. Either way, resume with resumeAfterGate: true.',
+      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + resumeWorktreePathArg + '", branchName: "' + resumeBranchNameArg + '", postImplReviewTaskId: "' + nextGate.postImplReviewTaskId + '", round: ' + nextRound + ' } })',
+    }
+  } else {
+    return { status: 'manual-needed', message: 'postImplReviewTaskId ' + resumePostImplReviewTaskId + ' is not yet decided' }
+  }
+}
+
+if (!resumeAfterGate) {
+  docStatus = await callAgent(
+    'Read the file at "' + specPath + '". ' +
+    'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false }. ' +
+    'If it exists, read the **Status:** line for the lifecycle status, ' +
+    'return specReviewDone: true if a "## Spec Review" section exists, ' +
+    'implReviewDone: true if Implementation Notes contains an "### Implementation Review" subsection.',
+    { schema: STATUS_SCHEMA, label: 'inspect', phase: 'Inspect' }
+  )
+
+  currentStatus = docStatus.status
+
+  log('Node ' + nodeId + ': status=' + currentStatus)
+
+  if (currentStatus === 'COMPLETE') {
+    log('Already COMPLETE — nothing to do')
+    return { nodeId, status: 'already-complete' }
+  }
 }
 
 // Derive stage-skip flags from lifecycle state
@@ -264,11 +455,10 @@ const runImplReview = runRebase || (currentStatus === 'VERIFY' && !docStatus.imp
 const runFixes = runImplReview
 
 // ── Worktree recovery (IN_PROGRESS / VERIFY re-entry) ─────────────────────────
+// Skipped when resuming after a post-impl gate: worktreePath/branchName are already
+// known from the resume args, so there is nothing to search for.
 
-let worktreePath = null
-let branchName = null
-
-if (currentStatus === 'IN_PROGRESS' || currentStatus === 'VERIFY') {
+if (!resumeAfterGate && (currentStatus === 'IN_PROGRESS' || currentStatus === 'VERIFY')) {
   phase('Inspect')
   const wtInfo = await callAgent(
     'Run: git -C ' + repoPath + ' worktree list --porcelain\n' +
@@ -411,6 +601,28 @@ if (runImpl) {
     ? '  E2E: if spec Verification says E2E is N/A, set e2eExit: -1 with note. Otherwise: ' + renderCmd(e2eCommand, implWorktreePath) + '\n'
     : '  E2E: not configured — set e2eExit: -1.\n'
 
+  // When a post-implementation gate is configured, the implementer stops after 4b — the
+  // IN_PROGRESS → VERIFY exit commit (4c) is deferred until the operator approves the gate
+  // artifact (11-workflow-scripts/01-post-implementation-gate R2/D6). When no gate is
+  // configured, 4c happens immediately in this same agent turn exactly as before (R8: byte-
+  // identical behavior for projects — including ledger itself — that don't set the config).
+  const fourCText = postImplementationGateCommand
+    ? '\n4c. EXIT COMMIT — DEFERRED:\n' +
+      '  A post-implementation gate is configured for this project (workflow.postImplementationGate).\n' +
+      '  Fill Implementation Notes: deps added, decisions, bundle delta, gate results, deviations.\n' +
+      '  Do NOT bump **Status:** yet — it stays IN_PROGRESS. Commit the implementation + notes:\n' +
+      '  git -C ' + implWorktreePath + ' add -A\n' +
+      '  git -C ' + implWorktreePath + ' commit -m "impl(' + leafId + '): implementation complete, pending post-impl gate"\n' +
+      '  The IN_PROGRESS → VERIFY transition (4c proper) lands later, once the operator approves\n' +
+      '  the post-implementation gate artifact — that is the orchestrator\'s job, not yours.\n\n' +
+      'Return worktreePath: "' + implWorktreePath + '" and branchName: "' + implBranchName + '", plus gate exit codes.'
+    : '\n4c. EXIT COMMIT:\n' +
+      '  Fill Implementation Notes: deps added, decisions, bundle delta, gate results, deviations.\n' +
+      '  Bump **Status:** IN_PROGRESS → VERIFY in spec + parent manifest.\n' +
+      '  git -C ' + implWorktreePath + ' add -A\n' +
+      '  git -C ' + implWorktreePath + ' commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
+      'Return worktreePath: "' + implWorktreePath + '" and branchName: "' + implBranchName + '", plus gate exit codes.'
+
   const implResult = await callAgent(
     'You are the implementing agent for node "' + nodeId + '".\n' +
     'Source of truth: read "' + specPath + '" in full before touching any file.\n' +
@@ -432,12 +644,7 @@ if (runImpl) {
     '  Implement per the spec.\n' +
     gatesText +
     e2eText +
-    '\n4c. EXIT COMMIT:\n' +
-    '  Fill Implementation Notes: deps added, decisions, bundle delta, gate results, deviations.\n' +
-    '  Bump **Status:** IN_PROGRESS → VERIFY in spec + parent manifest.\n' +
-    '  git -C ' + implWorktreePath + ' add -A\n' +
-    '  git -C ' + implWorktreePath + ' commit -m "impl(' + leafId + '): IN_PROGRESS → VERIFY"\n\n' +
-    'Return worktreePath: "' + implWorktreePath + '" and branchName: "' + implBranchName + '", plus gate exit codes.',
+    fourCText,
     { schema: IMPL_SCHEMA, label: 'implement', phase: 'Implement' }
   )
 
@@ -455,6 +662,30 @@ if (runImpl) {
     const anyGateFailed = gateCommands.some(function(g) { return implResult[g.label + 'Exit'] !== 0 })
     if (anyGateFailed) {
       log('WARNING: one or more gates failed — reviewer will flag')
+    }
+  }
+
+  // ── Post-Impl Gate (4b½) ──────────────────────────────────────────────────
+  // Inserted between 4b and 4c: run the configured command, create a human_review
+  // task pointing at the artifact, and return early. 4c does not land until the
+  // operator approves — see the resume-after-gate branch above.
+  if (postImplementationGateCommand) {
+    phase('Post-Impl Gate')
+
+    const round1 = await runPostImplGate(1, worktreePath, branchName)
+
+    log('Post-Impl Gate: round 1 task ' + round1.postImplReviewTaskId + ' artifact ' + round1.artifactPath)
+
+    return {
+      nodeId,
+      status: 'awaiting-post-impl-approval',
+      worktreePath,
+      branchName,
+      postImplReviewTaskId: round1.postImplReviewTaskId,
+      artifactPath: round1.artifactPath,
+      round: 1,
+      nextStep: 'Open the artifact, then approve or reject (with a reason) the human_review task. Either way, resume with resumeAfterGate: true.',
+      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + worktreePath + '", branchName: "' + branchName + '", postImplReviewTaskId: "' + round1.postImplReviewTaskId + '", round: 1 } })',
     }
   }
 } else {
@@ -601,19 +832,21 @@ if (runFixes && implReview) {
 // ── Stage 8: Gate ─────────────────────────────────────────────────────────────
 
 phase('Gate')
+// Fixed alongside 11-workflow-scripts/01-post-implementation-gate: task-input.schema.json
+// has no generic nodeId/input field (additionalProperties: false) — this previously would
+// have 400'd against the real POST /api/tasks validator. Pre-existing defect, never caught
+// because no acceptance item for this stage had run against a live server. Same fix as the
+// Post-Impl Gate: resourceClaims for nodeId, reviewPayload for the human-readable payload.
 const taskPayload = JSON.stringify({
   type: 'human_review',
-  nodeId: nodeId,
   title: 'Operator gate: ' + nodeId + ' implementation ready for verification',
-  input: {
-    nodeId: nodeId,
-    worktreePath: worktreePath,
-    branchName: branchName,
-    nextStep: 'Walk browser acceptance items, then approve or reject.',
+  resourceClaims: [{ kind: 'node', nodeId: nodeId, mode: 'write' }],
+  reviewPayload: {
+    summary: 'Node ' + nodeId + '. Worktree: ' + worktreePath + '. Branch: ' + branchName + '. ' +
+      'Walk browser acceptance items, then approve or reject.',
+    diffRef: worktreePath,
   },
 })
-
-const apiCurlPath = repoPath + '/.claude/scripts/api-curl'
 
 const gateResult = await callAgent(
   'Create a human_review task in the Ledger task runner.\n\n' +

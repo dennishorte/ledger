@@ -2,9 +2,9 @@
 
 **Node ID:** `11-workflow-scripts/01-post-implementation-gate`
 **Parent:** `11-workflow-scripts`
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-07-13)
 **Created:** 2026-07-12
-**Last Updated:** 2026-07-12
+**Last Updated:** 2026-07-13
 **Dependencies:** `.claude/workflows/leaf-workflow.js` (`11-workflow-scripts` R1, D1), `.ledger/process/leaf-workflow.md` (stages 4–5), `docs/_schemas/project-metadata.schema.json` (`workflow` block), `packages/parser/src/runner/types.ts` (`TaskType` `"human_review"`), POST `/api/tasks` (`05-task-runner/04-api-endpoints`), POST `/api/tasks/:id/reject` with OCC + rationale (`05-task-runner/03-hitl-gate`), `.claude/scripts/sync-process` (propagates the updated `leaf-workflow.md` to registered children)
 
 ---
@@ -15,9 +15,9 @@
 
 - R1: New optional `workflow.postImplementationGate` block in `.ledger/project.json`: `{ command: string, artifactPath?: string }`. `command` is templated with `{dir}` exactly like the existing `gates`/`e2eGate` fields. Absent by default — zero behavior change for any project that doesn't set it, including ledger itself.
 - R2: `.claude/workflows/leaf-workflow.js` gains a new optional gate, **Post-Impl Gate**, inserted *inside* Stage 4 — after 4b (implementation) but **before** the 4c exit commit (`IN_PROGRESS → VERIFY`). It runs only when `workflow.postImplementationGate` is configured for the project. The 4c exit commit is deferred until the gate is approved — see D6.
-- R3: The Post-Impl Gate runs `postImplementationGate.command` inside the implementation worktree, then POSTs a `human_review` task (same `TaskType` as the existing stage-8 gate — see D1) whose `input` payload adds `artifactPath` and `round` fields alongside the existing `nodeId`/`worktreePath`/`branchName`/`nextStep`. `round` starts at 1 and increments each time the gate loops (R5b). The command is arbitrary — a rendered image, a generated report, a log dump, a diff summary — the gate itself has no opinion on content; it only pauses and surfaces a path.
+- R3: The Post-Impl Gate runs `postImplementationGate.command` inside the implementation worktree, then POSTs a `human_review` task (same `TaskType` as the existing stage-8 gate — see D1) carrying `nodeId` via `resourceClaims` and `artifactPath`/`worktreePath`/`branchName`/`round`/`nextStep` via `reviewPayload.summary`/`reviewPayload.diffRef` (see Task payload note below — `task-input.schema.json` has no generic `input` field). `round` starts at 1 and increments each time the gate loops (R5b). The command is arbitrary — a rendered image, a generated report, a log dump, a diff summary — the gate itself has no opinion on content; it only pauses and surfaces a path.
 - R4: After posting the task, the script returns early with a new result shape: `{ status: "awaiting-post-impl-approval", worktreePath, branchName, postImplReviewTaskId, artifactPath, round, nextStep, resumeCommand }`. Status in the spec doc stays `IN_PROGRESS` — the deferred 4c means the node never claims `VERIFY` on an artifact nobody has approved. It does not proceed further in the same invocation — per `11-workflow-scripts` D1, the Workflow tool has no native HITL pause, so the pause is implemented as an early return, not a blocking wait.
-- R5: `leaf-workflow.js` accepts a new optional arg, `resumeAfterGate: boolean`, paired with `worktreePath`/`branchName`/`postImplReviewTaskId`. When true, the script queries `GET /api/tasks/:id` for `postImplReviewTaskId`'s current status and branches (see D2, D7):
+- R5: `leaf-workflow.js` accepts a new optional arg, `resumeAfterGate: boolean`, paired with `worktreePath`/`branchName`/`postImplReviewTaskId`/`round`. `round` must be passed back explicitly — it is not recoverable from the task itself (see Task payload note below). When true, the script queries `GET /api/tasks/:id` for `postImplReviewTaskId`'s current status and branches (see D2, D7):
   - **Approved** → perform the deferred 4c exit commit (`IN_PROGRESS → VERIFY`), then proceed to Stage 5 onward exactly as if no gate were configured.
   - **Rejected** → this is the reimplementation loop (R5b).
   - **Still pending** → return `{ status: "manual-needed", message: "postImplReviewTaskId <id> is not yet decided" }`.
@@ -74,7 +74,8 @@ Post-Impl Gate — NEW, conditional on workflow.postImplementationGate being set
         │
         │   operator inspects the artifact, approves or rejects the task in the Tasks panel,
         │   then re-invokes leaf-workflow.js with { resumeAfterGate: true, worktreePath,
-        │   branchName, postImplReviewTaskId } — same shape regardless of verdict
+        │   branchName, postImplReviewTaskId, round } — same shape regardless of verdict
+        │   (round is echoed back from the prior return value — not recoverable from the task)
         ▼
   script queries GET /api/tasks/:id for the task's actual status:
     ├─ REJECTED → patch agent fixes the worktree using the rejection rationale,
@@ -97,27 +98,25 @@ No lifecycle state other than `IN_PROGRESS` is touched while the gate loops — 
 
 ### `leaf-workflow.js` changes
 
-- Args parsing (near the top, alongside `skipSpecReview`): add `resumeAfterGate = _args.resumeAfterGate ?? false`, plus `_args.worktreePath` / `_args.branchName` / `_args.postImplReviewTaskId` read-through when resuming.
+- Args parsing (near the top, alongside `skipSpecReview`): add `resumeAfterGate = _args.resumeAfterGate ?? false`, plus `_args.worktreePath` / `_args.branchName` / `_args.postImplReviewTaskId` / `_args.round` (default 1) read-through when resuming.
 - Read `postImplementationGate` config the same way `gateCommands`/`e2eCommand` are already read from the project's workflow block.
 - New early-branch near the top: if `resumeAfterGate` is true, `GET /api/tasks/:id` for `postImplReviewTaskId` and dispatch on its status (approved → deferred-4c-then-Stage-5; rejected → patch loop below; pending → `manual-needed`), bypassing Stages 0–4b entirely (the worktree already exists).
-- New gate logic inserted between 4b and 4c in the normal (non-resume) flow: guarded by `if (postImplementationGateCommand) { ... }`. Mirrors the Stage 8 Gate's `callAgent` + POST `/api/tasks` pattern, with `artifactPath` and `round` added to the task's `input`, then returns early instead of falling through to 4c.
+- New gate logic inserted between 4b and 4c in the normal (non-resume) flow: guarded by `if (postImplementationGateCommand) { ... }`. Mirrors the Stage 8 Gate's `callAgent` + POST `/api/tasks` pattern, carrying `artifactPath`/`round` via `reviewPayload` (schema-conformant — see Task payload note), then returns early instead of falling through to 4c.
 - Reject-loop logic (shared between the initial pass and the resume path): a `callAgent` briefed with the task's rejection rationale, working in the existing worktree (no `isolation: "worktree"` — it's a continuation of 4b, not a new dispatch), followed by re-running `postImplementationGate.command` and posting a new round's task.
 - New schema, `POST_IMPL_GATE_SCHEMA`, for the agent call that runs the configured command and reports back the artifact path (when `artifactPath` isn't statically configured).
 
 ### Task payload (extends the existing stage-8 pattern)
 
+**Corrected during implementation (see Implementation Notes):** `task-input.schema.json` has no generic `nodeId`/`input` field (`additionalProperties: false` at the top level) — a payload shaped like the original draft below would 400 against the real `POST /api/tasks` validator. The sanctioned vehicles are `resourceClaims` (structured; used here to carry `nodeId`) and, for `human_review` specifically, `reviewPayload: {summary, diffRef}`. `round` is **not** recoverable from the created task — the resume call must pass it back explicitly (see Return shapes and `resumeAfterGate` below).
+
 ```json
 {
   "type": "human_review",
-  "nodeId": "<nodeId>",
   "title": "Operator gate: <nodeId> post-implementation artifact ready for review (round <N>)",
-  "input": {
-    "nodeId": "<nodeId>",
-    "worktreePath": "<worktreePath>",
-    "branchName": "<branchName>",
-    "artifactPath": "<generated artifact path>",
-    "round": <N>,
-    "nextStep": "Open the artifact, then approve or reject (with a reason). Either way, resume with { resumeAfterGate: true, worktreePath, branchName, postImplReviewTaskId }."
+  "resourceClaims": [{ "kind": "node", "nodeId": "<nodeId>", "mode": "write" }],
+  "reviewPayload": {
+    "summary": "Node <nodeId> (round <N>). Worktree: <worktreePath>. Branch: <branchName>. Open the artifact, then approve or reject (with a reason). Either way, resume with { resumeAfterGate: true, worktreePath, branchName, postImplReviewTaskId, round: <N> }.",
+    "diffRef": "<generated artifact path>"
   }
 }
 ```
@@ -125,7 +124,8 @@ No lifecycle state other than `IN_PROGRESS` is touched while the gate loops — 
 ### Return shapes (extends the existing four)
 
 ```js
-// New — recurs once per round; round increments on each rejection
+// New — recurs once per round; round increments on each rejection. `round` must be passed
+// back explicitly on the next resumeAfterGate call — it is not recoverable from the task.
 { status: "awaiting-post-impl-approval", worktreePath, branchName, postImplReviewTaskId, artifactPath, round, nextStep, resumeCommand }
 
 // New — resume called before the task has an approve/reject decision recorded
@@ -202,7 +202,7 @@ Insert inside the existing "### 4. APPROVED → IN_PROGRESS → VERIFY — imple
 ## Open Issues
 
 - **LOW — worldgen's actual render/visualization command is not yet known.** This spec's config example (`pnpm -C {dir}/ui render-preview ...`) is a placeholder. This does **not** block implementation or verification of this node — the mechanism is content-agnostic by design (D4/D8 below), so stage 4's acceptance checks (A2–A5) exercise it with a trivial fixture command (e.g. `echo`/write-a-dummy-file). Wiring worldgen's real command into worldgen's own `.ledger/project.json` is a separate, later, worldgen-side config change that happens after this node ships — not a dependency of it.
-- **LOW — pre-existing, unrelated schema gap noticed while drafting this spec.** `workflow.worktreeSetup` is documented in root `CLAUDE.md` and read by `leaf-workflow.js` Stage 4, but is absent from `project-metadata.schema.json`'s `workflow.properties`. Since `workflow` has `additionalProperties: false`, a `project.json` that sets `worktreeSetup` today would fail schema validation. Same bug class as the `baseBranch` fix in `6b1ab94`. Not this node's bug to fix — flagging for a separate maintenance pass.
+- ~~**LOW — pre-existing, unrelated schema gap noticed while drafting this spec.** `workflow.worktreeSetup` is documented in root `CLAUDE.md` and read by `leaf-workflow.js` Stage 4, but is absent from `project-metadata.schema.json`'s `workflow.properties`. Since `workflow` has `additionalProperties: false`, a `project.json` that sets `worktreeSetup` today would fail schema validation. Same bug class as the `baseBranch` fix in `6b1ab94`. Not this node's bug to fix — flagging for a separate maintenance pass.~~ **FIXED (2026-07-13):** ended up blocking this node's own stage-8 gate creation — ledger's own server refused to boot against ledger's own `.ledger/project.json` at all (`additionalProperties` rejecting `worktreeSetup`), so there was no way to create a live `human_review` task for this node against ledger itself. Added `worktreeSetup: {label, command}[]` to the schema, matching the shape already read by the script and documented in `CLAUDE.md`, mirroring the sibling `gates` array's style. See Implementation Notes for verification.
 - **LOW — no cap on reject-loop rounds.** A persistently-rejected gate loops indefinitely (round 2, 3, 4, ...) with no escape hatch to `manual-needed` after N consecutive rejections. Worth adding once real usage shows whether runaway loops are a practical concern; not blocking for v1 since the operator can always abandon the node manually (it just sits `IN_PROGRESS` with an open task).
 
 ---
@@ -227,7 +227,81 @@ Operator caught a scoping error after APPROVED, before stage 4 dispatch: R9 and 
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+### Dependencies added
+
+None. No new npm packages; the change is confined to `.claude/workflows/leaf-workflow.js`, the JSON schema, the process doc, and parser test fixtures.
+
+### Files changed
+
+- `.claude/workflows/leaf-workflow.js` — args parsing gains `resumeAfterGate` / `worktreePath` / `branchName` / `postImplReviewTaskId` read-through; config section reads `workflow.postImplementationGate`; new `POST_IMPL_GATE_SCHEMA`; new `renderPostImplCmd` (adds `{nodeId}` interpolation on top of `renderCmd`'s `{dir}`/`{repo}`) and `runPostImplGate(round, wtPath, brName)` helper (runs the configured command, resolves the artifact path — either statically configured or agent-reported via `POST_IMPL_GATE_SCHEMA` — then POSTs the round's `human_review` task); new resume-after-gate branch inserted right after config/doc-path derivation and before the doc-status read, dispatching on the fetched task's status (`COMPLETE` → deferred 4c commit then falls through to Stage 5 onward via a synthetic `currentStatus = 'IN_PROGRESS'`; `FAILED` → patch agent + re-run gate + new round, returns `awaiting-post-impl-approval`; anything else → `manual-needed`); Stage 4's `fourCText` is now built conditionally (deferred-commit variant when a gate is configured, byte-identical original variant otherwise) and the post-4b/pre-4c gate-trigger block (round 1) is nested inside the `if (runImpl)` branch, returning early with `awaiting-post-impl-approval` when a gate is configured; the worktree-recovery search block (IN_PROGRESS/VERIFY re-entry) is now guarded with `&& !resumeAfterGate` since resume already supplies `worktreePath`/`branchName` directly; `meta.phases` gains a `Post-Impl Gate` entry between `Implement` and `Rebase`.
+- `docs/_schemas/project-metadata.schema.json` — added `workflow.properties.postImplementationGate` (required `command`, optional `artifactPath`, both `minLength: 1`, `additionalProperties: false`) verbatim per the spec's Schema diff.
+- `.ledger/process/leaf-workflow.md` — inserted the "4b½. Post-implementation gate" subsection between the 4b and 4c bullets in stage 4, per the spec's diff sketch (landed verbatim).
+- `packages/parser/test/project/validateProjectMetadata.test.ts` + new fixture `packages/parser/test/project/fixtures/post-implementation-gate.json` — positive-case test that a `project.json` with `workflow.postImplementationGate.command` set validates via `validateProjectMetadata`, plus a regression assertion that the existing `conformant.json` fixture (no `postImplementationGate`) still validates. Covers A6 with real automated coverage instead of only a live Workflow-tool path.
+- `app/src/lib/deriveWorkflow.ts` — incidental one-line fix, not part of this node's scope (see Deviations below).
+
+### Decisions / deviations from spec
+
+- **4a/4c commit-message prefix kept as `impl(...)`, not `docs(...)`.** The task briefing described the established convention as `docs(${leafId}): ...`, but the actual pre-existing Stage 4 code in `leaf-workflow.js` uses `impl(${leafId}): APPROVED → IN_PROGRESS` / `impl(${leafId}): IN_PROGRESS → VERIFY` (implementation-bearing transitions use `impl(`, distinct from the pure doc-transition commits in stages 1–3 and the parent's stage-9 promote, which do use `docs(`). Per R8/A1 (byte-for-byte identical behavior when no gate is configured), the non-gate `fourCText` branch and the new deferred-commit / gate-configured intermediate commit both keep `impl(` for consistency with the sibling case. The new reject-loop patch commit correctly uses `fix(${leafId}): address post-impl gate feedback (round N)` per R5b's literal spec.
+- **Deferred 4c splits into two sub-commits when a gate is configured.** Rather than leaving Implementation Notes and code uncommitted across the early-return boundary (risky — the workflow invocation ends entirely at that point), the gate-configured path has the implementer commit code + Implementation Notes immediately after 4b (`impl(${leafId}): implementation complete, pending post-impl gate`, Status left at IN_PROGRESS), then a separate small commit later bumps only the Status header to VERIFY once the gate is approved (`impl(${leafId}): IN_PROGRESS → VERIFY`). This keeps the worktree's on-disk state always fully committed between invocations of the script, which a single "leave it dirty and resume" design would not.
+- **Blocking correctness bug found and fixed post-implementation (operator-caught, not self-caught): the task payload didn't conform to the real `POST /api/tasks` schema.** The original implementation (this bullet's earlier draft, and — it turns out — the pre-existing Stage 8 Gate this node's Post-Impl Gate was modeled on) posted `{type, nodeId, title, input: {...}}`. `docs/_schemas/task-input.schema.json` has `additionalProperties: false` at the top level and no `nodeId` or `input` property at all — confirmed by compiling the schema with ajv directly against that exact payload shape (`additionalProperty "nodeId"` / `"input"` not allowed). Every `POST /api/tasks` call from either gate would have 400'd and never created a task; this was never caught because no acceptance item touching either gate has ever run against a live server (`00-workflow-scripts.md`'s A3 is explicitly "N/A — requires live Workflow tool invocation"). Fixed in both `runPostImplGate` and the pre-existing Stage 8 Gate block: `nodeId` moves into `resourceClaims: [{kind:"node", nodeId, mode:"write"}]` (a real, schema-sanctioned field); the rest (`worktreePath`, `branchName`, `artifactPath`, `round`, `nextStep`) collapses into `reviewPayload.summary` (free text for the operator to read in the Tasks panel) and `reviewPayload.diffRef` (the artifact path / worktree path — the one field explicitly meant for "the thing to look at"). Consequence: `round` is no longer recoverable from the created task at all (there is no `input` field to read it back from), so the resume call now must pass `round` back explicitly as an arg (defaulting to 1) rather than the orchestrator reading `task.input.round` — the design's D7 "derive behavior from live state" idiom still applies to the approve/reject *decision* (read live from `task.status`), just not to `round` bookkeeping, which the schema has no field for. Bundling the Stage 8 fix into this commit rather than filing it separately was an operator call: same file, same root cause, and Stage 8 was equally non-functional.
+- **Incidental fix, out of this node's scope: `app/src/lib/deriveWorkflow.ts:45`.** `pnpm -C app build` (not `typecheck`, which passes — the discrepancy is `tsc -b`'s project-reference rebuild picking up the parser's freshly-built `NodeStatus` union vs. `tsc --noEmit`'s non-composite check) failed on main HEAD (confirmed via `git stash` + direct build in the primary repo, independent of this worktree) with `TS2366: Function lacks ending return statement` in `statusToRank`'s switch — the `NodeStatus` union gained a `"DEPRECATED"` member (`f3d1a57`, already on `main` before this node's work started) that the switch didn't handle. Added the missing `case "DEPRECATED": return 5` (terminal status, mirroring `DEFERRED`'s and `statusColors.ts`'s treatment). This is unrelated to `postImplementationGate` — verified pre-existing by reverting only the schema edit and re-running; the failure was identical. Bundled per the established precedent of fixing small unrelated build breaks found during gate runs (see `11-workflow-scripts`'s own vite.config.ts lint fix and the `07-health-daemon` reconciliation's `doc_decompose`/`TaskTypeBadge` fix, both documented in root `CLAUDE.md`).
+- **`workflow.worktreeSetup` schema gap — initially left as an out-of-scope Open Issue, later fixed after it turned out to block this node's own stage 8.** Originally deferred (see Decisions above): `worktreeSetup` is read by `leaf-workflow.js` and set in ledger's own `.ledger/project.json`, but was absent from `project-metadata.schema.json`'s `workflow.properties` (`additionalProperties: false` on `workflow`), causing `validateProjectMetadata` to reject ledger's own real `project.json`. Confirmed pre-existing and unrelated to `postImplementationGate` at the time (reproduced with the schema edit reverted via `git stash`). It stayed deferred until attempting to create this node's real stage-8 `human_review` gate task against ledger's own project — at that point the ledger server refused to boot at all (`ledger: invalid project metadata ... /workflow: must NOT have additional properties`), making it impossible to complete this node's own operator gate without fixing it. Operator decision: fix now rather than defer further. Added the `worktreeSetup` property to the schema (array of `{label, command}`, mirroring the `gates` array's style exactly). Consequence: `app/src/lib/project/loadProjectMetadata.test.ts`'s previously-failing 5 tests now pass (186/186), and the ledger server boots cleanly against ledger's own project directory for the first time. See "Live stage-8 gate creation" below.
+
+### Gate results
+
+- `pnpm -C packages/parser build`: exit 0
+- `pnpm -C packages/parser test` (via `pnpm test` fanout): 11 files / 147 tests passed, including the 2 new `workflow.postImplementationGate` cases in `validateProjectMetadata.test.ts`
+- `pnpm -C server test`: 42 files passed / 1 skipped (43), 420 tests passed / 2 skipped (422), 0 failed
+- `pnpm -C app typecheck`: exit 0
+- `pnpm -C app lint`: exit 0
+- `pnpm -C app build`: exit 0 (after the incidental `deriveWorkflow.ts` fix above; failed with exit 2 before it, both on this worktree and on unmodified `main`)
+- `pnpm -C app test`: 21 files passed (21), 186 tests passed (186) — the 5 `loadProjectMetadata.test.ts` failures present earlier in this same Implementation Notes pass are now fixed by the `worktreeSetup` schema addition above; re-ran clean after that fix landed
+- `pnpm test` (full fanout, `--no-bail`): overall exit 1, driven entirely by the two pre-existing/out-of-scope issues above (app's `loadProjectMetadata` singleton test + e2e's `webServer` boot failure); every gate within this node's actual scope (parser build, parser tests, server tests, app typecheck/lint/build) is green
+- E2E: `e2eExit: -1` — this node introduces no UI panel or user-facing API endpoint (same as the parent `11-workflow-scripts` node); no new Playwright tests required. (Separately, the E2E suite's `webServer` currently cannot boot at all due to the pre-existing schema gap above — unrelated to this node.)
+
+### Implementation Review (2026-07-13)
+
+**Verdict:** NEEDS_MINOR_REVISIONS (0 blocking / 2 should-fix / 1 nit). Independent clean-context review against the rebased `main..HEAD` diff. Reviewer independently re-derived the schema-conformance finding from scratch (did not take the Implementation Notes' claim on faith) by compiling `task-input.schema.json` with ajv against literal payload objects matching the actual `runPostImplGate`/Stage-8-Gate code — both validated true. Also independently re-ran every gate (parser build/test, server test, app typecheck/lint/build/test) with matching results, traced the non-gate control-flow path by hand to confirm byte-identical behavior when `postImplementationGate` is absent, and confirmed the `deriveWorkflow.ts` incidental fix against `NodeStatus`'s real union and `statusColors.ts`'s existing `DEFERRED` precedent.
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| R1 | `workflow.postImplementationGate` config, `{command, artifactPath?}`, `{dir}`-templated, absent-by-default | PASS | Schema diff verbatim; `postImplementationGateCommand = wf.postImplementationGate ?? null`; ledger's own `project.json` confirmed to lack the key. |
+| R2 | Gate inserted inside Stage 4 after 4b, before 4c; 4c deferred until approved | PASS | `if (postImplementationGateCommand)` block sits after `implResult` processing and before Stage 5; `fourCText` branches to deferred-commit variant when configured. |
+| R3 | Gate POSTs `human_review` task carrying artifact/round data | PASS (post-fix) | Corrected to `resourceClaims`/`reviewPayload` per the schema-conformance fix; requirement text now matches. |
+| R4 | Early-return shape `{status:"awaiting-post-impl-approval", ...}` | PASS | Return object matches exactly, `nodeId` included consistent with sibling return shapes. |
+| R5 | `resumeAfterGate` + `worktreePath`/`branchName`/`postImplReviewTaskId`/`round`; branches on live task status | PASS | Args parsed; resume branch dispatches on `gateTask.status` (COMPLETE/FAILED/else), matching real GET `/:id` response shape. |
+| R5b | Reject → patch agent in same worktree, commit, re-run, new round's task, same resume shape both verdicts | PASS | Patch-agent issues no `worktree add`; commit message matches spec literally; `runPostImplGate(nextRound, ...)` posts next round. |
+| R6 | Schema gains `postImplementationGate` under `workflow`, matching sibling style | PASS | `additionalProperties:false`, `required:["command"]`, both fields `minLength:1`, verbatim. |
+| R7 | `leaf-workflow.md` gains 4b½ section; `sync-process` propagates it | PARTIAL → resolved | Doc section verified landed. `sync-process` correctly deferred to stage 10 (post-merge) — running it pre-merge would no-op against main's still-unmerged copy (confirmed: main's and worldgen's copies are currently byte-identical, both pre-dating 4b½). A7 reworded to reflect this is a stage-10 action item, not blocking VERIFY. |
+| R8 | Config-gated, default-off, zero cross-project impact | PASS | Same evidence as R1; control-flow trace confirms non-gate path unchanged. |
+| R9 | This node's own acceptance exercises a fixture command, not worldgen's real one | PASS | Fixture command (`echo`) confirmed in parser test fixture; no dependency on worldgen. |
+| A1 | Gate absent → 4b straight to 4c, no behavior change | PASS | Control-flow hand-trace: `fourCText`'s non-gate branch textually identical to pre-diff 4c block; gate-trigger block skipped; only cosmetic `log()` suffix added. |
+| A2–A5 | Live round-trip (create/approve/reject/pending) | N/A — operator gate | Requires a live Workflow tool invocation against a running server; code-reviewed and schema-verified, not live-exercised — correctly deferred to stage 8. |
+| A6 | Schema validates new + existing `project.json` files | PASS (post-fix) | Worldgen's real file validates. Ledger's own real file also now validates after the `worktreeSetup` schema addition (see Implementation Notes) — confirmed by the server booting cleanly against ledger's own project directory. |
+| A7 | `leaf-workflow.md` 4b½ section + sync-process | Resolved | See R7 above — reworded to correctly scope `sync-process` to stage 10. |
+
+**Findings:**
+- Should-fix (`isMechanical: true`, both applied): R3 and the "leaf-workflow.js changes" Design bullet used stale pre-fix wording describing a generic `input` field that no longer exists post-fix — rewritten to describe `resourceClaims`/`reviewPayload`.
+- Should-fix (`isMechanical: true`, applied via rewording rather than executing literally): A7/R7's `sync-process` — running the script now would silently no-op (main hasn't merged this branch yet, so it has nothing new to push); corrected the acceptance check to scope this to stage 10 instead of claiming it's done or blocking on a premature run.
+- Nit (`isMechanical: false`, not applied — pre-existing, inherited, out of this node's diff): the gate-creation prompt's "return the id field" wording is slightly imprecise against the real `{task:{id,...}}` response shape; low behavioral risk, inherited verbatim from the already-shipped Stage 8 pattern. Left for a future maintenance pass if that block is touched again.
+
+### Live API round-trip verification (2026-07-13)
+
+Beyond the ajv-level schema check (Implementation Notes above) and the reviewer's independent ajv re-derivation (Implementation Review above), the underlying task-runner contract was exercised against a **real running server** — not simulated. Booted `pnpm -C server dev /Users/dennis/code/worldgen` (ledger's own `.ledger/project.json` currently can't boot a server at all, due to the unrelated pre-existing `worktreeSetup` schema gap documented in Open Issues — worldgen's config validates cleanly and served as a stand-in test harness for the task-runner API itself, which is project-agnostic).
+
+- `POST /api/tasks` with the exact corrected payload shape (`resourceClaims: [{kind:"node", nodeId, mode:"write"}]`, `reviewPayload: {summary, diffRef}`) → **201, task created**, `status: "AWAITING_HUMAN_REVIEW"` (task id `82b1e7c6-...`).
+- `GET /api/tasks/:id` → confirmed `{task, events}` shape matches exactly what the resume branch's status-check agent expects.
+- `POST /api/tasks/:id/reject` with a rationale → task transitions to `FAILED`; `GET` afterward shows an event with `kind: "error"`, `message: "rejected_with_details"`, `stack: "<the rationale text>"` — the exact shape the reject-loop's patch-agent briefing reads.
+- A second task, `POST /api/tasks/:id/approve` → transitions to `COMPLETE` — the exact status the resume branch's approve path checks for.
+- Server shut down cleanly afterward (`kill-port 4180`). Two harmless test tasks (one `FAILED`, one `COMPLETE`, titled "TEST post-impl-gate payload conformance...") remain in worldgen's local, gitignored `.ledger/runner.db` — not committed anywhere, safe to ignore or clear.
+
+This closes the gap that let the original bug ship undetected in the first place (no acceptance item for either gate had ever run against a live server). What remains genuinely un-exercised is the full `leaf-workflow.js` Workflow-tool orchestration end-to-end (the actual `agent()`/`phase()` control flow calling these endpoints itself) — that's stage 8's live Workflow-tool invocation, which is the operator's own gate to run, not something to simulate here.
+
+### Live stage-8 gate creation against ledger itself (2026-07-13)
+
+After fixing the `worktreeSetup` schema gap (Implementation Notes above), booted the **worktree's own** `server` package (not main's — main's `packages/parser/dist` doesn't have the schema fix until this branch merges) against ledger's real project directory: `pnpm -C /Users/dennis/code/ledger/.claude/worktrees/impl-01-post-implementation-gate/server dev /Users/dennis/code/ledger`. Booted clean (`ledger: Ledger on http://localhost:4180/`) — the first time ledger's own server has been able to boot against ledger's own `.ledger/project.json` in this branch's lifetime.
+
+Created the real stage-8 `human_review` gate task for this node against the live server: task id `e823794c-639f-4fe4-aaff-c2724b3aeb2b`, `resourceClaims: [{kind:"node", nodeId:"11-workflow-scripts/01-post-implementation-gate", mode:"write"}]`, `reviewPayload.diffRef` pointing at this worktree. Server left running for the operator's browser walk / Tasks-panel approval.
 
 ---
 
@@ -243,7 +317,7 @@ Acceptance checks (all require a live Workflow tool invocation — operator gate
 - A4: Re-invoking the same way after the task is **rejected** (with a rationale) dispatches a patch agent in the same worktree, produces a new commit, regenerates the artifact, and returns `awaiting-post-impl-approval` with `round: 2` and a new `postImplReviewTaskId` — the spec doc's Status stays `IN_PROGRESS` throughout (no `ISSUE_OPEN` transition).
 - A5: Re-invoking while the task is still pending (no approve/reject recorded) returns `{ status: "manual-needed" }` rather than guessing.
 - A6: `project-metadata.schema.json` validates a `project.json` containing `workflow.postImplementationGate` (positive case) and still validates existing unmodified `project.json` files (regression, both ledger's and worldgen's pre-change copies).
-- A7: `.ledger/process/leaf-workflow.md` contains the new 4b½ section (diff-sketch content landed verbatim or near-verbatim); `.claude/scripts/sync-process` has been run and reports `sync` (not `ok`, i.e. an actual update) for every registered child.
+- A7: `.ledger/process/leaf-workflow.md` contains the new 4b½ section (diff-sketch content landed verbatim or near-verbatim) — verifiable now, in the worktree. The `sync-process` half of this check can only run **after this branch merges to main** — the script reads `.ledger/process/` from the main repo's own working tree regardless of invocation cwd, so running it pre-merge would diff against main's still-unmerged (pre-4b½) copy and no-op. This is a stage-10 (`leaf-workflow-finish`'s merge stage) action item, not a stage-6/7 one — tracked there, not blocking VERIFY.
 
 Expected runtime: this node's own gate command is a trivial fixture (seconds), well under the compute-heavy gating checkpoint's ~15-minute threshold. Whatever real command a given project later configures (e.g. worldgen's render step) is that project's own concern to check against the checkpoint when it adopts this gate — not something this node's implementation or verification depends on.
 

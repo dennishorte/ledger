@@ -62,6 +62,8 @@ function statusToRank(status: NodeStatus): number {
       return -1; // caught by authored === false check; guard only
     case "DEFERRED":
       return 5; // terminal status (PRD §6.2), sibling of COMPLETE
+    case "DEPRECATED":
+      return 5; // terminal status, sibling of COMPLETE/DEFERRED (see statusColors.ts)
   }
 }
 

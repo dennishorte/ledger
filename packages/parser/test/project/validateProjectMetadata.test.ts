@@ -25,6 +25,7 @@ function fixtureRaw(name: string): string {
 }
 
 const conformant = fixtureJson("conformant.json");
+const postImplementationGate = fixtureJson("post-implementation-gate.json");
 const missingName = fixtureJson("missing-name.json");
 const missingDocs = fixtureJson("missing-docs.json");
 const missingAgent = fixtureJson("missing-agent.json");
@@ -49,6 +50,22 @@ describe("validateProjectMetadata — conformant fixture", () => {
     expect(result.metadata.docs).toBe("docs");
     expect(result.metadata.agent).toBe("claude-code");
     expect(result.metadata.schemaVersion).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// workflow.postImplementationGate (11-workflow-scripts/01-post-implementation-gate R6/A6)
+// ---------------------------------------------------------------------------
+
+describe("validateProjectMetadata — workflow.postImplementationGate fixture", () => {
+  it("returns ok: true for a project.json with workflow.postImplementationGate.command set", () => {
+    const result = validateProjectMetadata(postImplementationGate);
+    expect(result.ok).toBe(true);
+  });
+
+  it("still returns ok: true for an existing project.json with no postImplementationGate (regression)", () => {
+    const result = validateProjectMetadata(conformant);
+    expect(result.ok).toBe(true);
   });
 });
 

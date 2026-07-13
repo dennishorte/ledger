@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Test Project",
+  "docs": "docs",
+  "agent": "claude-code",
+  "workflow": {
+    "postImplementationGate": {
+      "command": "echo hello > {dir}/.gate/{nodeId}.txt"
+    }
+  }
+}

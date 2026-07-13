@@ -129,6 +129,19 @@ Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
   - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
   - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → add or update E2E tests (see below) → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
     - **Compute-heavy exception.** If the compute-heavy gating checkpoint fired at stage 1, 4b stops once the probe/harness is wired and runnable — the implementer commits the harness, not a completed run, and notes in Implementation Notes that the probe result is pending operator execution. The operator then runs the real probe from the main session (background job, re-invoked on completion) and records the verdict in Implementation Notes before 4c. Do not claim VERIFY on a probe result the implementer's own turn could not have witnessed completing — that includes a background job it kicked off and then reported "done" without waiting for.
+  - **4b½. Post-implementation gate (optional, project-configured).** If the project's
+    `.ledger/project.json` sets `workflow.postImplementationGate`, run its `command` inside
+    the implementation worktree and create a `human_review` task pointing at the resulting
+    artifact. **4c does not land until this gate is approved** — same deferral pattern as the
+    compute-heavy exception above. Projects with no `postImplementationGate` configured skip
+    straight to 4c; it exists because some project domains produce an artifact (a rendered
+    map, a generated report) that benefits from a direct look before rebase/review proceed —
+    a diff review alone doesn't substitute for eyeballing the actual output.
+    - **On reject:** the task's rejection rationale briefs a patch agent working in the same
+      worktree (no new branch). It commits a fix, the gate command re-runs, and a new
+      `human_review` task is created for the next round. The node stays `IN_PROGRESS`
+      throughout — no `ISSUE_OPEN` detour, since `VERIFY` was never claimed to begin with.
+    - **On approve:** 4c proceeds as originally specified.
   - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event. For a compute-heavy node, this commit does not land until the operator's probe verdict (above) is recorded.
 - Reporting: bundle delta vs a named baseline, files changed, `pnpm -C e2e test` exit code and pass/skip/fail counts, acceptance-check items the agent could not verify in its headless environment.
 
