@@ -34,6 +34,10 @@ const resumeAfterGate = _args.resumeAfterGate ?? false
 const resumeWorktreePathArg = _args.worktreePath ?? null
 const resumeBranchNameArg = _args.branchName ?? null
 const resumePostImplReviewTaskId = _args.postImplReviewTaskId ?? null
+// The task record has no generic input/round field (task-input.schema.json has no
+// such property) — round is tracked by the caller across resume calls, not read back
+// from the task. Defaults to 1 so a bare first resume call still behaves sensibly.
+const resumeRoundArg = _args.round ?? 1
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
@@ -282,17 +286,21 @@ async function runPostImplGate(round, wtPath, brName) {
     artifactPath = gateRunResult.artifactPath
   }
 
+  // task-input.schema.json has no generic nodeId/input field (additionalProperties:
+  // false) — the sanctioned vehicles are resourceClaims (structured) and reviewPayload
+  // (human_review-specific: summary + diffRef). worktreePath/branchName/round are not
+  // read back from the task by the resume path (see resumeRoundArg above); reviewPayload
+  // here is purely for the operator to read in the Tasks panel.
   const taskPayload = JSON.stringify({
     type: 'human_review',
-    nodeId: nodeId,
     title: 'Operator gate: ' + nodeId + ' post-implementation artifact ready for review (round ' + round + ')',
-    input: {
-      nodeId: nodeId,
-      worktreePath: wtPath,
-      branchName: brName,
-      artifactPath: artifactPath,
-      round: round,
-      nextStep: 'Open the artifact, then approve or reject (with a reason). Either way, resume with { resumeAfterGate: true, worktreePath, branchName, postImplReviewTaskId }.',
+    resourceClaims: [{ kind: 'node', nodeId: nodeId, mode: 'write' }],
+    reviewPayload: {
+      summary: 'Node ' + nodeId + ' (round ' + round + '). Worktree: ' + wtPath + '. Branch: ' + brName + '. ' +
+        'Open the artifact, then approve or reject (with a reason). Either way, resume with ' +
+        '{ resumeAfterGate: true, worktreePath: "' + wtPath + '", branchName: "' + brName + '", ' +
+        'postImplReviewTaskId: <this task\'s id>, round: ' + round + ' }.',
+      diffRef: artifactPath,
     },
   })
 
@@ -333,17 +341,16 @@ if (resumeAfterGate) {
     '  curl -sS ' + apiBaseUrl + '/api/tasks/' + resumePostImplReviewTaskId + '\n\n' +
     'The response is shaped { task, events }. Return:\n' +
     '  status: task.status (one of PENDING, RUNNING, BLOCKED, AWAITING_HUMAN_REVIEW, COMPLETE, FAILED, CANCELLED)\n' +
-    '  round: task.input.round (the round number this task was created for; default 1 if absent)\n' +
     '  rationale: if task.status is "FAILED", find the entry in the events array with kind "error" and ' +
     'message "rejected_with_details", and return its "stack" field (the full rejection rationale text). ' +
     'Otherwise return "".\n' +
-    'If the server is unreachable, return { status: "server-offline", round: 1, rationale: "" }.',
+    'If the server is unreachable, return { status: "server-offline", rationale: "" }.',
     {
       schema: {
         type: 'object',
-        required: ['status', 'round', 'rationale'],
+        required: ['status', 'rationale'],
         additionalProperties: false,
-        properties: { status: { type: 'string' }, round: { type: 'number' }, rationale: { type: 'string' } },
+        properties: { status: { type: 'string' }, rationale: { type: 'string' } },
       },
       label: 'check-post-impl-gate',
       phase: 'Post-Impl Gate',
@@ -351,16 +358,16 @@ if (resumeAfterGate) {
     }
   )
 
-  log('Post-Impl Gate task ' + resumePostImplReviewTaskId + ': status=' + gateTask.status + ' round=' + gateTask.round)
+  log('Post-Impl Gate task ' + resumePostImplReviewTaskId + ': status=' + gateTask.status + ' round=' + resumeRoundArg)
 
   if (gateTask.status === 'COMPLETE') {
     // Approved — land the deferred Stage 4c exit commit, then proceed to Stage 5 onward
     // exactly as if no gate were configured.
     await callAgent(
       'In the worktree at "' + resumeWorktreePathArg + '", the post-implementation gate for node "' + nodeId +
-      '" (round ' + gateTask.round + ') was approved. Land the deferred Stage 4c exit commit:\n' +
+      '" (round ' + resumeRoundArg + ') was approved. Land the deferred Stage 4c exit commit:\n' +
       '  In "' + resumeWorktreePathArg + '/' + docsDir + '/' + nodeId + '.md", note under Implementation Notes ' +
-      'that the post-implementation gate was approved (round ' + gateTask.round + ').\n' +
+      'that the post-implementation gate was approved (round ' + resumeRoundArg + ').\n' +
       '  Bump **Status:** IN_PROGRESS → VERIFY in the spec and the parent manifest row at "' +
       resumeWorktreePathArg + '/' + docsDir + '/' + parentDocName + '.md".\n' +
       '  git -C ' + resumeWorktreePathArg + ' add -A\n' +
@@ -385,16 +392,16 @@ if (resumeAfterGate) {
     await callAgent(
       'You are a patch agent continuing implementation for node "' + nodeId + '" in the existing worktree at "' +
       resumeWorktreePathArg + '" (do NOT create a new worktree or branch — this is a continuation of the same implementation, not a fresh dispatch).\n\n' +
-      'The post-implementation gate artifact for round ' + gateTask.round + ' was REJECTED by the operator with this rationale:\n\n' +
+      'The post-implementation gate artifact for round ' + resumeRoundArg + ' was REJECTED by the operator with this rationale:\n\n' +
       '"""\n' + gateTask.rationale + '\n"""\n\n' +
       'Read "' + specPath + '" for context. Address the feedback in the worktree, then commit:\n' +
       '  git -C ' + resumeWorktreePathArg + ' add -A\n' +
-      '  git -C ' + resumeWorktreePathArg + ' commit -m "fix(' + leafId + '): address post-impl gate feedback (round ' + gateTask.round + ')"\n' +
+      '  git -C ' + resumeWorktreePathArg + ' commit -m "fix(' + leafId + '): address post-impl gate feedback (round ' + resumeRoundArg + ')"\n' +
       'Return "done".',
       { label: 'post-impl-gate-patch', phase: 'Post-Impl Gate' }
     )
 
-    const nextRound = gateTask.round + 1
+    const nextRound = resumeRoundArg + 1
     const nextGate = await runPostImplGate(nextRound, resumeWorktreePathArg, resumeBranchNameArg)
 
     log('Post-Impl Gate: round ' + nextRound + ' task ' + nextGate.postImplReviewTaskId + ' artifact ' + nextGate.artifactPath)
@@ -408,7 +415,7 @@ if (resumeAfterGate) {
       artifactPath: nextGate.artifactPath,
       round: nextRound,
       nextStep: 'Open the artifact, then approve or reject (with a reason) the human_review task. Either way, resume with resumeAfterGate: true.',
-      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + resumeWorktreePathArg + '", branchName: "' + resumeBranchNameArg + '", postImplReviewTaskId: "' + nextGate.postImplReviewTaskId + '" } })',
+      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + resumeWorktreePathArg + '", branchName: "' + resumeBranchNameArg + '", postImplReviewTaskId: "' + nextGate.postImplReviewTaskId + '", round: ' + nextRound + ' } })',
     }
   } else {
     return { status: 'manual-needed', message: 'postImplReviewTaskId ' + resumePostImplReviewTaskId + ' is not yet decided' }
@@ -678,7 +685,7 @@ if (runImpl) {
       artifactPath: round1.artifactPath,
       round: 1,
       nextStep: 'Open the artifact, then approve or reject (with a reason) the human_review task. Either way, resume with resumeAfterGate: true.',
-      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + worktreePath + '", branchName: "' + branchName + '", postImplReviewTaskId: "' + round1.postImplReviewTaskId + '" } })',
+      resumeCommand: 'Workflow({ scriptPath: "' + repoPath + '/.claude/workflows/leaf-workflow.js", args: { nodeId: "' + nodeId + '", resumeAfterGate: true, worktreePath: "' + worktreePath + '", branchName: "' + branchName + '", postImplReviewTaskId: "' + round1.postImplReviewTaskId + '", round: 1 } })',
     }
   }
 } else {
@@ -825,15 +832,19 @@ if (runFixes && implReview) {
 // ── Stage 8: Gate ─────────────────────────────────────────────────────────────
 
 phase('Gate')
+// Fixed alongside 11-workflow-scripts/01-post-implementation-gate: task-input.schema.json
+// has no generic nodeId/input field (additionalProperties: false) — this previously would
+// have 400'd against the real POST /api/tasks validator. Pre-existing defect, never caught
+// because no acceptance item for this stage had run against a live server. Same fix as the
+// Post-Impl Gate: resourceClaims for nodeId, reviewPayload for the human-readable payload.
 const taskPayload = JSON.stringify({
   type: 'human_review',
-  nodeId: nodeId,
   title: 'Operator gate: ' + nodeId + ' implementation ready for verification',
-  input: {
-    nodeId: nodeId,
-    worktreePath: worktreePath,
-    branchName: branchName,
-    nextStep: 'Walk browser acceptance items, then approve or reject.',
+  resourceClaims: [{ kind: 'node', nodeId: nodeId, mode: 'write' }],
+  reviewPayload: {
+    summary: 'Node ' + nodeId + '. Worktree: ' + worktreePath + '. Branch: ' + branchName + '. ' +
+      'Walk browser acceptance items, then approve or reject.',
+    diffRef: worktreePath,
   },
 })
 
