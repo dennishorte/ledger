@@ -2,10 +2,10 @@
 
 **Node ID:** `13-reference-layer`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** SPEC_REVIEW
+**Status:** APPROVED
 **Created:** 2026-09-18
 **Last Updated:** 2026-09-18
-**Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/maintenance-round.md`, `.ledger/process/decomposition.md`, `.claude/workflows/leaf-workflow-finish.js` (`11-workflow-scripts`), `.claude/scripts/new-project`, `.claude/scripts/sync-process`
+**Dependencies:** `CLAUDE.md`, `.ledger/process/leaf-workflow.md`, `.ledger/process/maintenance-round.md`, `.ledger/process/decomposition.md`, `.claude/workflows/leaf-workflow-finish.js` (`11-workflow-scripts`), `.claude/scripts/new-project`, `.claude/scripts/sync-process`
 
 ---
 
@@ -19,12 +19,12 @@ The worldgen project piloted a second layer at `docs/_reference/` — curated cu
 
 ### In scope
 
-- **R1 — Convention documented in ledger `CLAUDE.md`.** The Process-notes underscore-folders bullet gains `_reference/` with its distinct semantics: living current-state reference, one doc per subsystem, non-obvious claims cite their owning node (`[NN.MM.LL]`) or a source file, generated tables preferred over hand-written ones, **Last verified** commit stamp. The text must state the three-lifecycle distinction explicitly: node docs = append-only audit trail (never retroactively cleaned), `_investigations/` = point-in-time analyses backing Open Issues, `_reference/` = present-tense reference rewritten freely.
-- **R2 — VERIFY→COMPLETE gate in `leaf-workflow.md` stage 9.** The promotion checklist gains a diff-shaped check: list the files the node touched, grep `docs/_reference/` for docs citing them, fold any stale-section delta plus stamp bump into the same commit. No covering doc → nothing to do. Phrased as a cheap mechanical check, not a writing task.
+- **R1 — Convention documented in ledger `CLAUDE.md`.** The Process-notes underscore-folders bullet gains `_reference/` with its distinct semantics: living current-state reference, one doc per subsystem, non-obvious claims cite their owning node id or a source file, generated tables preferred over hand-written ones, **Last verified** commit stamp. The text must state the three-lifecycle distinction explicitly: node docs = append-only audit trail (never retroactively cleaned), `_investigations/` = point-in-time analyses backing Open Issues, `_reference/` = present-tense reference rewritten freely. This is an **amend**, not only an append: the same bullet currently calls underscore-dir files "**LIVING** reference material" — that clause must be rephrased (e.g. "framework-internal material") or it contradicts the new text's "point-in-time" label for `_investigations/` inside one bullet.
+- **R2 — VERIFY→COMPLETE gate in `leaf-workflow.md` stage 9.** The promotion checklist gains a diff-shaped check: list the files the node touched, grep `docs/_reference/` for docs citing them **or citing the node's own id** (the citation rule allows node-id references, which a paths-only grep would miss), fold any stale-section delta plus stamp bump into the same commit. No covering doc → nothing to do. Phrased as a cheap mechanical check, not a writing task.
 - **R3 — Same gate wired into the automation.** `.claude/workflows/leaf-workflow-finish.js` automates stage 9; its Promote prompt (~lines 164–173) currently instructs "Only status bumps in this commit — no other changes." Add the reference check as a numbered step and amend that line to admit `_reference` updates — prose-only gates decay because the script is the executed path.
-- **R4 — Underscore-sibling enumerations updated.** `decomposition.md`'s file-naming line (currently lists `_process/`, `_investigations/`, `_schemas/`) and **both** spots in `.claude/scripts/new-project`'s embedded CLAUDE.md template (the file-naming enumeration ~line 236 and the Process-notes line ~line 249) gain `_reference/`. The template is the source for every future child's CLAUDE.md — updating worldgen's file by hand but not the generator leaves the next scaffold stale.
+- **R4 — Underscore-sibling enumerations updated.** `decomposition.md`'s file-naming line (currently lists `_process/`, `_investigations/`, `_schemas/`) and **both** spots in `.claude/scripts/new-project`'s embedded CLAUDE.md template (the file-naming enumeration ~line 236 and the Process-notes line ~line 249) gain `_reference/`. The template is the source for every future child's CLAUDE.md — updating worldgen's file by hand but not the generator leaves the next scaffold stale. Same amend discipline as R1: `decomposition.md`'s Notes section (line ~72) also calls underscore dirs "LIVING reference material (CLAUDE.md)" — tighten it to whatever phrasing the amended CLAUDE.md bullet uses.
 - **R5 — `maintenance-round.md` staleness sweep.** The operator-triggered reading pass (the "Rounds are operator-triggered" pattern bullet and/or stage-1 punch-list guidance) gains `docs/_reference/` stamps as a sweep target: a doc whose described files changed since its **Last verified** commit is punch-list material. This is v1's only backstop for commits that bypass the node lifecycle.
-- **R6 — Stamp semantics defined once.** Wherever the convention is written, the stamp rule reads: **Last verified** = the commit the claims were last verified against — operationally `git rev-parse HEAD` *immediately before* committing the doc's update. A doc never names the commit it lives in (the folded-into-transition-commit case would otherwise be unwritable).
+- **R6 — Stamp semantics defined once.** Wherever the convention is written, the stamp rule reads: **Last verified** = the commit the claims were last verified against — operationally `git rev-parse HEAD` *immediately before* committing the doc's update. A doc never names the commit it lives in (the folded-into-transition-commit case would otherwise be unwritable). `_reference` updates never ride merge commits — if one must, stamp `git rev-parse MERGE_HEAD` (the incoming tip whose tree was verified), since pre-merge HEAD's tree lacks the described changes and the doc would self-flag under R5's `git log` test.
 - **R7 — Propagation to worldgen.** Run `.claude/scripts/sync-process` (pushes the three edited playbooks to `.ledger/child-projects` entries); add the one-line `_reference/` mention to worldgen's `CLAUDE.md` Process-notes underscore-siblings line, same style as its `_investigations/`/`_schemas/` mention. Do not touch worldgen's `docs/_reference/` content — the pilot files are already correct.
 
 ### Out of scope (v1)
@@ -60,9 +60,9 @@ Plus worldgen-side changes produced by R7 (committed in the worldgen repo, not t
 
 ### Convention paragraph (ledger `CLAUDE.md`, Process notes)
 
-Extend the existing underscore-folders bullet — it already names `_investigations/` and `_schemas/` and states "add a new internal folder by prefixing its name with `_`." Append the `_reference/` semantics in the same dense style:
+Extend the existing underscore-folders bullet — it already names `_investigations/` and `_schemas/` and states "add a new internal folder by prefixing its name with `_`." Two edits: first **amend** its "they are LIVING reference material, not implementation nodes" clause to "framework-internal material, not implementation nodes" (the folder class is mixed-lifecycle — `_investigations/` is frozen, `_reference/` is living — so the blanket "LIVING" label contradicts the distinction this paragraph draws); then append the `_reference/` semantics in the same dense style:
 
-> `docs/_reference/` holds **living current-state docs** — one per subsystem (module map / entry points / data contracts / state surfaces / invariants / active migration), rewritten freely as reality changes. Every non-obvious claim cites its owning node (`[NN.MM.LL]`) or a source file so stale sections are greppable when a node changes status; prefer generated tables over hand-written lists (generated content can't drift — regeneration commands live in the doc). Each doc carries a **Last verified** commit stamp: the commit its claims were last verified against — `git rev-parse HEAD` immediately before committing the update (a doc never names the commit it lives in). Three lifecycles, don't blur them: node docs are the append-only audit trail, `_investigations/` are point-in-time analyses, `_reference/` is present-tense only. Creating one is opt-in per subsystem and needs no approval. Leaf-workflow stage 9 checks whether a promoting node's diff touched anything a `_reference` doc describes.
+> `docs/_reference/` holds **living current-state docs** — one per subsystem (module map / entry points / data contracts / state surfaces / invariants / active migration), rewritten freely as reality changes. Every non-obvious claim cites its owning node id or a source file so stale sections are greppable when a node changes status; prefer generated tables over hand-written lists (generated content can't drift — regeneration commands live in the doc). Each doc carries a **Last verified** commit stamp: the commit its claims were last verified against — `git rev-parse HEAD` immediately before committing the update (a doc never names the commit it lives in; updates never ride merge commits — if one must, stamp `MERGE_HEAD`). Three lifecycles, don't blur them: node docs are the append-only audit trail, `_investigations/` are point-in-time analyses, `_reference/` is present-tense only. Creating one is opt-in per subsystem and needs no approval; each project's `docs/_reference/README.md` carries its rules. Leaf-workflow stage 9 checks whether a promoting node's diff touched anything a `_reference` doc describes.
 
 ### Stage-9 gate text (`leaf-workflow.md`)
 
@@ -71,21 +71,22 @@ Stage 9 currently reads "Once verification passes, bump: … Single commit in th
 ```markdown
 - **`_reference` check.** List the files this node touched
   (`git diff --name-only <base>...HEAD`), grep `docs/_reference/` for docs citing
-  them; update any stale section and set its **Last verified** stamp to
-  `git rev-parse HEAD` — run it *before* committing, since a doc never names the
-  commit it lives in. Fold the delta into this commit. If no `_reference` doc
-  covers the touched surface (or the directory doesn't exist), nothing to do.
+  those paths or this node's id; update any stale section and set its
+  **Last verified** stamp to `git rev-parse HEAD` — run it *before* committing,
+  since a doc never names the commit it lives in. Fold the delta into this
+  commit. If no `_reference` doc covers the touched surface (or the directory
+  doesn't exist), nothing to do.
 ```
 
 ### Automation delta (`leaf-workflow-finish.js`)
 
-In the Promote `callAgent` prompt (~lines 164–173), insert a numbered step between the manifest-row step and the `git add` step:
+In the Promote `callAgent` prompt (~lines 164–173), insert a step between the manifest-row step and the `git add` step (renumber the git steps accordingly — the prompt's steps are 1–4):
 
 ```
-'2.5. Reference check:\n' +
+'3. Reference check:\n' +
 '   - git -C ' + worktreePath + ' diff --name-only ' + baseBranch + '...HEAD — files this node touched\n' +
-'   - if "' + worktreePath + '/' + docsDir + '/_reference/" exists, grep its *.md for those paths\n' +
-'   - update any stale section; set **Last verified** to `git rev-parse HEAD` (before committing)\n\n' +
+'   - if "' + worktreePath + '/' + docsDir + '/_reference/" exists, grep its *.md for those paths or for "' + nodeId + '"\n' +
+'   - update any stale section; set **Last verified** to `git -C ' + worktreePath + ' rev-parse HEAD` (before committing)\n\n' +
 ```
 
 and change the closing line to `'Only status bumps + _reference updates in this commit — no other changes.'`
@@ -101,7 +102,7 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 
 ### Worldgen edits (R7)
 
-- `.claude/scripts/sync-process` run from the ledger repo — reports `sync` for the three edited playbooks.
+- `.claude/scripts/sync-process` run from the ledger repo — reports `sync` for the three edited playbooks. (The `leaf-workflow-finish.js` edit propagates differently: it reaches children's automated path via the `~/.claude/workflows/` global-fallback refresh inside the script's own merge step, lines ~213–215 — not via `sync-process`.)
 - Worldgen `CLAUDE.md` Process-notes line gains `docs/_reference/` in the parenthetical — one line, same style.
 - Both land as a single worldgen commit (`docs: sync process playbooks + _reference convention note`), made directly in the worldgen checkout — trivial file copies + one line; no worktree needed. Do not touch `docs/_reference/` itself.
 
@@ -109,7 +110,7 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 
 - **A1:** `grep -n "_reference" CLAUDE.md .ledger/process/leaf-workflow.md .ledger/process/maintenance-round.md .ledger/process/decomposition.md .claude/scripts/new-project .claude/workflows/leaf-workflow-finish.js` — every convention surface carries the update.
 - **A2:** `git diff --name-only main -- packages/parser app server` — empty; no code changed.
-- **A3:** `node --check .claude/workflows/leaf-workflow-finish.js` — script still parses; the Promote prompt contains the reference-check step and the amended closing line.
+- **A3:** `node --input-type=module --check < .claude/workflows/leaf-workflow-finish.js` — script still parses (the file is ESM with no governing `"type": "module"`; plain `node --check` only accepts it on Node ≥22, so the portable form is required). Also `bash -n .claude/scripts/new-project` — the template edits land inside a single-quoted heredoc, but the check is free. The Promote prompt contains the reference-check step and the amended closing line.
 - **A4:** The stage-9 text and the script prompt both state the stamp rule (stamp = pre-commit `git rev-parse HEAD`), and the CLAUDE.md paragraph states the three-lifecycle distinction verbatim-clearly.
 - **A5:** `.claude/scripts/sync-process` exits 0 and reports `sync` (not `ok`) for the three edited playbooks against worldgen.
 - **A6:** Worldgen's doc graph contains no `_reference` node — `GET /api/docs` against worldgen's ledger server (`./dev.sh` boots it; api on its configured port) returns no `nodeId` containing `_reference`. Equally: the `/dag` panel shows no `_reference` node.
@@ -136,7 +137,28 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 - **MEDIUM — No automated staleness detection for non-lifecycle commits.** The stage-9 gate only fires on VERIFY→COMPLETE; direct commits, hotfixes, and any work outside the node lifecycle drift `_reference` silently. The stamp makes this *detectable* (doc is "true as of X"), not *surfaced*. Natural fix: a `reference_staleness` monitor on the health scanner (`07-health-daemon` v2 architecture already runs report-only monitors) — parse `docs/_reference/*.md` for stamp + cited paths, fire when `git log <stamp>..HEAD -- <paths>` is non-empty. Candidate future node; v1's only backstop is the R5 maintenance-round sweep.
 - **LOW — The stage-9 check is a convention, not an enforced gate.** An operator or agent can skip it and still promote. Same enforcement gap as `12-workflow-decomposition`'s open issue — true enforcement is a task-runner COMPLETE-transition gate, deferred until dispatch is the default path.
 - **TRIVIAL — `doc-status` doesn't filter underscore dirs.** `.claude/scripts/doc-status` skips `*/process/*` only; `_investigations` already renders as `—` rows and `_reference` will too. Cosmetic noise, pre-existing; fix would be tightening the filter to `*/_*/*`.
-- **TRIVIAL — Stale `docs/_process/` references.** `decomposition.md`'s enumeration (the line R4 edits) and `doc-size-resolution.md:45` still name `docs/_process/`, which no longer exists — playbooks moved to `.ledger/process/`. Pre-existing; the implementer may fix the touched line inline and leave `doc-size-resolution.md` for a maintenance round.
+- **TRIVIAL — Stale `docs/_process/` references.** `decomposition.md`'s enumeration (the line R4 edits — names `_process/` without the `docs/` prefix), `doc-size-resolution.md:45`, and `docs/00-project.md:218` ("Operator procedure: `docs/_process/decomposition.md`") still reference `docs/_process/`, which no longer exists — playbooks moved to `.ledger/process/`. Pre-existing; the implementer may fix the touched line inline and leave the rest for a maintenance round.
+- **TRIVIAL — `sync-process` overwrites living per-project playbooks.** The script copies every `.ledger/process/*.md` unconditionally; `open-issue-queue.md` is a living per-project working artifact (per `open-issue-resolution.md`), so a child's local triage edits would be silently clobbered by the next sync. Harmless today (worldgen's copy is a verbatim duplicate of ledger's). Out of this node's scope — candidate maintenance-round item: skip-list or per-project-override semantics in `sync-process`.
+
+---
+
+## Spec Review (2026-09-18)
+
+Independent clean-context review. Verdict: **NEEDS_MINOR_REVISIONS** — no Blocking, no FAIL rows; PARTIALs on R1, R6, A3. Sign-off matrix: R2/R3/R4/R5/R7 PASS, R1/R6/A3 PARTIAL, A1/A2/A4/A5/A6/A7 PASS (all with evidence).
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| S1 | Should-fix: R1 append-only edit leaves CLAUDE.md:109 self-contradicting — the bullet calls all underscore-dir files "LIVING reference material" while the new text calls `_investigations/` point-in-time. | Applied — R1 + Design paragraph now specify an amend ("framework-internal material"), not just an append. |
+| S2 | Should-fix: R6/D4 stamp rule produces a misleading stamp if a `_reference` update rides a stage-10 merge commit (pre-merge HEAD lacks the described changes; doc self-flags under R5's `git log` test). | Applied — R6 + Design paragraph now state updates never ride merge commits; if one must, stamp `MERGE_HEAD`. |
+| S3 | Should-fix: A3 `node --check` is machine-dependent (ESM file, no `type: module`; fails on Node <22 regardless of correctness). | Applied — A3 now uses `node --input-type=module --check <` and adds `bash -n` for `new-project`. |
+| S4 | Should-fix: R2's paths-only grep misses `_reference` docs that cite the owning node id instead of a file path; also `[NN.MM.LL]` notation is worldgen-style — ledger ids are slugged paths. | Applied — R2, the stage-9 bullet, and the script prompt now grep for touched paths *or* the node id; citation wording generalised to "owning node id". |
+| N1 | Nit: Dependencies header omitted `CLAUDE.md` (an edited file). | Applied. |
+| N2 | Nit: TRIVIAL `_process` issue missed `docs/00-project.md:218` and mis-described `decomposition.md`'s wording. | Applied — issue now lists all three sites, corrected. |
+| N3 | Nit: `decomposition.md:72` also says "LIVING reference material (CLAUDE.md)" — consistent only if S1's fix lands there too. | Applied — R4 now scopes the same tighten to that line. |
+| N4 | Nit: script-edit propagation path unmentioned — `~/.claude/workflows/` global fallback refreshes via the finish script's own merge step, not `sync-process`. | Applied — one sentence added to Design §Worldgen edits. |
+| N5 | Nit: prompt step "2.5." reads awkwardly; `rev-parse` lacked `-C <worktreePath>`. | Applied — step renumbered to 3 (git steps renumber to 4–5); `-C` added. |
+| N6 | Nit: spec could cite per-project `docs/_reference/README.md` as the rules doc (scaffolded children otherwise get only the one-line parenthetical). | Applied — pointer added to the convention paragraph. |
+| N7 | Nit: pre-existing footgun — `sync-process` unconditionally overwrites living per-project playbooks (`open-issue-queue.md`); harmless today, clobbers future child edits. | Applied — filed as a TRIVIAL Open Issue, deferred to a maintenance round (out of this node's scope). |
 
 ---
 
