@@ -230,6 +230,13 @@ Once verification passes, bump:
 - Spec's Status header: VERIFY → COMPLETE (v1, YYYY-MM-DD).
 - Parent manifest row: VERIFY → COMPLETE (v1).
 - Spec's own sample-tree picture (if it has one): row → `[COMPLETE]`.
+- **Reference-doc check** — if the node touched anything a
+  `docs/_reference/` doc describes (module map, data contract, state
+  surface, invariants, entry points), fold the delta into this same
+  commit. The check is diff-shaped and cheap: does the reference doc
+  still describe reality after this node? If yes, nothing to write; if
+  no, update the stale rows and bump the doc's last-verified stamp.
+  Skipping it silently is how the reference layer rots.
 
 Single commit in the worktree.
 

@@ -17,6 +17,7 @@ The round mechanism exists because the per-leaf ISSUE_OPEN loop (leaf-workflow �
 | Bug found during verification of a freshly-completing leaf, regardless of severity | leaf-workflow §8b (COMPLETE → ISSUE_OPEN → ...) on that leaf. |
 | HIGH-priority bug discovered post-COMPLETE on a single leaf | leaf-workflow §8b on the originating leaf. The full single-leaf cycle is appropriate weight for a HIGH. |
 | MEDIUM/LOW/TRIVIAL Open Issues accumulated across multiple COMPLETE siblings in the same subtree | **This playbook.** Batch them into a maintenance round. |
+| `docs/_reference/` doc drifted stale (subsystem changed since its last-verified stamp; the leaf-workflow stage-9 check should catch this at source, but drift accumulates) | Punch-list item in a round — update the stale sections and bump the stamp. Structural rewrites of a reference doc are their own leaf, not a round item. |
 | Maintenance work that spans multiple subtrees | One round per subtree. Each subtree's `99-maintenance/` is independent. Cross-subtree resource-claim sprawl defeats the SPEC_REVIEW pass. |
 
 A round is appropriate when the curated punch list contains at least two items from at least two siblings. A one-item round is just §8b with extra ceremony.

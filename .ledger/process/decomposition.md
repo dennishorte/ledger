@@ -52,7 +52,7 @@ For each child, create `docs/<parent-path>/<id>.md` with the full §6.1 schema (
 | Decomposed former-leaf (doc already exists at `docs/NN-name.md`) | stays at `docs/NN-name.md` | `docs/NN-name/MM-child.md` |
 | Top-level leaf (no children) | `docs/NN-name.md` | — |
 
-`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. The sequence determines display order in the DAG but carries no semantic meaning — leave gaps rather than renumber when inserting. The `_process/`, `_investigations/`, and `_schemas/` siblings always use an underscore prefix and never carry `NN-` numbering.
+`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. The sequence determines display order in the DAG but carries no semantic meaning — leave gaps rather than renumber when inserting. The `_process/`, `_investigations/`, `_schemas/`, and `_reference/` siblings always use an underscore prefix and never carry `NN-` numbering.
 
 ---
 
