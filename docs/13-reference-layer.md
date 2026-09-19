@@ -2,7 +2,7 @@
 
 **Node ID:** `13-reference-layer`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-09-18
 **Last Updated:** 2026-09-18
 **Dependencies:** `CLAUDE.md`, `.ledger/process/leaf-workflow.md`, `.ledger/process/maintenance-round.md`, `.ledger/process/decomposition.md`, `.claude/workflows/leaf-workflow-finish.js` (`11-workflow-scripts`), `.claude/scripts/new-project`, `.claude/scripts/sync-process`
@@ -110,7 +110,7 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 
 - **A1:** `grep -n "_reference" CLAUDE.md .ledger/process/leaf-workflow.md .ledger/process/maintenance-round.md .ledger/process/decomposition.md .claude/scripts/new-project .claude/workflows/leaf-workflow-finish.js` — every convention surface carries the update.
 - **A2:** `git diff --name-only main -- packages/parser app server` — empty; no code changed.
-- **A3:** `node --input-type=module --check < .claude/workflows/leaf-workflow-finish.js` — script still parses (the file is ESM with no governing `"type": "module"`; plain `node --check` only accepts it on Node ≥22, so the portable form is required). Also `bash -n .claude/scripts/new-project` — the template edits land inside a single-quoted heredoc, but the check is free. The Promote prompt contains the reference-check step and the amended closing line.
+- **A3:** The finish script still parses — but note neither plain `node --check` form works on it: the file mixes `export` (module goal) with top-level `return` (script goal) because the workflow harness wraps the body at load time. The working check is de-export + function-wrap: `{ echo '(async () => {'; sed 's/^export //' .claude/workflows/leaf-workflow-finish.js; echo '})'; } | node --check`. Also `bash -n .claude/scripts/new-project` — the template edits land inside a single-quoted heredoc, but the check is free. The Promote prompt contains the reference-check step and the amended closing line.
 - **A4:** The stage-9 text and the script prompt both state the stamp rule (stamp = pre-commit `git rev-parse HEAD`), and the CLAUDE.md paragraph states the three-lifecycle distinction verbatim-clearly.
 - **A5:** `.claude/scripts/sync-process` exits 0 and reports `sync` (not `ok`) for the three edited playbooks against worldgen.
 - **A6:** Worldgen's doc graph contains no `_reference` node — `GET /api/docs` against worldgen's ledger server (`./dev.sh` boots it; api on its configured port) returns no `nodeId` containing `_reference`. Equally: the `/dag` panel shows no `_reference` node.
@@ -164,7 +164,15 @@ Independent clean-context review. Verdict: **NEEDS_MINOR_REVISIONS** — no Bloc
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**v1 — 2026-09-18**
+
+- **Partial pre-landing on main (`bb17f01`) — lifecycle deviation.** An out-of-band commit landed most of R1/R2/R4(decomposition.md)/R5 directly on `main` while this node sat at APPROVED — no IN_PROGRESS transition, no worktree. The implementer worktree branched from `bb17f01`, so this node's commits contain only the *remaining* scope; the audit trail for the earlier chunk lives in `bb17f01`'s message. Recorded here so the gap is durable rather than invisible.
+- **bb17f01 covered:** `leaf-workflow.md` stage-9 bullet, `decomposition.md:55` enumeration, `maintenance-round.md` punch-list row, `CLAUDE.md` `_reference` paragraph.
+- **Worktree added:** `CLAUDE.md` S1 amend (`LIVING reference material` → `framework-internal material`) + stamp rule + README pointer; stage-9 bullet rewritten to the spec's mechanics (touched-files list, grep for paths *or* node id, stamp = pre-commit `git rev-parse HEAD`); `leaf-workflow-finish.js` Promote step 3 + amended closing line (`_reference updates` admitted); `new-project` template both spots; `decomposition.md:72` tighten.
+- **Deviation — A3 check form.** Neither `node --check` variant parses `leaf-workflow-finish.js` standalone (top-level `export` + top-level `return` — the harness wraps the body at load). Used `{ echo '(async () => {'; sed 's/^export //' …; echo '})'; } | node --check`; A3 text updated to match.
+- **Gates:** `pnpm install` + `pnpm -C packages/parser build` required in the fresh worktree (gitignored `node_modules`/`dist` — the documented build-order quirk); then typecheck exit 0, lint exit 0, build exit 0. `bash -n new-project` exit 0. No TS files changed; gates confirm baseline.
+- **E2E:** N/A — no UI/API surface.
+- **Dogfood note:** ledger has no `docs/_reference/` — this node's own stage-9 `_reference` check is vacuous (directory absent → nothing to do).
 
 ---
 
