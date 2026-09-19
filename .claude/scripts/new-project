@@ -233,7 +233,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 | Fresh parent (always had children) | `docs/NN-name/00-name.md` (parent) + `docs/NN-name/MM-child.md` (children) |
 | Decomposed former-leaf | doc stays at `docs/NN-name.md`; children go in `docs/NN-name/MM-child.md` |
 
-`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_investigations/`, `_schemas/`) never carry `NN-` numbering.
+`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_investigations/`, `_schemas/`, `_reference/`) never carry `NN-` numbering.
 
 ## Hard constraints
 
@@ -246,7 +246,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## Process notes
 
-- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are never parsed as project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_schemas/`) are also framework-internal and skipped by the parser.
+- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are never parsed as project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_schemas/`, `docs/_reference/`) are also framework-internal and skipped by the parser.
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
 - **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
 - Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.

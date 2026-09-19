@@ -69,5 +69,5 @@ From here each child is an ordinary leaf — hand it to the leaf-workflow.
 ## Notes
 
 - **Decomposition is not a lifecycle transition of the parent.** It changes the parent's *shape* (leaf → coordinator), not its status. The parent reaches COMPLETE when its children do and its own coordination concerns are satisfied — not before.
-- **Underscore-prefixed paths are not nodes** and cannot be decomposed this way; they are LIVING reference material (CLAUDE.md). A `doc_decompose` dispatch against one returns 409.
+- **Underscore-prefixed paths are not nodes** and cannot be decomposed this way; they are framework-internal material (CLAUDE.md). A `doc_decompose` dispatch against one returns 409.
 - The recursion bottoms out at the single-implementer rule (§6.6 rule 2). If you find yourself decomposing to a depth where each leaf is trivial, you have over-decomposed — collapse back up.

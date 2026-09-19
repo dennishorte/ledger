@@ -231,12 +231,14 @@ Once verification passes, bump:
 - Parent manifest row: VERIFY → COMPLETE (v1).
 - Spec's own sample-tree picture (if it has one): row → `[COMPLETE]`.
 - **Reference-doc check** — if the node touched anything a
-  `docs/_reference/` doc describes (module map, data contract, state
-  surface, invariants, entry points), fold the delta into this same
-  commit. The check is diff-shaped and cheap: does the reference doc
-  still describe reality after this node? If yes, nothing to write; if
-  no, update the stale rows and bump the doc's last-verified stamp.
-  Skipping it silently is how the reference layer rots.
+  `docs/_reference/` doc describes, fold the delta into this same
+  commit. The check is diff-shaped and cheap: list the files this node
+  touched (`git diff --name-only <base>...HEAD`), grep `docs/_reference/`
+  for docs citing those paths or this node's id. No covering doc (or no
+  `_reference/` dir) → nothing to do. Otherwise update the stale rows
+  and set the doc's **last-verified** stamp to `git rev-parse HEAD` —
+  run it *before* committing, since a doc never names the commit it
+  lives in. Skipping it silently is how the reference layer rots.
 
 Single commit in the worktree.
 

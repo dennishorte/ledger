@@ -168,9 +168,13 @@ if (runPromote) {
     '   - If there is a sample-tree table, update the row for ' + nodeId + ' to [COMPLETE]\n\n' +
     '2. In "' + worktreePath + '/' + docsDir + '/' + parentDocName + '.md":\n' +
     '   - Update the children manifest row for ' + nodeId + ' to COMPLETE (v1, ' + runDate + ')\n\n' +
-    '3. git -C ' + worktreePath + ' add -A\n' +
-    '4. git -C ' + worktreePath + ' commit -m "docs(' + leafId + '): VERIFY → COMPLETE (v1, ' + runDate + ')"\n\n' +
-    'Only status bumps in this commit — no other changes.',
+    '3. Reference check:\n' +
+    '   - git -C "' + worktreePath + '" diff --name-only ' + baseBranch + '...HEAD — files this node touched\n' +
+    '   - if "' + worktreePath + '/' + docsDir + '/_reference/" exists, grep its *.md for those paths or for "' + nodeId + '"\n' +
+    '   - update any stale section; set **Last verified** to `git -C "' + worktreePath + '" rev-parse HEAD` (before committing)\n\n' +
+    '4. git -C ' + worktreePath + ' add -A\n' +
+    '5. git -C ' + worktreePath + ' commit -m "docs(' + leafId + '): VERIFY → COMPLETE (v1, ' + runDate + ')"\n\n' +
+    'Only status bumps + _reference updates in this commit — no other changes.',
     { label: 'promote', phase: 'Promote' }
   )
 } else {

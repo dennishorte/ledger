@@ -2,7 +2,7 @@
 
 **Node ID:** `13-reference-layer`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** APPROVED
+**Status:** COMPLETE (v1, 2026-09-18)
 **Created:** 2026-09-18
 **Last Updated:** 2026-09-18
 **Dependencies:** `CLAUDE.md`, `.ledger/process/leaf-workflow.md`, `.ledger/process/maintenance-round.md`, `.ledger/process/decomposition.md`, `.claude/workflows/leaf-workflow-finish.js` (`11-workflow-scripts`), `.claude/scripts/new-project`, `.claude/scripts/sync-process`
@@ -102,7 +102,7 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 
 ### Worldgen edits (R7)
 
-- `.claude/scripts/sync-process` run from the ledger repo — reports `sync` for the three edited playbooks. (The `leaf-workflow-finish.js` edit propagates differently: it reaches children's automated path via the `~/.claude/workflows/` global-fallback refresh inside the script's own merge step, lines ~213–215 — not via `sync-process`.)
+- `.claude/scripts/sync-process` run from the ledger repo — reports `sync` for the three edited playbooks. (The `leaf-workflow-finish.js` edit propagates differently: it reaches children's automated path via the `~/.claude/workflows/` global-fallback refresh inside the script's own merge step (Step 5, ~lines 217–219) — not via `sync-process`.)
 - Worldgen `CLAUDE.md` Process-notes line gains `docs/_reference/` in the parenthetical — one line, same style.
 - Both land as a single worldgen commit (`docs: sync process playbooks + _reference convention note`), made directly in the worldgen checkout — trivial file copies + one line; no worktree needed. Do not touch `docs/_reference/` itself.
 
@@ -110,9 +110,9 @@ Extend the "Rounds are operator-triggered, not scheduled" pattern bullet: the ma
 
 - **A1:** `grep -n "_reference" CLAUDE.md .ledger/process/leaf-workflow.md .ledger/process/maintenance-round.md .ledger/process/decomposition.md .claude/scripts/new-project .claude/workflows/leaf-workflow-finish.js` — every convention surface carries the update.
 - **A2:** `git diff --name-only main -- packages/parser app server` — empty; no code changed.
-- **A3:** `node --input-type=module --check < .claude/workflows/leaf-workflow-finish.js` — script still parses (the file is ESM with no governing `"type": "module"`; plain `node --check` only accepts it on Node ≥22, so the portable form is required). Also `bash -n .claude/scripts/new-project` — the template edits land inside a single-quoted heredoc, but the check is free. The Promote prompt contains the reference-check step and the amended closing line.
+- **A3:** The finish script still parses — but note neither plain `node --check` form works on it: the file mixes `export` (module goal) with top-level `return` (script goal) because the workflow harness wraps the body at load time. The working check is de-export + function-wrap: `{ echo '(async () => {'; sed 's/^export //' .claude/workflows/leaf-workflow-finish.js; echo '})'; } | node --check`. Also `bash -n .claude/scripts/new-project` — the template edits land inside a single-quoted heredoc, but the check is free. The Promote prompt contains the reference-check step and the amended closing line.
 - **A4:** The stage-9 text and the script prompt both state the stamp rule (stamp = pre-commit `git rev-parse HEAD`), and the CLAUDE.md paragraph states the three-lifecycle distinction verbatim-clearly.
-- **A5:** `.claude/scripts/sync-process` exits 0 and reports `sync` (not `ok`) for the three edited playbooks against worldgen.
+- **A5:** `.claude/scripts/sync-process` exits 0 and reports `sync` for `leaf-workflow.md` and `decomposition.md` against worldgen (`maintenance-round.md` will report `ok` — worldgen already carries the bb17f01-state copy via `a5e6183`).
 - **A6:** Worldgen's doc graph contains no `_reference` node — `GET /api/docs` against worldgen's ledger server (`./dev.sh` boots it; api on its configured port) returns no `nodeId` containing `_reference`. Equally: the `/dag` panel shows no `_reference` node.
 - **A7:** Worldgen `CLAUDE.md` carries the `_reference/` mention; `worldgen/docs/_reference/` contents are byte-identical to before this node.
 
@@ -150,7 +150,7 @@ Independent clean-context review. Verdict: **NEEDS_MINOR_REVISIONS** — no Bloc
 |---|---------|------------|
 | S1 | Should-fix: R1 append-only edit leaves CLAUDE.md:109 self-contradicting — the bullet calls all underscore-dir files "LIVING reference material" while the new text calls `_investigations/` point-in-time. | Applied — R1 + Design paragraph now specify an amend ("framework-internal material"), not just an append. |
 | S2 | Should-fix: R6/D4 stamp rule produces a misleading stamp if a `_reference` update rides a stage-10 merge commit (pre-merge HEAD lacks the described changes; doc self-flags under R5's `git log` test). | Applied — R6 + Design paragraph now state updates never ride merge commits; if one must, stamp `MERGE_HEAD`. |
-| S3 | Should-fix: A3 `node --check` is machine-dependent (ESM file, no `type: module`; fails on Node <22 regardless of correctness). | Applied — A3 now uses `node --input-type=module --check <` and adds `bash -n` for `new-project`. |
+| S3 | Should-fix: A3 `node --check` is machine-dependent (ESM file, no `type: module`; fails on Node <22 regardless of correctness). | Applied — A3 amended; at implementation the file turned out to be neither module- nor script-goal parseable (harness-wrapped: top-level `export` + `return`), so A3 now specifies the de-export + function-wrap `node --check` form, plus `bash -n` for `new-project`. |
 | S4 | Should-fix: R2's paths-only grep misses `_reference` docs that cite the owning node id instead of a file path; also `[NN.MM.LL]` notation is worldgen-style — ledger ids are slugged paths. | Applied — R2, the stage-9 bullet, and the script prompt now grep for touched paths *or* the node id; citation wording generalised to "owning node id". |
 | N1 | Nit: Dependencies header omitted `CLAUDE.md` (an edited file). | Applied. |
 | N2 | Nit: TRIVIAL `_process` issue missed `docs/00-project.md:218` and mis-described `decomposition.md`'s wording. | Applied — issue now lists all three sites, corrected. |
@@ -164,7 +164,30 @@ Independent clean-context review. Verdict: **NEEDS_MINOR_REVISIONS** — no Bloc
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+**v1 — 2026-09-18**
+
+- **Partial pre-landing on main (`bb17f01`) — lifecycle deviation.** An out-of-band commit landed most of R1/R2/R4(decomposition.md)/R5 directly on `main` while this node sat at APPROVED — no IN_PROGRESS transition, no worktree. The implementer worktree branched from `bb17f01`, so this node's commits contain only the *remaining* scope; the audit trail for the earlier chunk lives in `bb17f01`'s message. Recorded here so the gap is durable rather than invisible.
+- **bb17f01 covered:** `leaf-workflow.md` stage-9 bullet, `decomposition.md:55` enumeration, `maintenance-round.md` punch-list row, `CLAUDE.md` `_reference` paragraph. Its worldgen side also pre-landed: commit `a5e6183` synced the bb17f01-state playbooks and added the `CLAUDE.md` mention — so post-merge `sync-process` owes only `leaf-workflow.md` + `decomposition.md` (worldgen `maintenance-round.md` already matches → will report `ok`, not `sync`; A5 expectation corrected accordingly).
+- **Worktree added:** `CLAUDE.md` S1 amend (`LIVING reference material` → `framework-internal material`) + stamp rule + README pointer; stage-9 bullet rewritten to the spec's mechanics (touched-files list, grep for paths *or* node id, stamp = pre-commit `git rev-parse HEAD`); `leaf-workflow-finish.js` Promote step 3 + amended closing line (`_reference updates` admitted); `new-project` template both spots; `decomposition.md:72` tighten.
+- **Deviation — A3 check form.** Neither `node --check` variant parses `leaf-workflow-finish.js` standalone (top-level `export` + top-level `return` — the harness wraps the body at load). Used `{ echo '(async () => {'; sed 's/^export //' …; echo '})'; } | node --check`; A3 text updated to match.
+- **Gates:** `pnpm install` + `pnpm -C packages/parser build` required in the fresh worktree (gitignored `node_modules`/`dist` — the documented build-order quirk); then typecheck exit 0, lint exit 0, build exit 0. `bash -n new-project` exit 0. No TS files changed; gates confirm baseline.
+- **E2E:** N/A — no UI/API surface.
+- **Dogfood note:** ledger has no `docs/_reference/` — this node's own stage-9 `_reference` check is vacuous (directory absent → nothing to do).
+
+### Implementation Review (2026-09-18)
+
+**Verdict:** READY_WITH_FOLLOWUPS — no Blocking, no FAIL rows. Matrix: R2/R3/R4/R6 PASS, R1/R5 PARTIAL, R7 N/A–post-merge (correctly deferred), A1/A4 PASS, A2/A3 PASS-static, A5–A7 N/A–post-merge.
+
+| # | Item | Verdict | Evidence / Resolution |
+|---|------|---------|------------------------|
+| 1 | Should-fix: R5 sweep mechanics absent — spec Design prescribed extending the "Rounds are operator-triggered" bullet with the stamp sweep + `git log <stamp>..HEAD` recipe; only the "When to use" table row landed. | Applied — bullet now carries the `_reference` stamp sweep and the `git log` test. |
+| 2 | Should-fix: R1 dropped "prefer generated tables" and "entry points" from the CLAUDE.md paragraph. | Applied — both restored. |
+| 3 | Should-fix: Implementation Notes under-recorded the worldgen side of bb17f01 (`a5e6183` already synced those playbook states + the CLAUDE.md mention); A5's expectation was stale. | Applied — notes + A5 corrected (`sync` for leaf-workflow/decomposition, `ok` for maintenance-round). |
+| 4 | Nit: S3 audit row wording stale after the A3 check-form change. | Applied — row reworded. |
+| 5 | Nit: `worktreePath` unquoted in the new prompt lines. | Applied — `-C "<worktreePath>"`. |
+| 6 | Nit: fallback-refresh line cite off (~213–215 → actual ~217–219). | Applied. |
+
+**Skipped:** none.
 
 ---
 
@@ -177,7 +200,7 @@ See Design §Acceptance checks (A1–A7) for the full criteria. Verifier confirm
 - **A1–A2** are direct `grep`/`git diff` runs.
 - **A3:** `node --check` plus `grep -n "Reference check" .claude/workflows/leaf-workflow-finish.js` and `grep -n "_reference updates" .claude/workflows/leaf-workflow-finish.js`.
 - **A4:** read the landed text in `leaf-workflow.md` stage 9, the script prompt, and `CLAUDE.md` — the stamp rule and three-lifecycle distinction must survive wordsmithing.
-- **A5:** run `.claude/scripts/sync-process` from the ledger repo; expect `sync` lines for `leaf-workflow.md`, `maintenance-round.md`, `decomposition.md` under `/Users/dennis/code/worldgen`.
+- **A5:** run `.claude/scripts/sync-process` from the ledger repo; expect `sync` for `leaf-workflow.md` + `decomposition.md` and `ok` for `maintenance-round.md` under `/Users/dennis/code/worldgen` (the bb17f01-state copy already synced via worldgen `a5e6183`).
 - **A6:** boot worldgen's stack (`./dev.sh`) or `pnpm -C server dev /Users/dennis/code/worldgen`, then `GET /api/docs` — assert no `nodeId` contains `_reference`. (Note: `.claude/scripts/doc-status` is hardcoded to ledger's own `docs/` and cannot be used for this check.)
 - **A7:** `grep -n "_reference" /Users/dennis/code/worldgen/CLAUDE.md`; `git -C /Users/dennis/code/worldgen status docs/_reference/` clean or identical content.
 - Gates: `pnpm -C app typecheck`, `lint`, `build` — no TypeScript changed; gates confirm baseline health.

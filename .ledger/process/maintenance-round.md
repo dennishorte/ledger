@@ -105,7 +105,7 @@ Identical to leaf-workflow §11.
 - **One round = one subtree.** Cross-subtree maintenance happens via serial rounds, each owned by that subtree's own `99-maintenance/`. This keeps each round's resource claims narrow and each SPEC_REVIEW focused.
 - **Cross-references on siblings are durable.** The strikethrough-plus-pointer convention on stage 10 is the maintenance equivalent of the audit-tables-stay-forever rule. A reader bisecting a regression should be able to trace from a symptom on `04-tasks` to the resolution in `99-maintenance/01-round-1` in one hop.
 - **Discovered-mid-round bugs go to the next round.** The implementer in stage 4 will sometimes find a related bug while patching a curated item. Do not expand the current round's scope. File the new finding into the originating leaf's Open Issues and pick it up in round N+1. Expanding scope mid-stream invalidates the SPEC_REVIEW pass.
-- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." Until the health daemon exists (PRD §6.4), this is a manual reading pass over the subtree's Open Issues sections.
+- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." Until the health daemon exists (PRD §6.4), this is a manual reading pass over the subtree's Open Issues sections — plus a `docs/_reference/` stamp sweep: a doc whose cited files have commits after its **Last verified** stamp (`git log <stamp>..HEAD -- <cited paths>`) is punch-list material.
 
 ---
 
