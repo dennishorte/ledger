@@ -42,7 +42,13 @@ The original node keeps its document and becomes a coordinator:
 
 ## Step 3 — Create each child at PLANNED
 
-For each child, create `docs/<parent-path>/<id>.md` with the full §6.1 schema (Requirements, Design, Decisions, Open Issues, Implementation Notes, Status: PLANNED). The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`. A child that is itself multi-responsibility re-runs this playbook from Step 0 — but the depth cap (§6.6 rule 4) means that should be rare.
+For each child, create `docs/<parent-path>/<id>.md` at Status `PLANNED` with the full §6.1 heading set. The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`.
+
+A forward child is a requirements seed, not a design. Requirements holds the one-line responsibility from Step 1 as the Outcome, sets `**Requirements confirmed:** unconfirmed`, and leaves Acceptance, Constraints, and Out of scope as `_(operator)_`. Design, Decisions, Open Issues, Implementation Notes, and Verification say `*(not started)*`. Children is `None`. Do not write a design into a forward child. The leaf-workflow requirements phase (stage 1a) fills the rest.
+
+A retroactive split of already-shipped work is different: those children describe the implemented design and inherit the parent's shipped status. They are not entering the requirements phase.
+
+A child that is itself multi-responsibility re-runs this playbook from Step 0 — but the depth cap (§6.6 rule 4) means that should be rare.
 
 **File placement rules:**
 
@@ -62,7 +68,7 @@ Build order follows the declared dependencies: a child cannot reach APPROVED-and
 
 Before dispatching, verify two sequencing properties. First, at least one child in the first tier (children with no declared sibling dependencies) must produce an artifact the operator can independently verify — a runnable test suite, a curl-able endpoint, or a UI surface. A schema file or type definition that only pays off downstream does not count. If every meaningful acceptance criterion lives in a final-sequenced child, restructure: extract the verifiable core into an earlier child, or collapse children and resequence. Second, if the plan introduces a user-facing UI panel or a GET endpoint the operator is expected to inspect during verification, that surface must appear no later than the midpoint of the sequencing order. A plan where nothing visible happens until the last merge is a sequencing defect, not a dependency declaration.
 
-From here each child is an ordinary leaf — hand it to the leaf-workflow.
+From here each child is an ordinary leaf — hand it to the leaf-workflow at stage 1a when Requirements are unconfirmed.
 
 ---
 

@@ -20,8 +20,32 @@ The review's primary artifact is a table with exactly one row per checkable item
 ```
 
 **What gets a row:**
-- **Spec review** — one row per PRD §-coverage item the spec must address, plus one per Requirements bullet the spec declares. The matrix *is* the coverage matrix.
-- **Implementation review / verify / reverify** — one row per **Requirements** bullet *and* one per **Acceptance-check** item in the spec. Nothing is implicitly covered.
+- **Spec review** — the requirements-fidelity rows below, then one row per PRD §-coverage item the spec must address, plus one per Requirements bullet the spec declares. The matrix *is* the coverage matrix. Fidelity leads.
+- **Implementation review / verify / reverify** — one row for the Requirements text itself (unchanged since confirmation, or an amendment is recorded), then one row per **Requirements** bullet *and* one per **Acceptance-check** item in the spec. Nothing is implicitly covered.
+
+### Requirements fidelity (spec review)
+
+These rows come before the coverage rows. They check the design against the confirmed requirements, not the spec against itself.
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| F1 | Acceptance line, verbatim | PASS / FAIL | Which Requirements bullet and which part of Design serves it. A line nothing serves is FAIL. |
+| F2 | Requirements bullet, verbatim | PASS / FAIL | Which acceptance line it traces to. A bullet that traces to no line is FAIL — scope the confirmation did not contain. |
+| F3 | Requirements text matches the confirmation commit | PASS / FAIL | `git` diff against the commit that set `**Requirements confirmed:**`, or the `**Requirements amended:**` line that explains the difference. |
+
+A Requirements bullet that names a file, a component, a library, or a mechanism is a design decision sitting in the wrong section. Record that as FAIL on its F2 row.
+
+A node that reached DRAFT before the confirmation line existed gets F3 as `N/A` with that reason. Do not invent a confirmation retroactively.
+
+### Requirements text (implementation review)
+
+One row, ahead of the per-bullet rows:
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| R0 | Requirements unchanged since confirmation, or an amendment is recorded | PASS / FAIL / N/A | Diff of the Requirements section against the confirmation commit. A rewrite that makes the code look on-target, with no `**Requirements amended:**` line, is FAIL. N/A when the node predates the confirmation line. |
+
+This row does not re-open design-versus-goal. Stage 2's fidelity rows already did that. R0 checks that the frozen text did not move during implementation.
 
 ---
 
@@ -40,7 +64,7 @@ The review's primary artifact is a table with exactly one row per checkable item
 
 ## Aggregate verdict — derived, not asserted
 
-The headline verdict must be *derivable* from the matrix, not stated independently of it:
+The headline verdict must be *derivable* from the matrix, not stated independently of it. The fidelity rows (F1–F3) and the R0 row are part of the matrix for this purpose:
 
 - any **FAIL** → `NEEDS_REVISIONS` (or `NEEDS_MAJOR_REVISIONS` if a FAIL is on a core Requirement)
 - no FAIL, ≥1 **PARTIAL** with filed follow-ups → `READY_WITH_FOLLOWUPS` (verify) / `NEEDS_MINOR_REVISIONS` (spec review)

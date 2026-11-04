@@ -61,7 +61,7 @@ describe("implement template snapshot", () => {
 
       ## Success criteria
 
-      1. The spec at (spec doc for node 00000000-0000-0000-0000-000000000001 — resolve via resolveDocPath) is APPROVED; ship the code it prescribes exactly. Do not redesign.
+      1. The spec at (spec doc for node 00000000-0000-0000-0000-000000000001 — resolve via resolveDocPath) is APPROVED; ship the code it prescribes exactly. Do not redesign. Do not edit the Requirements section. Record deviations in Implementation Notes.
       2. Pay specific attention to the Spec Review audit table — those are known-risk closures the spec author would otherwise miss.
       3. Status bumps: APPROVED → IN_PROGRESS (entry commit, status-only), then IN_PROGRESS → VERIFY (exit commit, code + Implementation Notes).
       4. Run all gates yourself: pnpm -C packages/parser build (if touching parser), pnpm -C server build, pnpm -C server typecheck, pnpm -C server lint, pnpm test. All must exit zero.

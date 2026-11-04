@@ -1,10 +1,11 @@
 export const meta = {
   name: 'leaf-workflow',
-  description: 'Drive a leaf node DRAFT→VERIFY and create a human_review gate task (stages 1–8 of leaf-workflow.md)',
-  whenToUse: 'Run against any leaf node to take it from DRAFT (or earlier) through operator gate. Resumes from current status automatically.',
+  description: 'Drive a leaf node from requirements through VERIFY and create a human_review gate task (stages 1–8 of leaf-workflow.md). Returns after unconfirmed requirements; design starts on a later run.',
+  whenToUse: 'Run against any leaf node to take it from PLANNED (or earlier) through operator gate. Resumes from current status automatically. Stops for the operator to confirm requirements before design.',
   phases: [
     { title: 'Inspect', detail: 'Read current doc status and determine resume point' },
-    { title: 'Draft', detail: 'Author spec if NOT_FOUND; skip if DRAFT or further' },
+    { title: 'Requirements', detail: 'Write Requirements at PLANNED and return for operator confirmation' },
+    { title: 'Design', detail: 'On a confirmed PLANNED node, write Design and bump to DRAFT' },
     { title: 'Spec Review', detail: 'Bump DRAFT→SPEC_REVIEW; independent clean-context review' },
     { title: 'Approve', detail: 'Apply mechanical findings; SPEC_REVIEW→APPROVED' },
     { title: 'Implement', detail: 'Isolated worktree; three commits (entry / impl / exit)' },
@@ -38,6 +39,7 @@ const resumePostImplReviewTaskId = _args.postImplReviewTaskId ?? null
 // such property) — round is tracked by the caller across resume calls, not read back
 // from the task. Defaults to 1 so a bare first resume call still behaves sensibly.
 const resumeRoundArg = _args.round ?? 1
+const operatorAsk = typeof _args.ask === 'string' ? _args.ask : ''
 
 if (!nodeId) {
   return { status: 'manual-needed', message: 'nodeId is required (e.g. "01-ui/11-new-panel")' }
@@ -56,13 +58,14 @@ async function callAgent(prompt, opts) {
 
 const STATUS_SCHEMA = {
   type: 'object',
-  required: ['exists', 'status', 'specReviewDone', 'implReviewDone'],
+  required: ['exists', 'status', 'specReviewDone', 'implReviewDone', 'requirementsConfirmed'],
   additionalProperties: false,
   properties: {
     exists: { type: 'boolean' },
     status: { type: 'string' },
     specReviewDone: { type: 'boolean' },
     implReviewDone: { type: 'boolean' },
+    requirementsConfirmed: { type: 'boolean' },
   },
 }
 
@@ -379,7 +382,7 @@ if (resumeAfterGate) {
     worktreePath = resumeWorktreePathArg
     branchName = resumeBranchNameArg
     currentStatus = 'IN_PROGRESS'
-    docStatus = { exists: true, status: 'IN_PROGRESS', specReviewDone: true, implReviewDone: false }
+    docStatus = { exists: true, status: 'IN_PROGRESS', specReviewDone: true, implReviewDone: false, requirementsConfirmed: true }
   } else if (gateTask.status === 'FAILED') {
     // Rejected — patch agent in the same worktree, re-run the gate command, new round's task.
     if (!postImplementationGateCommand) {
@@ -425,10 +428,12 @@ if (resumeAfterGate) {
 if (!resumeAfterGate) {
   docStatus = await callAgent(
     'Read the file at "' + specPath + '". ' +
-    'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false }. ' +
+    'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false, requirementsConfirmed: false }. ' +
     'If it exists, read the **Status:** line for the lifecycle status, ' +
     'return specReviewDone: true if a "## Spec Review" section exists, ' +
-    'implReviewDone: true if Implementation Notes contains an "### Implementation Review" subsection.',
+    'implReviewDone: true if Implementation Notes contains an "### Implementation Review" subsection, ' +
+    'requirementsConfirmed: true only when the Requirements section contains a line "**Requirements confirmed:**" followed by an ISO date (YYYY-MM-DD). ' +
+    'The word "unconfirmed", a missing line, or any other value is false.',
     { schema: STATUS_SCHEMA, label: 'inspect', phase: 'Inspect' }
   )
 
@@ -442,12 +447,17 @@ if (!resumeAfterGate) {
   }
 }
 
-// Derive stage-skip flags from lifecycle state
-// PLANNED is treated as pre-DRAFT (doc exists, spec not yet reviewed/approved)
-const runDraft = currentStatus === 'NOT_FOUND'
-const runSpecReview = (currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT' || currentStatus === 'PLANNED') &&
+// Derive stage-skip flags from lifecycle state.
+// Unconfirmed PLANNED / NOT_FOUND stops after requirements. A confirmed PLANNED
+// node is ready for design, then falls through into spec review like a DRAFT.
+// A node already at DRAFT or later is past the requirements gate even when it
+// has no confirmation line (it predates the phase).
+const requirementsConfirmed = !!(docStatus && docStatus.requirementsConfirmed)
+const runRequirements = currentStatus === 'NOT_FOUND' || (currentStatus === 'PLANNED' && !requirementsConfirmed)
+const runDesign = currentStatus === 'PLANNED' && requirementsConfirmed
+const runSpecReview = (runDesign || currentStatus === 'DRAFT') &&
   !skipSpecReview && !docStatus.specReviewDone
-const runApprove = currentStatus === 'NOT_FOUND' || currentStatus === 'DRAFT' || currentStatus === 'PLANNED' ||
+const runApprove = runDesign || currentStatus === 'DRAFT' ||
   currentStatus === 'SPEC_REVIEW'
 const runImpl = runApprove || currentStatus === 'APPROVED'
 const runRebase = runImpl || currentStatus === 'IN_PROGRESS'
@@ -479,32 +489,86 @@ if (!resumeAfterGate && (currentStatus === 'IN_PROGRESS' || currentStatus === 'V
   }
 }
 
-// ── Stage 1: Draft ────────────────────────────────────────────────────────────
+// ── Stage 1a: Requirements ────────────────────────────────────────────────────
+// Hard stop. Design runs on a later invocation, after the operator sets the date.
 
-if (runDraft) {
-  phase('Draft')
+if (runRequirements) {
+  phase('Requirements')
+  const askBlock = operatorAsk
+    ? 'The operator\'s ask — copy verbatim wherever it already states the outcome, the acceptance checks, or the out-of-scope line:\n\n"""\n' + operatorAsk + '\n"""\n\n'
+    : 'No operator ask was passed in args.ask. Use the parent manifest\'s one-line responsibility as the Outcome when that is all you have.\n\n'
   await callAgent(
-    'Author a new spec doc at "' + specPath + '" for node "' + nodeId + '".\n\n' +
+    'Write the requirements for node "' + nodeId + '" at "' + specPath + '". Status stays PLANNED. Do not write Design.\n\n' +
+    askBlock +
     'Read before writing:\n' +
+    '- "' + repoPath + '/.ledger/process/leaf-workflow.md" stage 1a\n' +
     '- "' + repoPath + '/' + docsDir + '/' + rootDoc + '.md" §§1–6 (PRD schema and lifecycle)\n' +
-    '- Parent doc: "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" (if it exists)\n' +
-    '- A recently modified sibling .md in the same directory (house style)\n\n' +
-    'Required sections per PRD §6.1 in this order:\n' +
-    '1. Front-matter: Node ID, Parent, Status: DRAFT, Created, Last Updated, Dependencies\n' +
-    '2. Requirements (in-scope bullets + explicit out-of-scope bullets)\n' +
-    '3. Design (data contracts, files, components, acceptance checks)\n' +
-    '4. Decisions (D1…Dn numbered table with Rationale)\n' +
-    '5. Open Issues (priority-tagged HIGH/MEDIUM/LOW/TRIVIAL)\n' +
-    '6. Implementation Notes: `*(none yet — pre-implementation)*`\n' +
-    '7. Verification (acceptance checks; name E2E files if UI/API surface exists)\n' +
-    '8. Children: None\n\n' +
-    'After writing, add this node to the parent manifest at "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+    '- Parent doc: "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" (if it exists)\n\n' +
+    'Requirements, under a page:\n' +
+    '- Line: **Requirements confirmed:** unconfirmed   (you do not write a date)\n' +
+    '- Outcome: one sentence, in the operator\'s words\n' +
+    '- Acceptance: checks a person can point at\n' +
+    '- Constraints: what must stay as it is\n' +
+    '- Out of scope: what this node will not do\n' +
+    'A requirement that names a file, a component, a library, or a mechanism does not belong here.\n' +
+    'If outcome, acceptance, or out of scope was not given, leave that heading as _(operator)_. Do not invent it.\n' +
+    'Verification repeats the same checks in the same words.\n' +
+    'Design, Decisions, Open Issues, Implementation Notes: *(not started)* — unless they already contain more than that placeholder, in which case leave them untouched.\n' +
+    'Children: None.\n' +
+    'Front-matter Status: PLANNED. Node ID and Parent must be correct.\n\n' +
+    'Add this node to the parent manifest at PLANNED in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" if it is not already there.\n' +
     'Commit: git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
-    '        git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT spec"',
-    { label: 'draft', phase: 'Draft' }
+    '        git -C ' + repoPath + ' commit -m "docs(' + leafId + '): PLANNED requirements"\n' +
+    'Then stop. Do not bump status. Do not write Design.',
+    { label: 'requirements', phase: 'Requirements' }
   )
+  return {
+    nodeId,
+    status: 'awaiting-requirements-confirmation',
+    specPath,
+    nextStep: 'Edit Requirements, replace any _(operator)_ placeholder, set **Requirements confirmed:** to today\'s date (YYYY-MM-DD), commit, and run leaf-workflow again. Design starts on that next run.',
+  }
+}
+
+// ── Stage 1c: Design ─────────────────────────────────────────────────────────
+
+if (runDesign) {
+  phase('Design')
+  const designResult = await callAgent(
+    'Write the design for node "' + nodeId + '". The requirements are already confirmed. Do not edit the Requirements section.\n\n' +
+    'Read "' + specPath + '" and "' + repoPath + '/.ledger/process/leaf-workflow.md" stage 1c.\n' +
+    'Quote the confirmed Requirements text at the start of your work, and again before you commit.\n' +
+    'Also read the parent doc "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" and one sibling spec for house style.\n\n' +
+    'If **Requirements confirmed:** is missing, says unconfirmed, or Outcome / Acceptance / Out of scope is still _(operator)_, set advanced: false and do not write Design.\n\n' +
+    'Otherwise write Design, Decisions (a # / Decision / Rationale table), and priority-tagged Open Issues.\n' +
+    'Every design choice names the acceptance line it serves. Leave out a choice that serves no line.\n' +
+    'Tighten Verification into runnable checks. Do not add an outcome the confirmed requirements do not contain.\n' +
+    'Implementation Notes: `*(none yet — pre-implementation)*`.\n' +
+    'Bump **Status:** PLANNED → DRAFT in the spec and the parent manifest row.\n' +
+    'Commit: git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+    '        git -C ' + repoPath + ' commit -m "docs(' + leafId + '): PLANNED → DRAFT"\n' +
+    'Return advanced: true after that commit. Return advanced: false if you stopped without designing.',
+    {
+      schema: {
+        type: 'object',
+        required: ['advanced'],
+        additionalProperties: false,
+        properties: { advanced: { type: 'boolean' } },
+      },
+      label: 'design',
+      phase: 'Design',
+    }
+  )
+  if (!designResult.advanced) {
+    return {
+      nodeId,
+      status: 'awaiting-requirements-confirmation',
+      specPath,
+      nextStep: 'Requirements are not ready to design against. Fill every _(operator)_ placeholder, set **Requirements confirmed:** to a YYYY-MM-DD date, commit, and run leaf-workflow again.',
+    }
+  }
 } else {
-  log('Status ' + currentStatus + ' — skipping Draft stage')
+  log('Status ' + currentStatus + ' — skipping Requirements and Design')
 }
 
 // ── Stage 2: Spec Review ──────────────────────────────────────────────────────
@@ -537,9 +601,10 @@ if (skipSpecReview) {
     '- "' + repoPath + '/.ledger/process/verification-signoff.md" (review format)\n' +
     '- "' + repoPath + '/CLAUDE.md" (constraints)\n' +
     typesLine +
-    '\nEvaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing, MVP scoping, internal consistency, house-style.\n\n' +
+    '\nEvaluation criteria: requirements fidelity first (verification-signoff.md — one row per acceptance line, one per Requirements bullet tracing back to a line, one for the confirmation text), then schema compliance, PRD coverage, dependency declaration, type additions vs existing, MVP scoping, internal consistency, house-style.\n\n' +
     'Return REVIEW_SCHEMA per verification-signoff.md.\n' +
-    'One matrix row per PRD-coverage item and per Requirements bullet.\n' +
+    'Lead with the fidelity rows. Then one matrix row per PRD-coverage item and per Requirements bullet.\n' +
+    'A Requirements bullet that names a file, component, library, or mechanism is FAIL. A bullet that traces to no acceptance line is FAIL.\n' +
     'Every PASS needs concrete evidence (file:line or section ref). "Looks correct" is FAIL.\n' +
     'Verdict derived from matrix: any FAIL → NEEDS_MAJOR_REVISIONS or NEEDS_MINOR_REVISIONS; no FAIL + PARTIAL → NEEDS_MINOR_REVISIONS; all PASS/N/A → LGTM.',
     { schema: REVIEW_SCHEMA, label: 'spec-review', phase: 'Spec Review' }
@@ -763,7 +828,7 @@ if (runImplReview) {
     '- Stage coverage and commit messages match leaf-workflow.md intent\n' +
     '- Build/lint/typecheck exit codes cited as evidence\n' +
     '- E2E coverage per spec Verification section\n\n' +
-    'Return REVIEW_SCHEMA. One row per Requirements bullet AND per Acceptance-check item.\n' +
+    'Return REVIEW_SCHEMA. First row is R0 from verification-signoff.md: Requirements text unchanged since **Requirements confirmed:**, or a **Requirements amended:** line records the change. N/A if the node has no confirmation line because it predates the requirements phase. Then one row per Requirements bullet AND per Acceptance-check item.\n' +
     'PASS requires file:line or gate exit code. "Looks correct" is FAIL.\n' +
     'Verdict: READY_FOR_COMPLETE | NEEDS_REVISIONS | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS',
     { schema: REVIEW_SCHEMA, label: 'impl-review', phase: 'Impl Review' }

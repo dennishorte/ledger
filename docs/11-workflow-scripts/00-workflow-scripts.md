@@ -107,7 +107,8 @@ STATUS_SCHEMA = {
   exists: "boolean",
   status: "string",        // PRD §6.2 lifecycle state or "NOT_FOUND"
   specReviewDone: "boolean",
-  implReviewDone: "boolean"
+  implReviewDone: "boolean",
+  requirementsConfirmed: "boolean"  // true only when **Requirements confirmed:** is a YYYY-MM-DD date
 }
 
 // Output of stage-2 spec review and stage-6 implementation review
@@ -149,22 +150,24 @@ WORKTREE_SCHEMA = {
 
 ### Stage 0 (Inspect) agent prompt outline
 
-Read `specPath`. Return `STATUS_SCHEMA`. If status is `COMPLETE`, return early with `{ status: "already-complete" }`. Derive boolean flags (`runDraft`, `runSpecReview`, `runApprove`, `runImpl`, `runRebase`, `runImplReview`, `runFixes`, `runGate`) from current lifecycle status so downstream stages are skipped on re-entry.
+Read `specPath`. Return `STATUS_SCHEMA`. If status is `COMPLETE`, return early with `{ status: "already-complete" }`. Derive boolean flags (`runRequirements`, `runDesign`, `runSpecReview`, `runApprove`, `runImpl`, `runRebase`, `runImplReview`, `runFixes`) from current lifecycle status so downstream stages are skipped on re-entry.
 
-Entry-state mapping:
-- `NOT_FOUND` → all stages run
+Entry-state mapping (requirements phase, 2026-11-04 — a node already at `DRAFT` or later is past the gate even with no confirmation line):
+- `NOT_FOUND` → stage 1a only, then return `awaiting-requirements-confirmation`
+- `PLANNED` and requirements unconfirmed → stage 1a only, then the same return
+- `PLANNED` and `**Requirements confirmed:**` dated → stage 1c (design, bump to `DRAFT`), then stage 2 onward
 - `DRAFT` → skip stage 1; start at stage 2
 - `SPEC_REVIEW` → skip stages 1–2; start at stage 3
 - `APPROVED` → skip stages 1–3; start at stage 4
 - `IN_PROGRESS` → skip stages 1–3; locate existing worktree; start at stage 5
-- `VERIFY` → skip stages 1–4; locate existing worktree; start at stage 6; `runGate: true` (gate not yet created)
+- `VERIFY` → skip stages 1–4; locate existing worktree; start at stage 6; gate not yet created
 - `COMPLETE` → early return
 
-### Stage 1 (Draft) agent prompt outline
+### Stage 1 (Requirements, then design) agent prompt outline
 
-If `NOT_FOUND`: author the spec following PRD §6.1 schema (sections in order: front-matter, Requirements with out-of-scope bullets, Design, Decisions, Open Issues, Implementation Notes, Verification, Children). Add the new node to its parent's children manifest. Commit `"docs(${leafId}): DRAFT spec"`.
+Stage 1a, when `NOT_FOUND` or `PLANNED` without a dated confirmation: write Requirements and a matching Verification, leave Design as `*(not started)*` unless it already has real content, Status stays `PLANNED`, commit `"docs(${leafId}): PLANNED requirements"`, and return. The script does not continue into design in that run. Optional `args.ask` is copied verbatim where it already states the outcome, the checks, or the out-of-scope line. Missing pieces stay `_(operator)_`.
 
-If `DRAFT`: log "existing DRAFT — proceeding to spec review" and skip to stage 2.
+Stage 1c, on a later run once `**Requirements confirmed:**` is a date: a fresh agent writes Design against that text, does not edit Requirements, bumps `PLANNED → DRAFT`, and commits `"docs(${leafId}): PLANNED → DRAFT"`. If a placeholder is still `_(operator)_`, it returns `advanced: false` and the script stops again.
 
 ### Stage 2 (Spec Review) agent prompt outline
 

@@ -101,12 +101,28 @@ export default function render(task: Task, ctx: ProjectContext): string {
 
   // Mode-aware child body placeholders (D12). Retroactive splits describe shipped
   // work in the past tense; forward splits are PLANNED stubs.
+  const requirementsBody = isRetroactive
+    ? "What this child delivers (extracted from the parent)."
+    : [
+        "**Requirements confirmed:** unconfirmed",
+        "",
+        "Outcome: <one line — this child's responsibility, in observable terms>.",
+        "",
+        "Acceptance: _(operator)_",
+        "",
+        "Constraints: _(operator)_",
+        "",
+        "Out of scope: _(operator)_",
+      ].join("\n");
+  const designBody = isRetroactive
+    ? "How it was built (extracted from the parent; past tense)."
+    : "*(not started — requirements unconfirmed)*";
   const implNotesBody = isRetroactive
     ? "What shipped for this responsibility (extracted from the parent)."
-    : "None yet.";
+    : "*(not started)*";
   const verificationBody = isRetroactive
     ? "What was built and how it was confirmed (past tense)."
-    : "How completion will be confirmed.";
+    : "*(not started — same checks as Requirements, written before design)*";
 
   // The exact schema both the reduced parent and every new child must satisfy.
   // (docs/_schemas/document-node.schema.json, validated by @ledger/parser.)
@@ -124,11 +140,11 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "",
     "## Requirements",
     "",
-    "What this child must deliver.",
+    requirementsBody,
     "",
     "## Design",
     "",
-    "How it will be built.",
+    designBody,
     "",
     "## Decisions",
     "",
@@ -154,7 +170,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
 
   const modeFraming = isRetroactive
     ? `This target is **${childStatus}** — its work has already shipped. You are **reorganizing existing documentation**, not planning new work. Each child must describe the *actual implemented design* extracted from the parent — read the referenced source under \`app/\`, \`server/\`, \`packages/\` as needed to stay accurate. Children inherit the target's \`${childStatus}\` status; write their Verification in the **past tense** (what was built and how it was confirmed). Do NOT invent scope or write forward-looking stubs.`
-    : `This target is **${targetStatus ?? "not yet built"}** — its work is not yet implemented. You are **decomposing forward scope** into separately-implementable child specs. New children start at \`PLANNED\`; their bodies are specs for what each child must build.`;
+    : `This target is **${targetStatus ?? "not yet built"}** — its work is not yet implemented. You are **decomposing forward scope**. New children start at \`PLANNED\` as requirements seeds, not designs. Requirements holds the child's one-line responsibility as the Outcome, leaves Acceptance, Constraints, and Out of scope as \`_(operator)_\`, and sets \`**Requirements confirmed:** unconfirmed\`. Design is \`*(not started — requirements unconfirmed)*\`. Do not write a design into a forward child. The leaf-workflow requirements phase fills the rest.`;
 
   const statusStep = isRetroactive
     ? `New child docs are \`**Status:** ${childStatus}\` — they inherit the target's \`${childStatus}\` status because they document already-shipped work. Do NOT change the lifecycle Status of the target or any existing doc.`

@@ -1,7 +1,7 @@
 # Process: Determining What To Do Next
 
 **Status:** LIVING (revise when the orchestration substrate gains an autonomous next-action selector)
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-11-04 (PLANNED splits into unconfirmed requirements vs confirmed, ready for design)
 **Location:** `.ledger/process/next-action.md`
 
 ## 1. Purpose
@@ -55,10 +55,12 @@ Collect all unstruck **HIGH** items from PRD §11 and from per-node Open Issues 
 
 Walk PRD §14 top-to-bottom for the first node not COMPLETE/DEFERRED, then verify its **dependency edges are all COMPLETE** (unblocked).
 - **An unblocked, non-COMPLETE manifest node exists →** recommend driving it via the lifecycle stage it's currently in:
+  - PLANNED with `**Requirements confirmed:**` missing or `unconfirmed` → `leaf-workflow` stage 1a (write or finish requirements). Do not design.
+  - PLANNED with `**Requirements confirmed:**` dated → stage 1c (design, in a fresh session). The decomposition checkpoint runs after that design exists.
   - DRAFT → `leaf-workflow` stage 2 (spec review). *(But if it's decision-blocked, R2 already caught it.)*
   - APPROVED → stage 4 (dispatch implementer). *(Exclude `Node Kind: maintenance-container` docs — APPROVED is their permanent steady state, never a "next action.")*
   - SPEC_REVIEW / VERIFY → resume the corresponding stage. *(VERIFY usually caught at R1.)*
-  - Status `—` / non-existent but listed → stage 1 (author the DRAFT), running the decomposition checkpoint.
+  - Status `—` / non-existent but listed → stage 1a (requirements only).
 - **Tie-break** between two equally-unblocked nodes: lower §14 row wins (it is earlier in declared build order); if same row depth, the one with more downstream dependents wins (unblocks more).
 - **All manifest nodes COMPLETE/DEFERRED →** descend to R5.
 
