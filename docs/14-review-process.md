@@ -17,12 +17,14 @@
 
 **Requirements amended:** 2026-11-13 — a partial the operator has waived may advance. No new outcome.
 
+**Requirements amended:** 2026-11-13 — the script may name the legal result values and the legal row verdicts, and may not state which rows produce which result. The node advances when no row failed and every partial is waived. The out-of-scope line no longer names a component. No new outcome.
+
 **Outcome.** Spec review and implementation review are specified once, and the places that specify them agree.
 
 **Acceptance.**
 
-- The playbook, the workflow script, and the reviewer prompts judge a review the same way. Comparing them shows one definition. None of them carries its own list of verdict words.
-- Both reviews follow the same steps. The review is written into the node before the status changes. A fix the review fully specifies is applied. The node advances only when every row passed, or every row that did not pass is a partial the operator waived.
+- The playbook, the workflow script, and the reviewer prompts judge a review the same way. Comparing them shows one definition. None of them states which rows produce which result. The workflow script may name the legal result values and the legal row verdicts.
+- Both reviews follow the same steps. The review is written into the node before the status changes. A fix the review fully specifies is applied. The node advances only when no row failed and every partial is one the operator waived.
 - When a row is only partly met, both reviews stop for the operator, and the operator's decision is written on that row. When a row fails, the work is changed and that review runs again.
 - The spec review still checks the design against the confirmed requirements. The implementation review still checks the code against the approved spec, including the build, lint, types, and tests.
 - Review records already written on finished nodes keep the words they were written with.
@@ -41,7 +43,7 @@
 **Out of scope.**
 
 - Reviewing finished nodes again under the new rules.
-- A task-runner gate that refuses to complete a node when no independent review ran.
+- No automatic refusal to finish a node when no independent review ran.
 - Changing how requirements are confirmed before design.
 
 ## Design
@@ -57,6 +59,7 @@ Edited:
 ```
 .ledger/process/verification-signoff.md          # the only definition of the result
 .ledger/process/leaf-workflow.md                 # stages 2, 3, 6, 7, and the commit-pattern bullets
+docs/00-project.md                               # §6.2 failed-verification sentence only
 .claude/workflows/leaf-workflow.js               # schema, prompts, record-then-branch
 server/src/dispatcher/prompts/shared.ts          # reminder + three personas
 server/src/dispatcher/prompts/specReview.ts
@@ -113,20 +116,20 @@ Spec review and implementation review do the same three steps.
 
    Findings sit under the table. Resolution cells start empty. The spec-review section stays between Open Issues and Implementation Notes. The implementation-review subsection stays inside Implementation Notes.
 
-2. **Apply a fully specified fix, then review again.** A mechanical finding is one whose fix text is the whole edit. Set that row's resolution to `applied`. That records the edit. It does not remove a `FAIL`, and it does not make the disposition `pass`. The review runs again over the rows the edit touched. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
+2. **Apply a fully specified fix, then review again.** A mechanical finding is one whose fix text is the whole edit. Set that row's resolution to `applied`. That records the edit. It does not remove a `FAIL`, and it does not make the disposition `pass`. The review runs again. A spec-review rerun is a full spec review. An implementation rerun covers the failed rows, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
 
 3. **Advance on `pass`.** On the latest matrix, no `FAIL` remains, and every `PARTIAL` is `waived`. A waived partial is the operator's decision to go on with that gap recorded. A `FAIL` cannot be waived.
    - Spec review: the next commit moves `SPEC_REVIEW` → `APPROVED`.
    - Implementation review: status stays `VERIFY`, and the operator gate opens. The review does not mark the node complete. The operator's sign-off still does that.
 
-Otherwise stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` stays the step where the operator rejects during the walk. This node does not edit that step, and it adds no lifecycle status.
+Otherwise stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `docs/00-project.md` §6.2 is changed so that sentence matches: a failed spec review or implementation review stays there and records the matrix, and `ISSUE_OPEN` is the operator rejecting during the walk. No new lifecycle status.
 
-- A `PARTIAL` may be closed by the operator in either review. The resolution is `waived`, and an Open Issue is filed. The node may then advance.
+- A `PARTIAL` may be closed by the operator in either review. The resolution is `waived`, and an Open Issue is filed. The node may then advance when no `FAIL` remains.
 - A `FAIL` is not waived. The work changes, including when the review fully specified the fix, and that review runs again.
   - Spec review: dispatch stage 2 again.
   - Implementation review: the `reverify` persona. It returns the same result shape and runs the same build, lint, typecheck, and tests. Its rows are the failed rows, any row the fix touched, and the requirements-text row when the fix touched Requirements. Its preamble does not describe `ISSUE_OPEN` as the place a review failure is stored.
 
-A heading is not a pass, for a Spec Review section or an Implementation Review subsection. The script does not treat either heading as review-done while the latest section still has a `FAIL`.
+A heading is not a pass, for a Spec Review section or an Implementation Review subsection. The script does not treat either heading as review-done while the latest section still has a `FAIL` or a `PARTIAL` that is not `waived`.
 
 A failure of the confirmation row (fidelity row F3, or implementation row R0) is `changes-required`. The fix is to put the text back, or to record an amendment. An amendment that adds an outcome still comes back through spec review. Any requirements amendment is reviewed again.
 
@@ -159,8 +162,8 @@ Implementation review rows, in order: R0, then one row per Requirements bullet a
 | D5 | The review object field is `disposition`, not a transition word. | A review cannot mark the node complete. The operator's sign-off still does that. `READY_FOR_COMPLETE` named a transition this review does not perform. |
 | D6 | Historical `Spec Review` and `Implementation Review` sections stay word for word. | Acceptance 5. |
 | D7 | `reverify` returns the same result shape, over a narrower row set. | Acceptance 3. A second vocabulary for the rerun would be another list. |
-| D8 | A review failure stays at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` stays the operator's rejection during the walk. | The audit has to exist before any status change. Moving a review failure to `ISSUE_OPEN` would make that status change part of the review. No new lifecycle status. The product requirement that a failed verification reaches `ISSUE_OPEN` stays on that walk, which this node does not edit. |
-| D9 | The script schema names the three legal disposition values. The playbook and the prompts do not. | Acceptance 1. A schema that accepts any string is how the old verdict lists drifted. Naming the legal values is not a statement of which rows produce which value. That statement stays in `verification-signoff.md`. |
+| D8 | A review failure stays at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` stays the operator's rejection during the walk. §6.2 says so. | The audit has to exist before any status change. Moving a review failure to `ISSUE_OPEN` would make that status change part of the review. No new lifecycle status. The product sentence is updated to the rule the playbook already follows. |
+| D9 | The script schema names the legal disposition values and the legal row verdicts. The playbook and the prompts do not state which rows produce which result. | Acceptance line 1, as amended. A schema that accepts any string is how the old verdict lists drifted. Naming the legal values is not that statement. The statement stays in `verification-signoff.md`. |
 
 ## Open Issues
 
@@ -243,6 +246,33 @@ Independent review of the revised design. Verdict under the current rules: **NEE
 | N1 | A sentence restated D9 | Applied. Deleted. |
 | N2 | A finding on a passed row was eligible to be applied | Applied. |
 
+## Spec Review (2026-11-13, third pass)
+
+Independent review after the waiver and re-review revisions. Verdict under the current rules: **NEEDS_MAJOR_REVISIONS**. This commit is the resolution. The node stays at `SPEC_REVIEW`.
+
+| # | Item | Verdict | Resolution |
+|---|------|---------|------------|
+| F1-1 | None of the three places carries its own list of verdict words | FAIL | Amended. The script may name the legal result values and the legal row verdicts. None of the three states which rows produce which result. |
+| F1-2 | Advance only when every row passed, or every non-pass is a waived partial | FAIL | Amended. Advance when no row failed and every partial is waived. A row marked not applicable does not block. |
+| F1-3 through F1-9 | The other acceptance lines | PASS | — |
+| F2-1 through F2-15, F2-17 | Requirements bullets | PASS | — |
+| F2-16 | Out of scope named a component | FAIL | Amended. The line no longer names one. |
+| F3 | Amendments explain the requirements diff | PASS | This commit adds the third amendment line. |
+| P1 | Failed verification goes to `ISSUE_OPEN` | FAIL | Revised. §6.2 is edited so a failed review stays put and records the matrix. `ISSUE_OPEN` stays the operator's walk. |
+| P2 | Self-audit residual stays deferred | PASS | — |
+| C1 | One row set for the next review | FAIL | Revised. A spec-review rerun is a full spec review. An implementation rerun uses the narrower set. |
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | The script's legal values were treated as a second mapping | Amended, as directed. D9 stands. |
+| B2 | A not-applicable row could not pass the advance sentence | Amended, as directed. |
+| B3 | §6.2 still sent every failed verification to `ISSUE_OPEN` | Applied in the design. The sentence is an implementation edit. |
+| B4 | The next review had three row sets | Applied. |
+| S1 | Out-of-scope line named a component | Applied. |
+| S2 | The rerun was not clearly the next entry | Applied. |
+| N1 | A heading counted as done while a partial was open | Applied. |
+| N2 | The waiver bullet omitted a remaining failure | Applied. |
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -273,13 +303,13 @@ The acceptance checks, now runnable. No new outcome.
 
 2. **Same steps.** In `.claude/workflows/leaf-workflow.js`, the spec-review record and the implementation-review record are each committed while status is unchanged. The status moves, or the operator gate opens, only when the latest matrix has no `FAIL` and every `PARTIAL` is `waived`. A `FAIL` marked `applied` or `waived` does not advance. `pnpm -C server exec vitest run test/dispatcher/prompts` exits 0. The `spec_review`, `verify`, and `reverify` snapshots point at `verification-signoff.md`, call `runner.complete_task` only for a passing disposition, and call `runner.await_human_review` for the other two.
 
-3. **A partial stops, a failure is reviewed again.** The same script returns `manual-needed` after the audit commit when the latest matrix has a `FAIL`, or a `PARTIAL` that is not `waived`. A `FAIL` marked `applied` dispatches that review again into a new dated section. A Spec Review heading, or an Implementation Review subsection, does not by itself count as review-done. `reverify.ts` runs the build, lint, typecheck, and tests, and limits its rows to the previous failures, the rows the fix touched, and the requirements-text row when the fix touched Requirements.
+3. **A partial stops, a failure is reviewed again.** The same script returns `manual-needed` after the audit commit when the latest matrix has a `FAIL`, or a `PARTIAL` that is not `waived`. On the next entry, a `FAIL` dispatches that review again into a new dated section. A spec-review rerun is a full spec review. An implementation rerun covers the previous failures, the rows the fix touched, and the requirements-text row when the fix touched Requirements. A Spec Review heading, or an Implementation Review subsection, does not by itself count as review-done while a `FAIL` or an unwaived `PARTIAL` remains. `reverify.ts` runs the build, lint, typecheck, and tests.
 
 4. **The two reviews still check different work.** The spec-review prompt in the script and `specReview.ts` still require fidelity rows F1, F2, and F3. `verify.ts` and `reverify.ts` still require the build, lint, typecheck, and tests. The implementation-review prompt in the script does not contain `pure literal` or `stage coverage`. `leaf-workflow.md` still says the operator may skip spec review and may not skip implementation review.
 
 5. **Old records stay.** `git diff` for the implementation does not change a heading matching `Spec Review` or `Implementation Review` in any doc other than this one.
 
-6. **The four constraint checks.** `leaf-workflow.md` still says the operator's sign-off marks a node complete, and the implementation-review steps open the operator gate without setting complete. The same playbook still allows skipping spec review and does not allow skipping implementation review. The edited playbook and script add no lifecycle status. The confirmation-row paragraph still sends an amendment that adds an outcome back through spec review.
+6. **The four constraint checks.** `leaf-workflow.md` still says the operator's sign-off marks a node complete, and the implementation-review steps open the operator gate without setting complete. The same playbook still allows skipping spec review and does not allow skipping implementation review. The edited playbook and script add no lifecycle status. `docs/00-project.md` §6.2 says a failed spec review or implementation review stays at `SPEC_REVIEW` or `VERIFY` and records the matrix, and that `ISSUE_OPEN` is the operator rejecting during the walk. The confirmation-row paragraph still sends an amendment that adds an outcome back through spec review.
 
 7. **Playbook copies.** `.claude/scripts/sync-process` reports `sync` or `ok` for each registered child.
 
