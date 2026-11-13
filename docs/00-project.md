@@ -1,8 +1,8 @@
 # LLM Project Framework
  
 **Status:** COMPLETE (PRD §14 manifest fully COMPLETE; `07-health-daemon` v2 shipped 2026-06-07)
-**Version:** 0.5.15
-**Last Updated:** 2026-06-10
+**Version:** 0.5.16
+**Last Updated:** 2026-11-13
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
@@ -23,6 +23,7 @@ v0.5.12 — Specced the **"Transcript ingestion couples the orchestration data l
 v0.5.15 — Defined **parent-node completion predicate** in §6.2: a parent reaches `COMPLETE` when all children are `COMPLETE` or `DEFERRED`, excluding `maintenance-container` children (which hold `APPROVED` as a permanent steady state and are lifecycle-independent of their parent). Formally records `DEFERRED` as terminal-for-completion (previously load-bearing but undocumented). Advanced `01-ui` to COMPLETE (v1, 2026-06-10) under the new predicate. `maintenance-round.md` updated with the exemption subsection; `99-maintenance/00-maintenance.md` carries the new `Node Kind: maintenance-container` marker.  
 v0.5.14 — New node **`10-e2e-testing`** (DRAFT) — Playwright browser-driven acceptance suite; covers every COMPLETE UI panel and primary interaction flows; wires into `pnpm test` fanout via a new `e2e/` workspace package. §14 gains the row.  
 v0.5.13 — `08-alerts` VERIFY → COMPLETE (v1, 2026-06-08). Operator browser sign-off after a controlled live run: a bogus-`ANTHROPIC_API_KEY` server drove a `verify` task `RUNNING→FAILED` (auth failure, no real agent run), the report-only observer raised the `Alert`, and the always-mounted banner rendered on-route. §14 row → COMPLETE; §11 algedonic entry updated VERIFY → COMPLETE.
+v0.5.16 — New node **`14-review-process`** (PLANNED). Requirements for one shared judgment and one shared procedure across spec review and implementation review, so the playbook, the workflow script, and the reviewer prompts stop disagreeing. §14 gains the row. Design and spec review wait on operator confirmation.
  
 ---
  
@@ -420,6 +421,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 | `11-workflow-scripts` | Workflow scripts — two `.claude/workflows/` JS scripts automating the leaf-workflow playbook (stages 1–8 in `leaf-workflow.js`; stages 9–11 in `leaf-workflow-finish.js`); idempotent re-entry; structured review output via sign-off matrix | `.ledger/process/leaf-workflow.md`, `05-task-runner/04-api-endpoints` | COMPLETE (v1, 2026-06-10); `99-maintenance/01-portability` COMPLETE (v1, 2026-06-13); `01-post-implementation-gate` COMPLETE (v1, 2026-07-13) |
 | `12-workflow-decomposition` | Decomposition checkpoint — adds a break-if-yes signal list at the end of leaf-workflow stage 1 so operators exit to decomposition.md before submitting an oversized or multi-responsibility DRAFT for spec review; doc-only change, no new lifecycle state | `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6 | COMPLETE (v1, 2026-06-12) |
 | `13-reference-layer` | Reference layer — `docs/_reference/` current-state docs as a framework convention (pilot proven in worldgen); VERIFY→COMPLETE gate in leaf-workflow + its automation script, enumeration updates (`decomposition.md`, `new-project` template), maintenance-round staleness sweep, worldgen propagation; doc/script-only, no parser change | `.ledger/process/leaf-workflow.md`, `.claude/workflows/leaf-workflow-finish.js`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
+| `14-review-process` | One shared judgment and one shared procedure for spec review and implementation review, so the playbook, the workflow script, and the reviewer prompts stop disagreeing | `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates` | PLANNED |
 
 Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` follows the runner. `07-health-daemon` was sequenced after the dispatcher under the original v1 design (its enqueued `doc_refactor`/`reverify`/`issue_triage` tasks needed the dispatcher's executors). The v2 redesign dropped the enqueue model entirely — the scanner is report-only — so that coupling no longer applies; the sequencing is now just historical.
 
