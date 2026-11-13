@@ -11,7 +11,7 @@
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-13
 
 **Outcome.** Spec review and implementation review are specified once, and the places that specify them agree.
 
