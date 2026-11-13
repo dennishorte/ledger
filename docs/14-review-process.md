@@ -2,7 +2,7 @@
 
 **Node ID:** `14-review-process`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** SPEC_REVIEW
 **Created:** 2026-11-13
 **Last Updated:** 2026-11-13
 **Dependencies:** `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates`
