@@ -68,7 +68,7 @@ server/src/dispatcher/prompts/reverify.ts
 server/test/dispatcher/prompts/*.snapshot.test.ts  # regenerated from the prompts
 ```
 
-Two finished specs quote the old verdict lists as if they were current. Replace those quotations with a pointer to `verification-signoff.md`. In `docs/11-workflow-scripts/00-workflow-scripts.md`, also replace the sentences that describe the old procedure: the skipped spec review proceeds with a synthetic `REVIEW_SCHEMA`; stage 3 is one commit that both records the review and approves; and a node already at `SPEC_REVIEW` skips the review and starts at approval. A node at `SPEC_REVIEW` or `VERIFY` whose latest section has a `FAIL` runs that review again. Do not edit any other paragraph:
+Two finished specs quote the old verdict lists as if they were current. In `docs/11-workflow-scripts/00-workflow-scripts.md`, replace the sentences that describe the old procedure: the skipped spec review proceeds with a synthetic `REVIEW_SCHEMA`; stage 3 is one commit that both records the review and approves; and a node already at `SPEC_REVIEW` skips the review and starts at approval. A node at `SPEC_REVIEW` or `VERIFY` whose latest disposition is `changes-required` runs that review again. `followups` waits. That spec's `REVIEW_SCHEMA` block names the three legal values and does not state which rows produce which result. In `docs/06-agent-dispatcher/04-prompt-templates.md`, the persona sentences become a pointer to `verification-signoff.md` and do not list those values. Do not edit any other paragraph:
 
 ```
 docs/11-workflow-scripts/00-workflow-scripts.md          # REVIEW_SCHEMA block, the two procedure sentences, and the re-entry line
@@ -79,7 +79,7 @@ Not edited: every existing `Spec Review` and `Implementation Review` section, `l
 
 ### The result
 
-`verification-signoff.md` is the only place that says how a review is judged, including which rows produce which disposition. The playbook and the prompts point there. They do not restate the mapping, and they do not list the disposition words. The script schema's `disposition` field is the closed set of legal values. It does not say when each value applies. That set is not a second definition.
+`verification-signoff.md` is the only place that says how a review is judged, including which rows produce which disposition. The playbook and the prompts point there. They do not restate the mapping, and they do not list the disposition words. The script schema's `disposition` field is the closed set of legal values. It does not say when each value applies. That set is not a second definition. The table below is the only statement of which rows produce which result. It is written into `verification-signoff.md` and nowhere else.
 
 Row verdicts stay `PASS`, `FAIL`, `PARTIAL`, `N/A`. A `PASS` without something checkable is stored as `FAIL`.
 
@@ -102,7 +102,7 @@ The reviewer returns:
 
 Every finding names a row. A finding on a `PASS` or `N/A` row does not change that verdict and is not applied. If the summary names a different disposition than the table, the table wins.
 
-`applied` records that the edit landed. It does not remove a `FAIL`. The review runs again, and the new section is the one that counts. `waived` is valid only on a `PARTIAL`.
+`applied` is valid only on a `FAIL`. It records that the edit landed and does not remove the `FAIL`. The next entry dispatches that review. `waived` is valid only on a `PARTIAL`. A `PARTIAL` is closed only by `waived`.
 
 Headline words that new reviews do not use: `LGTM`, `READY_FOR_APPROVAL`, `READY_FOR_COMPLETE`, `READY_WITH_FOLLOWUPS`, `NEEDS_MINOR_REVISIONS`, `NEEDS_REVISIONS`, `NEEDS_MAJOR_REVISIONS`. A review record written before this node keeps the word it was written with. The living sources do not list those words.
 
@@ -116,26 +116,24 @@ Spec review and implementation review do the same three steps.
 
    Findings sit under the table. Resolution cells start empty. The spec-review section stays between Open Issues and Implementation Notes. The implementation-review subsection stays inside Implementation Notes.
 
-2. **Apply a fully specified fix, then review again.** A mechanical finding is one whose fix text is the whole edit. Set that row's resolution to `applied`. That records the edit. It does not remove a `FAIL`, and it does not make the disposition `pass`. The review runs again. A spec-review rerun is a full spec review. An implementation rerun covers the failed rows, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
+2. **Apply a fully specified fix, then review again.** `applied` is valid only on a `FAIL`, as the result table says. Set that resolution when the finding's fix text is the whole edit. The next entry dispatches that review. A spec-review rerun is a full spec review. An implementation rerun covers the rows the result table calls failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
 
-3. **Advance on `pass`.** On the latest matrix, no `FAIL` remains, and every `PARTIAL` is `waived`. A waived partial is the operator's decision to go on with that gap recorded. A `FAIL` cannot be waived.
-   - Spec review: the next commit moves `SPEC_REVIEW` → `APPROVED`.
-   - Implementation review: status stays `VERIFY`, and the operator gate opens. The review does not mark the node complete. The operator's sign-off still does that.
+3. **Advance on `pass`.** When the disposition is `pass`, spec review's next commit moves `SPEC_REVIEW` → `APPROVED`. Implementation review stays at `VERIFY`, and the operator gate opens. The review does not mark the node complete. The operator's sign-off still does that.
 
-Otherwise stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `docs/00-project.md` §6.2 is changed so that sentence matches: a failed spec review or implementation review stays there and records the matrix, and `ISSUE_OPEN` is the operator rejecting during the walk. No new lifecycle status.
+`followups` and `changes-required` stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `docs/00-project.md` §6.2 is changed so that sentence matches: a failed spec review or implementation review stays there and records the matrix, and `ISSUE_OPEN` is the operator rejecting during the walk. No new lifecycle status.
 
-- A `PARTIAL` may be closed by the operator in either review. The resolution is `waived`, and an Open Issue is filed. The node may then advance when no `FAIL` remains.
-- A `FAIL` is not waived. The work changes, including when the review fully specified the fix, and that review runs again.
+- On `followups`, the operator may write `waived` on a partial and file an Open Issue. Disposition is computed again from the result table. The node advances only when that disposition is `pass`.
+- On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again on the next entry.
   - Spec review: dispatch stage 2 again.
-  - Implementation review: the `reverify` persona. It returns the same result shape and runs the same build, lint, typecheck, and tests. Its rows are the failed rows, any row the fix touched, and the requirements-text row when the fix touched Requirements. Its preamble does not describe `ISSUE_OPEN` as the place a review failure is stored.
+  - Implementation review: the `reverify` persona. It returns the same result shape and runs the same build, lint, typecheck, and tests. Its rows are the ones named in step 2. Its preamble does not describe `ISSUE_OPEN` as the place a review failure is stored.
 
-A heading is not a pass, for a Spec Review section or an Implementation Review subsection. The script does not treat either heading as review-done while the latest section still has a `FAIL` or a `PARTIAL` that is not `waived`.
+A heading is not a pass, for a Spec Review section or an Implementation Review subsection. The script does not treat either heading as review-done while the disposition is not `pass`.
 
-A failure of the confirmation row (fidelity row F3, or implementation row R0) is `changes-required`. The fix is to put the text back, or to record an amendment. An amendment that adds an outcome still comes back through spec review. Any requirements amendment is reviewed again.
+A failure of the confirmation row (fidelity row F3, or implementation row R0) is judged by the result table. The fix is to put the text back, or to record an amendment. An amendment that adds an outcome still comes back through spec review. Any requirements amendment is reviewed again.
 
-On a later entry, if the latest section has no `FAIL` and every `PARTIAL` is `waived`, advance without a new dispatch. If it has a `FAIL`, dispatch that review again. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
+On a later entry, `pass` advances without a new dispatch. `changes-required` dispatches that review again. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
 
-The dispatched reviewer records the matrix, applies a fully specified fix, and recomputes. It does not change lifecycle status. The status commit and the operator gate stay in the workflow script. A passing disposition ends with `runner.complete_task`. The other two end with `runner.await_human_review` and the open rows. It does not call `runner.complete_task` for a non-pass, and it does not call `runner.fail_task` for a review that reached a judgment. After it applies a fix to a failed row, the result is still not a pass, so it waits.
+The dispatched reviewer records the matrix, applies a fully specified fix, and recomputes. It does not change lifecycle status. The status commit and the operator gate stay in the workflow script. A passing disposition ends with `runner.complete_task`. The other two end with `runner.await_human_review` and the open rows. It does not call `runner.complete_task` for a non-pass, and it does not call `runner.fail_task` for a review that reached a judgment. After it applies a fix, it recomputes from the result table and then branches on that disposition.
 
 ### What each review checks
 
@@ -145,9 +143,9 @@ Implementation review rows, in order: R0, then one row per Requirements bullet a
 
 ### Playbook, script, prompts
 
-`leaf-workflow.md` stages 2, 3, 6, and 7 delete their headline-verdict lists and point at `verification-signoff.md` for the result and the three steps. Stage 2 keeps the skip. Stage 6 keeps the mandatory gate list. Stage 3's finding-only table is replaced by the five-column matrix. The Patterns bullets "Every status transition is a commit" and "Apply-easy, punt-substantive, discuss-leftovers" are updated to the same steps: the audit is its own commit, a fully specified fix is applied, and a failed row is reviewed again before the status moves.
+`leaf-workflow.md` stages 2, 3, 6, and 7 delete their headline-verdict lists and point at `verification-signoff.md` for the result and the three steps. Stage 2 keeps the skip. Stage 6 keeps the mandatory gate list. Stage 3's finding-only table is replaced by the five-column matrix. The Patterns bullets "Every status transition is a commit" and "Apply-easy, punt-substantive, discuss-leftovers" are updated to the same steps: the audit is its own commit, and a `changes-required` result is reviewed again before the status moves. They do not state which rows produce which result.
 
-`leaf-workflow.js` names `disposition` on the review object. The schema enum is `pass`, `followups`, `changes-required`, and the schema does not say when each applies. Findings require `rowId` plus the fields they have today. The row verdict enum is unchanged. The spec-review and implementation-review prompts name their row set and point at the sign-off doc. They do not list the disposition words and do not restate the mapping. Stage 3 and the implementation-review fix stage both record the audit before they branch. They return `manual-needed` after that commit when the latest matrix has a `FAIL`, or a `PARTIAL` that is not `waived`. They advance only when that matrix has no `FAIL` and every `PARTIAL` is `waived`. A `FAIL` marked `waived` does not advance. The skip path does not synthesize a review result.
+`leaf-workflow.js` names `disposition` on the review object. The schema enum is `pass`, `followups`, `changes-required`, and the schema does not say when each applies. Findings require `rowId` plus the fields they have today. The row verdict enum is unchanged. The spec-review and implementation-review prompts name their row set and point at the sign-off doc. They do not list the disposition words and do not restate the mapping. Stage 3 and the implementation-review fix stage both record the audit before they branch. They advance when the disposition is `pass`. They return `manual-needed` when it is `followups` or `changes-required`. They do not state which rows produce which result. The skip path does not synthesize a review result.
 
 `signOffMatrixReminder` points at the sign-off doc and does not list the disposition words. The `spec_review`, `verify`, and `reverify` preambles and success criteria do the same. They call `runner.complete_task` only for a passing disposition, and `runner.await_human_review` for the other two. `verify` and `reverify` both require the gates. Snapshot tests are regenerated, and `pnpm -C server exec vitest run test/dispatcher/prompts` exits 0.
 
@@ -273,6 +271,26 @@ Independent review after the waiver and re-review revisions. Verdict under the c
 | N1 | A heading counted as done while a partial was open | Applied. |
 | N2 | The waiver bullet omitted a remaining failure | Applied. |
 
+## Spec Review (2026-11-13, fourth pass)
+
+Independent review of the revised design. Verdict under the current rules: **NEEDS_MAJOR_REVISIONS**. This commit is the resolution. The node stays at `SPEC_REVIEW`.
+
+| # | Item | Verdict | Resolution |
+|---|------|---------|------------|
+| F1-1 | None of the three places states which rows produce which result | FAIL | Revised. The row rule stays in the result table. The script, the heading check, the later-entry check, and the pattern bullets branch on `pass`, `followups`, and `changes-required`. |
+| F1-2 through F1-9 | The other acceptance lines | PASS | — |
+| F2 | Requirements bullets, including the amendments | PASS | — |
+| F3 | Amendments explain the requirements diff | PASS | Requirements text unchanged in this commit. |
+| P1 | §6.2 replacement | PASS | — |
+| C1 | The design agrees with itself | FAIL | Resolved with F1-1. A waiver advances only when the recomputed disposition is `pass`. `applied` is only on a `FAIL`. The schema block names the three values; the persona sentences only point. |
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B1 | The script was told the row rule the acceptance withholds from it | Applied. Branch on the disposition. |
+| B2 | One bullet advanced while a partial was still open | Applied. Advance only when the recomputed disposition is `pass`. An open partial stops and does not dispatch. |
+| S1 | The finished schema block was both a pointer and a list of the three values | Applied. The schema block names the values. The persona sentences point and do not list them. |
+| S2 | A fully specified partial was both re-reviewed and not re-reviewed | Applied. `applied` is valid only on a `FAIL`. A `PARTIAL` is closed only by `waived`. |
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -301,9 +319,18 @@ The acceptance checks, now runnable. No new outcome.
 
    The `REVIEW_SCHEMA` block in `docs/11-workflow-scripts/00-workflow-scripts.md` names the same three legal values and does not state which rows produce which value. The persona sentences touched in `docs/06-agent-dispatcher/04-prompt-templates.md` point at `verification-signoff.md` and do not list those values.
 
-2. **Same steps.** In `.claude/workflows/leaf-workflow.js`, the spec-review record and the implementation-review record are each committed while status is unchanged. The status moves, or the operator gate opens, only when the latest matrix has no `FAIL` and every `PARTIAL` is `waived`. A `FAIL` marked `applied` or `waived` does not advance. `pnpm -C server exec vitest run test/dispatcher/prompts` exits 0. The `spec_review`, `verify`, and `reverify` snapshots point at `verification-signoff.md`, call `runner.complete_task` only for a passing disposition, and call `runner.await_human_review` for the other two.
+2. **Same steps.** In `.claude/workflows/leaf-workflow.js`, the spec-review record and the implementation-review record are each committed while status is unchanged. The script advances, or opens the operator gate, only when the disposition is `pass`. Otherwise it returns `manual-needed`. This returns no matches, so those files do not restate which rows produce which result:
 
-3. **A partial stops, a failure is reviewed again.** The same script returns `manual-needed` after the audit commit when the latest matrix has a `FAIL`, or a `PARTIAL` that is not `waived`. On the next entry, a `FAIL` dispatches that review again into a new dated section. A spec-review rerun is a full spec review. An implementation rerun covers the previous failures, the rows the fix touched, and the requirements-text row when the fix touched Requirements. A Spec Review heading, or an Implementation Review subsection, does not by itself count as review-done while a `FAIL` or an unwaived `PARTIAL` remains. `reverify.ts` runs the build, lint, typecheck, and tests.
+   ```
+   rg -n "no \`FAIL\`|every \`PARTIAL\`|PARTIAL that is not" \
+     .ledger/process/leaf-workflow.md \
+     .claude/workflows/leaf-workflow.js \
+     server/src/dispatcher/prompts
+   ```
+
+   `pnpm -C server exec vitest run test/dispatcher/prompts` exits 0. The `spec_review`, `verify`, and `reverify` snapshots point at `verification-signoff.md`, call `runner.complete_task` only for a passing disposition, and call `runner.await_human_review` for the other two.
+
+3. **A partial stops, a failure is reviewed again.** On the next entry, `changes-required` dispatches that review again into a new dated section. `followups` stops and does not dispatch. A spec-review rerun is a full spec review. An implementation rerun covers the previous failures, the rows the fix touched, and the requirements-text row when the fix touched Requirements. A Spec Review heading, or an Implementation Review subsection, does not by itself count as review-done while the disposition is not `pass`. `reverify.ts` runs the build, lint, typecheck, and tests. `applied` appears only as a resolution on a failed row.
 
 4. **The two reviews still check different work.** The spec-review prompt in the script and `specReview.ts` still require fidelity rows F1, F2, and F3. `verify.ts` and `reverify.ts` still require the build, lint, typecheck, and tests. The implementation-review prompt in the script does not contain `pure literal` or `stage coverage`. `leaf-workflow.md` still says the operator may skip spec review and may not skip implementation review.
 
