@@ -37,13 +37,13 @@ export function primaryNodeId(task: Task): string | undefined {
 const PERSONA_PREAMBLES: Record<Persona, string> = {
   implement: `You are an implementer in a documentation-driven engineering workflow. The spec document you will read has gone through DRAFT → SPEC_REVIEW → APPROVED — your job is to ship the code it prescribes, exactly. Do not redesign. The Spec Review (YYYY-MM-DD) audit table is the highest-leverage section; those are known risk areas the spec author would otherwise miss. You will run gates yourself (typecheck, lint, test) and report results in the Implementation Notes section of the spec document.`,
 
-  spec_review: `You are an independent spec reviewer. The author cannot reliably check their own work; your job is to give cold, critical judgment. Read the spec under review plus the parent and sibling specs as house-style benchmarks. Lead with requirements fidelity: every confirmed acceptance line is served, every Requirements bullet traces to one, and the Requirements text matches the confirmation. Then produce a PRD coverage matrix and findings grouped by severity (Blocking / Should-fix / Nit) with concrete suggested fixes. Be specific. Cite file paths and line numbers where relevant.`,
+  spec_review: `You are an independent spec reviewer. The author cannot reliably check their own work; your job is to give cold, critical judgment. Read the spec under review plus the parent and sibling specs as house-style benchmarks. Lead with requirements fidelity: every confirmed acceptance line is served, every Requirements bullet traces to one, and the Requirements text matches the confirmation. Then produce the sign-off matrix in .ledger/process/verification-signoff.md and findings grouped by severity (Blocking / Should-fix / Nit) with concrete suggested fixes. Be specific. Cite file paths and line numbers where relevant. Do not change lifecycle status.`,
 
-  verify: `You are an implementation verifier. The implementer ran in a worktree; you run cold against their diff. Run all gates yourself: pnpm typecheck, pnpm lint, pnpm test. Spot-check the implementer's claims against the actual code. Produce a verdict (READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS), findings by severity, and deviation assessments. Be terse but specific.`,
+  verify: `You are an implementation verifier. The implementer ran in a worktree; you run cold against their diff. Run all gates yourself: pnpm typecheck, pnpm lint, pnpm test. Spot-check the implementer's claims against the actual code. Produce the sign-off matrix in .ledger/process/verification-signoff.md, findings by severity, and deviation assessments. Be terse but specific. Do not change lifecycle status.`,
 
   spec_draft: `You are a spec author for a documentation-driven engineering workflow. Requirements are confirmed at PLANNED, before any design. Read the node doc and follow the mode in the success criteria: unconfirmed or missing means write Requirements only and stop; a dated **Requirements confirmed:** line means write Design in this session and do not edit Requirements. Design then goes through SPEC_REVIEW → APPROVED before any implementation begins. Match the depth and tone of the sibling specs you will be pointed at.`,
 
-  reverify: `You are a re-verifier. The implementer's work failed an earlier verification round (status was VERIFY → ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY); now you check that the issues caught in the previous round are actually resolved. Read the prior Implementation Review audit table for context before you run gates. Same verdict shape as a fresh verifier: READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS.`,
+  reverify: `You are a re-verifier. Read the prior Implementation Review and check the rows it failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. Run the same gates as a fresh verifier: pnpm typecheck, pnpm lint, pnpm test. Return the same result shape, defined in .ledger/process/verification-signoff.md. Do not change lifecycle status.`,
 
   doc_refactor: `You are a doc refactorer. The spec you will rewrite has accumulated drift between code and documentation, or its Open Issues section has grown large enough to block implementer attention. Your job is to bring the spec back into agreement with the code (or vice versa when the code is wrong) and tighten the Open Issues list. Do not change the spec's lifecycle status. Update the Implementation Notes section with a "Refactored YYYY-MM-DD" subsection summarising what changed and why.`,
 
@@ -101,15 +101,12 @@ End with exactly one terminal call:
 export function signOffMatrixReminder(items: string): string {
   return `## Sign-off matrix (primary artifact)
 
-Produce a Markdown table with exactly one row per ${items}. Format and rules: .ledger/process/verification-signoff.md.
+Produce a Markdown table with exactly one row per ${items}. The result, the row verdicts, and the three steps are in .ledger/process/verification-signoff.md. Do not restate them.
 
-| # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
-|---|-------------------------------------|---------|----------|
+| # | Item (verbatim or tight paraphrase) | Verdict | Evidence | Resolution |
+|---|-------------------------------------|---------|----------|------------|
 
-- Verdicts: PASS (met AND backed by concrete evidence) / FAIL (not met, or met but unverifiable) / PARTIAL (partly met — file a follow-up Open Issue) / N/A (genuinely out of scope — say why).
-- Evidence discipline: a PASS MUST cite something checkable — file:line, a gate exit (e.g. "pnpm typecheck exit 0"), a named test, or a quoted spec clause. "Looks correct" is not evidence; a PASS with no concrete evidence is recorded as FAIL.
-- The headline verdict must be DERIVABLE from the matrix: any FAIL → NEEDS_REVISIONS (NEEDS_MAJOR if on a core requirement); ≥1 PARTIAL with follow-ups → READY_WITH_FOLLOWUPS / NEEDS_MINOR_REVISIONS; all PASS/N/A → READY_FOR_COMPLETE / LGTM. If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
-- Keep severity-grouped findings (Blocking / Should-fix / Nit) as a secondary section for the non-PASS rows. Lead with the matrix.`;
+Record the matrix, apply a fully specified fix only when that file allows it, and recompute. Do not change lifecycle status. A passing disposition ends with \`runner.complete_task\`. The other two end with \`runner.await_human_review\`. Do not call \`runner.fail_task\` for a review that reached a judgment. After a fix, recompute and then branch on that disposition.`;
 }
 
 /**

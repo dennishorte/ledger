@@ -113,10 +113,9 @@ STATUS_SCHEMA = {
 
 // Output of stage-2 spec review and stage-6 implementation review
 REVIEW_SCHEMA = {
-  verdict: "string",       // Stage 2 (spec review): LGTM | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS | READY_WITH_FOLLOWUPS | NEEDS_REVISIONS
-                           // Stage 6 (impl review): READY_FOR_COMPLETE | NEEDS_REVISIONS | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS
-  matrix: [{ id, item, verdict, evidence }],  // one row per Requirements/Acceptance item
-  findings: [{ severity, description, fix, isMechanical }],
+  disposition: "pass" | "followups" | "changes-required",  // legal values; which rows produce which value is in verification-signoff.md
+  matrix: [{ id, item, verdict, evidence }],  // verdict: PASS | FAIL | PARTIAL | N/A
+  findings: [{ rowId, severity, description, fix, isMechanical }],
   summaryMarkdown: "string"
 }
 
@@ -157,10 +156,10 @@ Entry-state mapping (requirements phase, 2026-11-04 — a node already at `DRAFT
 - `PLANNED` and requirements unconfirmed → stage 1a only, then the same return
 - `PLANNED` and `**Requirements confirmed:**` dated → stage 1c (design, bump to `DRAFT`), then stage 2 onward
 - `DRAFT` → skip stage 1; start at stage 2
-- `SPEC_REVIEW` → skip stages 1–2; start at stage 3
+- `SPEC_REVIEW` → a latest disposition of `changes-required` runs that review again; `followups` waits; `pass` skips stages 1–2 and starts at approval
 - `APPROVED` → skip stages 1–3; start at stage 4
 - `IN_PROGRESS` → skip stages 1–3; locate existing worktree; start at stage 5
-- `VERIFY` → skip stages 1–4; locate existing worktree; start at stage 6; gate not yet created
+- `VERIFY` → skip stages 1–4; locate existing worktree; a latest disposition of `changes-required` runs that review again; `followups` waits; `pass` opens the operator gate
 - `COMPLETE` → early return
 
 ### Stage 1 (Requirements, then design) agent prompt outline
@@ -175,11 +174,11 @@ Bump Status `DRAFT → SPEC_REVIEW`, update parent manifest row, commit `"docs($
 
 Spawn a separate clean-context agent (no isolation). Brief it with: the spec path, PRD §§1–6, parent doc, `verification-signoff.md`, `CLAUDE.md`, `app/src/lib/types.ts`. Evaluation criteria: schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment. Output: `REVIEW_SCHEMA`. The matrix must have one row per PRD-coverage item and per Requirements bullet; a PASS without concrete evidence is recorded as FAIL.
 
-If `skipSpecReview` is true, log the shortcut, skip this stage, and proceed directly to stage 3 with a synthetic `REVIEW_SCHEMA` indicating no formal review ran.
+If `skipSpecReview` is true, log the shortcut, skip this stage, and proceed directly to stage 3. No review section is written and no synthetic matrix is produced. The approve commit says that no formal review was run.
 
 ### Stage 3 (Approve) agent prompt outline
 
-Apply all `isMechanical: true` findings from stage 2's `REVIEW_SCHEMA`. Add a `## Spec Review (YYYY-MM-DD)` section between Open Issues and Implementation Notes containing the full sign-off matrix. Bump Status `SPEC_REVIEW → APPROVED`, update parent manifest row, update any cross-doc summary lines. Single commit: `"docs(${leafId}): SPEC_REVIEW → APPROVED"`.
+Record the five-column matrix in its own commit while status stays `SPEC_REVIEW`. Advance to `APPROVED` only when the disposition is `pass`. `followups` and `changes-required` stop after that audit commit.
 
 ### Stage 4 (Implement) agent prompt outline
 

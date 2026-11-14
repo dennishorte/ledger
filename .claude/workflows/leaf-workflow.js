@@ -58,7 +58,7 @@ async function callAgent(prompt, opts) {
 
 const STATUS_SCHEMA = {
   type: 'object',
-  required: ['exists', 'status', 'specReviewDone', 'implReviewDone', 'requirementsConfirmed'],
+  required: ['exists', 'status', 'specReviewDone', 'implReviewDone', 'requirementsConfirmed', 'latestSpecDisposition', 'latestImplDisposition'],
   additionalProperties: false,
   properties: {
     exists: { type: 'boolean' },
@@ -66,15 +66,17 @@ const STATUS_SCHEMA = {
     specReviewDone: { type: 'boolean' },
     implReviewDone: { type: 'boolean' },
     requirementsConfirmed: { type: 'boolean' },
+    latestSpecDisposition: { type: 'string', enum: ['pass', 'followups', 'changes-required', 'none'] },
+    latestImplDisposition: { type: 'string', enum: ['pass', 'followups', 'changes-required', 'none'] },
   },
 }
 
 const REVIEW_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'matrix', 'findings', 'summaryMarkdown'],
+  required: ['disposition', 'matrix', 'findings', 'summaryMarkdown'],
   additionalProperties: false,
   properties: {
-    verdict: { type: 'string' },
+    disposition: { type: 'string', enum: ['pass', 'followups', 'changes-required'] },
     matrix: {
       type: 'array',
       items: {
@@ -93,9 +95,10 @@ const REVIEW_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['severity', 'description', 'fix', 'isMechanical'],
+        required: ['rowId', 'severity', 'description', 'fix', 'isMechanical'],
         additionalProperties: false,
         properties: {
+          rowId: { type: 'string' },
           severity: { type: 'string' },
           description: { type: 'string' },
           fix: { type: 'string' },
@@ -382,7 +385,7 @@ if (resumeAfterGate) {
     worktreePath = resumeWorktreePathArg
     branchName = resumeBranchNameArg
     currentStatus = 'IN_PROGRESS'
-    docStatus = { exists: true, status: 'IN_PROGRESS', specReviewDone: true, implReviewDone: false, requirementsConfirmed: true }
+    docStatus = { exists: true, status: 'IN_PROGRESS', specReviewDone: true, implReviewDone: false, requirementsConfirmed: true, latestSpecDisposition: 'pass', latestImplDisposition: 'none' }
   } else if (gateTask.status === 'FAILED') {
     // Rejected — patch agent in the same worktree, re-run the gate command, new round's task.
     if (!postImplementationGateCommand) {
@@ -428,10 +431,10 @@ if (resumeAfterGate) {
 if (!resumeAfterGate) {
   docStatus = await callAgent(
     'Read the file at "' + specPath + '". ' +
-    'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false, requirementsConfirmed: false }. ' +
-    'If it exists, read the **Status:** line for the lifecycle status, ' +
-    'return specReviewDone: true if a "## Spec Review" section exists, ' +
-    'implReviewDone: true if Implementation Notes contains an "### Implementation Review" subsection, ' +
+    'If it does not exist, return { exists: false, status: "NOT_FOUND", specReviewDone: false, implReviewDone: false, requirementsConfirmed: false, latestSpecDisposition: "none", latestImplDisposition: "none" }. ' +
+    'If it exists, read the **Status:** line for the lifecycle status. ' +
+    'Apply "' + repoPath + '/.ledger/process/verification-signoff.md" to the latest "## Spec Review" section\'s matrix and resolutions, and set latestSpecDisposition. Do the same for the latest "### Implementation Review" subsection and latestImplDisposition. Use "none" when there is no such section. ' +
+    'specReviewDone is true only when latestSpecDisposition is "pass". implReviewDone is true only when latestImplDisposition is "pass". A heading alone is not enough. ' +
     'requirementsConfirmed: true only when the Requirements section contains a line "**Requirements confirmed:**" followed by an ISO date (YYYY-MM-DD). ' +
     'The word "unconfirmed", a missing line, or any other value is false.',
     { schema: STATUS_SCHEMA, label: 'inspect', phase: 'Inspect' }
@@ -455,14 +458,27 @@ if (!resumeAfterGate) {
 const requirementsConfirmed = !!(docStatus && docStatus.requirementsConfirmed)
 const runRequirements = currentStatus === 'NOT_FOUND' || (currentStatus === 'PLANNED' && !requirementsConfirmed)
 const runDesign = currentStatus === 'PLANNED' && requirementsConfirmed
-const runSpecReview = (runDesign || currentStatus === 'DRAFT') &&
-  !skipSpecReview && !docStatus.specReviewDone
-const runApprove = runDesign || currentStatus === 'DRAFT' ||
-  currentStatus === 'SPEC_REVIEW'
-const runImpl = runApprove || currentStatus === 'APPROVED'
+const specDisposition = (docStatus && docStatus.latestSpecDisposition) || 'none'
+const implDisposition = (docStatus && docStatus.latestImplDisposition) || 'none'
+const runSpecReview = !skipSpecReview && (
+  ((runDesign || currentStatus === 'DRAFT') && specDisposition !== 'pass') ||
+  (currentStatus === 'SPEC_REVIEW' && (specDisposition === 'changes-required' || specDisposition === 'none'))
+)
+const runApprove = (skipSpecReview && (runDesign || currentStatus === 'DRAFT' || currentStatus === 'SPEC_REVIEW'))
+  || (specDisposition === 'pass' && (runDesign || currentStatus === 'DRAFT' || currentStatus === 'SPEC_REVIEW'))
+const runImpl = runApprove || currentStatus === 'APPROVED' || currentStatus === 'DRAFT' || currentStatus === 'SPEC_REVIEW' || runDesign
 const runRebase = runImpl || currentStatus === 'IN_PROGRESS'
-const runImplReview = runRebase || (currentStatus === 'VERIFY' && !docStatus.implReviewDone)
+const runImplReview = runRebase || (currentStatus === 'VERIFY' && implDisposition !== 'pass')
 const runFixes = runImplReview
+
+if ((currentStatus === 'SPEC_REVIEW' && specDisposition === 'followups') ||
+    (currentStatus === 'VERIFY' && implDisposition === 'followups')) {
+  return {
+    nodeId,
+    status: 'manual-needed',
+    message: 'Latest review disposition is followups. It stops for the operator and does not dispatch.',
+  }
+}
 
 // ── Worktree recovery (IN_PROGRESS / VERIFY re-entry) ─────────────────────────
 // Skipped when resuming after a post-impl gate: worktreePath/branchName are already
@@ -576,20 +592,21 @@ if (runDesign) {
 let specReview = null
 
 if (skipSpecReview) {
-  specReview = { verdict: 'LGTM', matrix: [], findings: [], summaryMarkdown: 'Skipped (skipSpecReview: true).' }
-  log('Spec review skipped per skipSpecReview=true')
+  log('Spec review skipped per skipSpecReview=true. No review section is written.')
 } else if (runSpecReview) {
   phase('Spec Review')
 
-  // Bump DRAFT → SPEC_REVIEW transition commit
-  await callAgent(
-    'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
-    'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
-    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
-    'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
-    'Return "done".',
-    { label: 'bump-spec-review', phase: 'Spec Review', model: 'sonnet', effort: 'low' }
-  )
+  // A node already at SPEC_REVIEW is a re-entry. Do not commit the transition again.
+  if (currentStatus !== 'SPEC_REVIEW') {
+    await callAgent(
+      'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
+      'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+      'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+      'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
+      'Return "done".',
+      { label: 'bump-spec-review', phase: 'Spec Review', model: 'sonnet', effort: 'low' }
+    )
+  }
 
   // Independent review — clean context
   const typesLine = typesPath ? '- "' + typesPath + '" (existing types)\n' : ''
@@ -602,15 +619,14 @@ if (skipSpecReview) {
     '- "' + repoPath + '/CLAUDE.md" (constraints)\n' +
     typesLine +
     '\nEvaluation criteria: requirements fidelity first (verification-signoff.md — one row per acceptance line, one per Requirements bullet tracing back to a line, one for the confirmation text), then schema compliance, PRD coverage, dependency declaration, type additions vs existing, MVP scoping, internal consistency, house-style.\n\n' +
-    'Return REVIEW_SCHEMA per verification-signoff.md.\n' +
-    'Lead with the fidelity rows. Then one matrix row per PRD-coverage item and per Requirements bullet.\n' +
+    'Return REVIEW_SCHEMA. The result is defined in verification-signoff.md. Do not restate which rows produce which result.\n' +
+    'Rows, in order: fidelity F1, F2, F3, then one row per product-requirements item the spec must cover and one per Requirements bullet.\n' +
     'A Requirements bullet that names a file, component, library, or mechanism is FAIL. A bullet that traces to no acceptance line is FAIL.\n' +
-    'Every PASS needs concrete evidence (file:line or section ref). "Looks correct" is FAIL.\n' +
-    'Verdict derived from matrix: any FAIL → NEEDS_MAJOR_REVISIONS or NEEDS_MINOR_REVISIONS; no FAIL + PARTIAL → NEEDS_MINOR_REVISIONS; all PASS/N/A → LGTM.',
+    'Every PASS needs concrete evidence (file:line or section ref).',
     { schema: REVIEW_SCHEMA, label: 'spec-review', phase: 'Spec Review' }
   )
 
-  log('Spec review verdict: ' + specReview.verdict)
+  log('Spec review disposition: ' + specReview.disposition)
   const specBlockers = specReview.findings.filter(function(f) { return f.severity === 'Blocking' })
   if (specBlockers.length > 0) {
     log('WARNING: ' + specBlockers.length + ' blocking spec-review finding(s)')
@@ -621,17 +637,50 @@ if (skipSpecReview) {
 
 // ── Stage 3: Approve ──────────────────────────────────────────────────────────
 
-if (runApprove) {
+if (specReview) {
   phase('Approve')
-  const mechanicalFindings = specReview ? specReview.findings.filter(function(f) { return f.isMechanical }) : []
   await callAgent(
-    'Apply these mechanical spec-review findings to "' + specPath + '":\n' +
-    JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
-    'Add a "## Spec Review (' + runDate + ')" section BETWEEN "## Open Issues" and "## Implementation Notes":\n' +
-    '| # | Finding | Resolution |\n' +
-    '|---|---------|------------|\n' +
-    '(one row per finding; mechanical → "applied"; skipped → reason)\n\n' +
-    'Bump **Status:** to APPROVED. Update the parent manifest row in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" to APPROVED.\n' +
+    'Record the spec review in "' + specPath + '". Do not change **Status:**. It stays SPEC_REVIEW.\n\n' +
+    'Add a "## Spec Review (' + runDate + ')" section BETWEEN "## Open Issues" and "## Implementation Notes".\n' +
+    'Write this five-column matrix. Resolution cells start empty, then set a resolution only when "' + repoPath + '/.ledger/process/verification-signoff.md" allows it:\n' +
+    '| # | Item | Verdict | Evidence | Resolution |\n' +
+    '|---|------|---------|----------|------------|\n' +
+    JSON.stringify(specReview.matrix, null, 2) + '\n\n' +
+    'Findings:\n' + JSON.stringify(specReview.findings, null, 2) + '\n\n' +
+    'Apply a finding only when that file says the resolution is valid, and only when its fix text is the whole edit. Do not change the row verdict.\n' +
+    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md\n' +
+    'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): record spec review"\n' +
+    'Return "done".',
+    { label: 'record-spec-review', phase: 'Approve' }
+  )
+  if (specReview.disposition !== 'pass') {
+    return {
+      nodeId,
+      status: 'manual-needed',
+      message: 'Spec review disposition is ' + specReview.disposition + '. The audit is recorded. Status stays SPEC_REVIEW.',
+    }
+  }
+  await callAgent(
+    'Bump **Status:** to APPROVED in "' + specPath + '". Update the parent manifest row in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" to APPROVED.\n' +
+    'Do not write another review section.\n' +
+    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+    'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): SPEC_REVIEW → APPROVED"',
+    { label: 'approve', phase: 'Approve' }
+  )
+} else if (runApprove && skipSpecReview) {
+  phase('Approve')
+  await callAgent(
+    'Bump **Status:** to APPROVED in "' + specPath + '". Update the parent manifest row in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" to APPROVED.\n' +
+    'Do not write a Spec Review section and do not write a synthetic matrix.\n' +
+    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+    'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): SPEC_REVIEW → APPROVED (no formal review was run)"',
+    { label: 'approve', phase: 'Approve' }
+  )
+} else if (runApprove) {
+  phase('Approve')
+  await callAgent(
+    'Bump **Status:** to APPROVED in "' + specPath + '". Update the parent manifest row in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md" to APPROVED.\n' +
+    'Do not write another review section. The latest review already has disposition pass.\n' +
     'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
     'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): SPEC_REVIEW → APPROVED"',
     { label: 'approve', phase: 'Approve' }
@@ -824,17 +873,18 @@ if (runImplReview) {
     implReviewGates +
     'Evaluation criteria (leaf-workflow.md stage 6):\n' +
     '- Spec conformance (Spec Review closures addressed?)\n' +
-    '- Schema correctness: meta is a pure literal; agent() calls use schema: where structure is needed\n' +
-    '- Stage coverage and commit messages match leaf-workflow.md intent\n' +
     '- Build/lint/typecheck exit codes cited as evidence\n' +
-    '- E2E coverage per spec Verification section\n\n' +
-    'Return REVIEW_SCHEMA. First row is R0 from verification-signoff.md: Requirements text unchanged since **Requirements confirmed:**, or a **Requirements amended:** line records the change. N/A if the node has no confirmation line because it predates the requirements phase. Then one row per Requirements bullet AND per Acceptance-check item.\n' +
-    'PASS requires file:line or gate exit code. "Looks correct" is FAIL.\n' +
-    'Verdict: READY_FOR_COMPLETE | NEEDS_REVISIONS | NEEDS_MINOR_REVISIONS | NEEDS_MAJOR_REVISIONS',
+    '- E2E coverage per spec Verification section\n' +
+    '- Code discipline: no any, no suppressions, no console.log, no dead code\n\n' +
+    'Return REVIEW_SCHEMA. The result is defined in verification-signoff.md. Do not restate which rows produce which result.\n' +
+    (implDisposition === 'changes-required'
+      ? 'This is a rerun. Rows: the ones the previous review failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. Run the same gates.\n'
+      : 'Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. A check that needs a person in the browser is N/A — operator gate.\n') +
+    'PASS requires file:line or gate exit code.',
     { schema: REVIEW_SCHEMA, label: 'impl-review', phase: 'Impl Review' }
   )
 
-  log('Impl review verdict: ' + implReview.verdict)
+  log('Impl review disposition: ' + implReview.disposition)
   log(
     'Blocking: ' + implReview.findings.filter(function(f) { return f.severity === 'Blocking' }).length +
     '  Should-fix: ' + implReview.findings.filter(function(f) { return f.severity === 'Should-fix' }).length +
@@ -849,47 +899,36 @@ if (runImplReview) {
 if (runFixes && implReview) {
   phase('Fixes')
 
-  const nonMechanical = implReview.findings.filter(function(f) {
-    return !f.isMechanical &&
-      (f.severity === 'Blocking' || f.severity === 'Should-fix' || f.severity === 'FAIL' || f.severity === 'PARTIAL')
-  })
-
-  // Non-mechanical blocking findings require operator resolution before proceeding
-  if (nonMechanical.length > 0) {
-    log('Non-mechanical findings require operator resolution (' + nonMechanical.length + ' items)')
-    return {
-      nodeId,
-      status: 'manual-needed',
-      worktreePath,
-      branchName,
-      message: 'Non-mechanical implementation review findings require operator resolution before the gate can be created.',
-      findings: nonMechanical,
-    }
-  }
-
-  const mechanicalFindings = implReview.findings.filter(function(f) { return f.isMechanical })
-
   const fixGates = gateCommands.length > 0
     ? 'If any code was changed, re-run:\n' +
       renderGates(gateCommands, worktreePath) + '\n\n'
     : ''
 
   await callAgent(
-    'Apply these mechanical implementation review findings in the worktree at "' + worktreePath + '":\n' +
-    JSON.stringify(mechanicalFindings, null, 2) + '\n\n' +
+    'Record the implementation review in the worktree at "' + worktreePath + '". Do not change **Status:**. It stays VERIFY.\n\n' +
     'Add a "### Implementation Review (' + runDate + ')" subsection to Implementation Notes in "' +
-    worktreePath + '/' + docsDir + '/' + nodeId + '.md":\n\n' +
-    '**Verdict:** ' + implReview.verdict + '\n\n' +
-    '| # | Item | Verdict | Evidence |\n' +
-    '|---|------|---------|----------|\n' +
-    '(one row per sign-off matrix entry)\n\n' +
-    '**Applied:** list isMechanical fixes\n' +
-    '**Skipped:** list any skipped findings with reason\n\n' +
+    worktreePath + '/' + docsDir + '/' + nodeId + '.md".\n' +
+    'Write this five-column matrix. Resolution cells start empty, then set a resolution only when "' + repoPath + '/.ledger/process/verification-signoff.md" allows it:\n' +
+    '| # | Item | Verdict | Evidence | Resolution |\n' +
+    '|---|------|---------|----------|------------|\n' +
+    JSON.stringify(implReview.matrix, null, 2) + '\n\n' +
+    'Disposition: ' + implReview.disposition + '\n' +
+    'Findings:\n' + JSON.stringify(implReview.findings, null, 2) + '\n\n' +
+    'Apply a finding only when that file says the resolution is valid, and only when its fix text is the whole edit. Do not change the row verdict.\n' +
     fixGates +
     'git -C ' + worktreePath + ' add -A\n' +
-    'git -C ' + worktreePath + ' commit -m "review(' + leafId + '): apply impl-review fixes + audit"',
+    'git -C ' + worktreePath + ' commit -m "review(' + leafId + '): record implementation review"',
     { label: 'apply-fixes', phase: 'Fixes' }
   )
+  if (implReview.disposition !== 'pass') {
+    return {
+      nodeId,
+      status: 'manual-needed',
+      worktreePath,
+      branchName,
+      message: 'Implementation review disposition is ' + implReview.disposition + '. The audit is recorded. Status stays VERIFY.',
+    }
+  }
 } else {
   log('Fixes not needed (runFixes=' + runFixes + ', implReview=' + !!implReview + ')')
 }
@@ -934,7 +973,7 @@ return {
   worktreePath,
   branchName,
   humanReviewTaskId,
-  implReviewVerdict: implReview ? implReview.verdict : 'skipped',
+  implReviewDisposition: implReview ? implReview.disposition : 'skipped',
   nextStep: 'Walk acceptance checks, then approve/reject the human_review task in the Tasks panel.',
   finishWorkflow: 'Workflow({ name: "leaf-workflow-finish", args: { nodeId: "' + nodeId + '", worktreePath: "' + worktreePath + '", branchName: "' + branchName + '" } })',
 }

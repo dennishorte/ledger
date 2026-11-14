@@ -11,12 +11,12 @@ This is the framework's standing mitigation for the **self-audit problem** (PRD 
 The review's primary artifact is a table with exactly one row per checkable item:
 
 ```markdown
-| # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
-|---|-------------------------------------|---------|----------|
-| R1 | <a Requirements bullet>            | PASS    | server/src/x.ts:42; `pnpm test` green (88/88) |
-| R2 | <a Requirements bullet>            | FAIL    | no handler for the empty-input case — x.ts:60 throws |
-| A1 | <an Acceptance-check item>          | PARTIAL | renders, but sort order wrong; follow-up filed |
-| A2 | <an Acceptance-check item>          | N/A     | browser-only; code-present, not run headless |
+| # | Item (verbatim or tight paraphrase) | Verdict | Evidence | Resolution |
+|---|-------------------------------------|---------|----------|------------|
+| R1 | <a Requirements bullet>            | PASS    | server/src/x.ts:42; `pnpm test` green (88/88) | |
+| R2 | <a Requirements bullet>            | FAIL    | no handler for the empty-input case — x.ts:60 throws | |
+| A1 | <an Acceptance-check item>          | PARTIAL | renders, but sort order wrong; follow-up filed | |
+| A2 | <an Acceptance-check item>          | N/A     | browser-only; code-present, not run headless | |
 ```
 
 **What gets a row:**
@@ -62,15 +62,43 @@ This row does not re-open design-versus-goal. Stage 2's fidelity rows already di
 
 ---
 
-## Aggregate verdict — derived, not asserted
+## The result
 
-The headline verdict must be *derivable* from the matrix, not stated independently of it. The fidelity rows (F1–F3) and the R0 row are part of the matrix for this purpose:
+This is the only statement of which rows produce which result. Row verdicts stay `PASS`, `FAIL`, `PARTIAL`, `N/A`. A `PASS` without something checkable is stored as `FAIL`.
 
-- any **FAIL** → `NEEDS_REVISIONS` (or `NEEDS_MAJOR_REVISIONS` if a FAIL is on a core Requirement)
-- no FAIL, ≥1 **PARTIAL** with filed follow-ups → `READY_WITH_FOLLOWUPS` (verify) / `NEEDS_MINOR_REVISIONS` (spec review)
-- all **PASS / N/A** → `READY_FOR_COMPLETE` (verify) / `LGTM` (spec review)
+Disposition is a function of the latest matrix and the resolutions on it:
 
-If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
+| Latest matrix | Disposition |
+|---|---|
+| Any `FAIL`, including one marked `applied` or `waived` | `changes-required` |
+| No `FAIL`, and at least one `PARTIAL` that is not `waived` | `followups` |
+| No `FAIL`, and every `PARTIAL` is `waived`, or every row is `PASS` or `N/A` | `pass` |
+
+Severity does not change the disposition. A finding does not outvote the table.
+
+The reviewer returns `disposition` (one of those three words), the matrix, findings, and a short summary. Every finding names a row (`rowId`) and has `severity` (`Blocking`, `Should-fix`, `Nit`), `description`, `fix`, and `isMechanical`. A finding on a `PASS` or `N/A` row does not change that verdict and is not applied. If the summary names a different disposition than the table, the table wins.
+
+`applied` is valid only on a `FAIL`. It records that the edit landed and does not remove the `FAIL`. The next entry dispatches that review. `waived` is valid only on a `PARTIAL`. A `PARTIAL` is closed only by `waived`.
+
+## The three steps
+
+Spec review and implementation review do the same three steps.
+
+1. **Record, before any status change.** Write the matrix into the node in its own commit. Status stays `SPEC_REVIEW` or `VERIFY`. Resolution cells start empty. The spec-review section stays between Open Issues and Implementation Notes. The implementation-review subsection stays inside Implementation Notes.
+
+2. **Apply a fully specified fix, then review again.** `applied` is valid only on a `FAIL`. Set that resolution when the finding's fix text is the whole edit. The next entry dispatches that review. A spec-review rerun is a full spec review. An implementation rerun covers the rows this table calls failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
+
+3. **Advance on `pass`.** When the disposition is `pass`, spec review's next commit moves `SPEC_REVIEW` → `APPROVED`. Implementation review stays at `VERIFY`, and the operator gate opens. The review does not mark the node complete. The operator's sign-off still does that.
+
+`followups` and `changes-required` stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` is the operator rejecting during the walk.
+
+On `followups`, the operator may write `waived` on a partial and file an Open Issue. Disposition is computed again from the table above. The node advances only when that disposition is `pass`.
+
+On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again on the next entry. Spec review dispatches stage 2 again. Implementation review uses the `reverify` persona. It returns the same result shape and runs the same build, lint, typecheck, and tests. Its rows are the ones named in step 2.
+
+A heading is not a pass. On a later entry, `pass` advances without a new dispatch. `changes-required` dispatches that review again. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
+
+The dispatched reviewer records the matrix, applies a fully specified fix, and recomputes. It does not change lifecycle status. A passing disposition ends with `runner.complete_task`. The other two end with `runner.await_human_review` and the open rows. It does not call `runner.complete_task` for a non-pass, and it does not call `runner.fail_task` for a review that reached a judgment. After it applies a fix, it recomputes from this table and then branches on that disposition.
 
 ---
 
@@ -78,14 +106,14 @@ If the stated verdict and the matrix disagree, the matrix wins and the review is
 
 The matrix is durable provenance, exactly like the existing audit tables (`leaf-workflow.md` "Audit tables as durable provenance"):
 
-- A **spec review** matrix lands in the spec's `Spec Review (YYYY-MM-DD)` section (between Open Issues and Implementation Notes), alongside or in place of the older finding table.
+- A **spec review** matrix lands in the spec's `Spec Review (YYYY-MM-DD)` section (between Open Issues and Implementation Notes).
 - An **implementation review** matrix lands in the `Implementation Review (YYYY-MM-DD)` subsection of Implementation Notes.
-- A **dispatched** reviewer (`spec_review` / `verify` / `reverify`) emits the matrix as its review body and references it in the `runner.complete_task` / `runner.await_human_review` call. Findings by severity (Blocking / Should-fix / Nit) remain a useful *secondary* grouping for FAIL/PARTIAL rows, but the matrix is primary.
+- A **dispatched** reviewer (`spec_review` / `verify` / `reverify`) emits the matrix as its review body. A passing disposition references it in `runner.complete_task`. The other two reference it in `runner.await_human_review`. Findings by severity remain a secondary grouping. The matrix is primary. A review record written before this result existed keeps the word it was written with.
 
 ---
 
 ## Notes
 
-- The matrix does **not** replace severity-grouped findings — it subsumes the pass/fail signal and references the findings for the rows that are not PASS. Keep both; lead with the matrix.
-- Acceptance items that genuinely require human eyes (browser walk-through) are `N/A` for a headless dispatched verifier with the reason "operator gate" — they move the task to `await_human_review` rather than `complete_task`. The operator's browser pass is the real sign-off for those rows (leaf-workflow stage 8).
-- This format is the per-requirement half of the self-audit mitigation. The independence half (review runs in a fresh context / separate dispatched persona) is already in place — leaf-workflow stages 2 & 6 and the `spec_review`/`verify`/`reverify` task personas.
+- The matrix does **not** replace severity-grouped findings. Keep both. Lead with the matrix.
+- A check that needs a person in the browser is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's browser pass is the real sign-off for those rows (leaf-workflow stage 8).
+- This format is the per-requirement half of the self-audit mitigation. The independence half (review runs in a fresh context / separate dispatched persona) is already in place — leaf-workflow stages 2 and 6 and the `spec_review` / `verify` / `reverify` task personas.

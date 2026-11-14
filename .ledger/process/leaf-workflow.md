@@ -134,7 +134,7 @@ Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) an
 - Pointer to the spec doc.
 - Required reading: relevant PRD sections, parent doc, sibling specs as house-style benchmarks, existing types in `app/src/lib/types.ts`.
 - Evaluation criteria: requirements fidelity (`.ledger/process/verification-signoff.md`), then schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment.
-- Output shape: the **per-requirement sign-off matrix** (`.ledger/process/verification-signoff.md`) — one row per PRD-coverage item and per Requirements bullet, each with a PASS/FAIL/PARTIAL/N/A verdict and concrete evidence. The matrix *is* the coverage matrix. Severity-grouped findings (Blocking / Should-fix / Nit) with concrete fixes are a secondary section for the non-PASS rows; the headline **Verdict** (`READY_FOR_APPROVAL` / `NEEDS_MINOR_REVISIONS` / `NEEDS_MAJOR_REVISIONS`) must be derivable from the matrix.
+- Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: fidelity F1, F2, F3, then one row per product-requirements item the spec must cover and one per Requirements bullet.
 
 The reviewer runs in clean context so it can give independent judgment — the framework's mitigation for the self-audit problem (PRD §11). The agent that wrote the spec cannot reliably check its own work.
 
@@ -142,19 +142,13 @@ Spec review runs against a `DRAFT`. A `PLANNED` node has not finished stage 1. D
 
 **Shortcut allowed:** if the spec is small, well-established, and you (the operator) trust it cold, skip this stage. Set Status directly to APPROVED with a note in the commit message that no formal review was run. The implementation review (stage 6) is the mandatory gate, not the spec review. The shortcut skips the review. It does not skip the stage-1b confirmation commit.
 
-### 3. Apply easy fixes; record audit; SPEC_REVIEW → APPROVED
+### 3. Record the audit, then advance on `pass`
 
-Apply every Should-fix and Nit that is a mechanical text change. Punt anything requiring structural rewrites or substantive judgment back to the conversation for the operator's call. Add a **Spec Review (YYYY-MM-DD)** section between Open Issues and Implementation Notes with an audit table:
+The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them.
 
-```markdown
-| # | Finding | Resolution |
-|---|---------|------------|
-| S1 | ... | ... |
-```
+Write the five-column matrix into a **Spec Review (YYYY-MM-DD)** section between Open Issues and Implementation Notes. That commit does not change status. Status stays `SPEC_REVIEW`. The matrix stays in the doc as durable provenance — the implementing agent in stage 4 will read it to know what was already decided.
 
-The audit table stays in the doc as durable provenance — the implementing agent in stage 4 will read it to know what was already decided.
-
-With the audit landed, bump Status SPEC_REVIEW → APPROVED. Update the parent's children manifest row. Update cross-doc summary lines (CLAUDE.md round-2 line, PRD §14 parent status note, sibling sample-tree pictures). Single commit covers all of these — the framework's "doc-and-code must agree" rule (CLAUDE.md) extends to "all doc tree references to a node must agree."
+When the disposition is `pass`, the next commit moves `SPEC_REVIEW` → `APPROVED`. Update the parent's children manifest row and the cross-doc summary lines in that commit. `followups` stops for the operator and does not dispatch. `changes-required` is reviewed again before the status moves. A heading is not a pass.
 
 ### 4. APPROVED → IN_PROGRESS → VERIFY — implementer in isolated worktree
 
@@ -209,7 +203,7 @@ This stage also tests the **multi-worktree shared-file gap** (see Known Limitati
 
 Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the (now-rebased) worktree branch. Because the diff is clean post-rebase, the reviewer can use `git diff main..HEAD` directly without artifact confusion.
 
-Output shape: the **per-requirement sign-off matrix** (`.ledger/process/verification-signoff.md`) — the R0 row for the Requirements text, then one row per Requirements bullet *and* per Acceptance-check item, each PASS/FAIL/PARTIAL/N/A with concrete evidence (a `file:line`, a gate exit, or a named test; a PASS with no evidence is recorded as FAIL). Acceptance items that need a browser walk are `N/A — operator gate` for a headless reviewer; the operator's stage-8 pass is their real sign-off.
+Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. The reviewer runs the build, lint, typecheck, and tests, and cites the exit codes. A check that needs a person in the browser is `N/A — operator gate`. The operator's stage-8 pass is their real sign-off.
 
 **No shortcut.** Unlike the spec review (stage 2), the implementation review is mandatory for every node. The operator cannot assess code correctness from a browser walk alone; the headless reviewer catches type errors, spec-conformance gaps, and discipline violations (no `any`, no dead code) that stage 8's manual walk misses.
 
@@ -224,9 +218,9 @@ Evaluation criteria expand to include:
 - **Regression checks** for any shared infrastructure the node touched (e.g., DAG panel if shared types or parser logic changed).
 - **Anything the implementer's report glossed over.**
 
-### 7. Apply easy review fixes in the worktree; record the audit
+### 7. Record the audit, then open the operator gate on `pass`
 
-Same pattern as stage 3. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance. **Commit the audit + any code fixes as a single commit** in the worktree.
+Same pattern as stage 3. The result and the three steps are in `.ledger/process/verification-signoff.md`. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance. The audit commit does not change status. Status stays `VERIFY`. When the disposition is `pass`, the operator gate opens. The review does not mark the node complete. `followups` stops for the operator and does not dispatch. `changes-required` is reviewed again before any status moves. A heading is not a pass.
 
 If the implementation diverged from the spec in a way the operator approves, update the spec in the same commit. "Doc and code must agree" (CLAUDE.md) is honoured by updating whichever side drifted; silent divergence is not. An edit to Requirements in that commit records a `**Requirements amended:**` line (date and what changed). If the edit adds an outcome the confirmation did not contain, stop after the commit and re-enter at stage 2. Do not promote.
 
@@ -370,7 +364,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase, not only as a decomposition placeholder. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
 
-- **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. Stages whose only output is a transition (stages 2, 4a, 8b) commit just the status bump; stages that bundle a transition with substantive work (stages 1, 3, 4c, 7, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
+- **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. The review audit is its own commit, and it does not change status. A `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. Stages whose only output is a transition (stages 2, 4a, 8b, and the approve commit after a `pass`) commit just the status bump. Stages that bundle a transition with substantive work (stages 1, 4c, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
 - **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps. The *spec* review (stage 2) may be skipped on a small, trusted spec — the operator's call. The *implementation* review (stage 6) is non-negotiable; no shortcut applies.
 
@@ -378,7 +372,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Audit tables as durable provenance.** Spec reviews land in a "Spec Review (YYYY-MM-DD)" section between Open Issues and Implementation Notes. Implementation reviews land in an "Implementation Review (YYYY-MM-DD)" subsection of Implementation Notes. Both stay in the doc forever — future implementing agents on related nodes will read them.
 
-- **Apply-easy, punt-substantive, discuss-leftovers.** When a review returns N findings, apply the mechanical ones, record the full audit, surface anything needing operator judgment back to the conversation before continuing.
+- **Apply-easy, punt-substantive, discuss-leftovers.** The audit is its own commit. A fully specified fix is applied per `.ledger/process/verification-signoff.md`, and a `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. These bullets do not state which rows produce which result.
 
 - **Worktree-per-implementation.** Every implementing agent runs in its own worktree. Worktrees can run in parallel (operator dispatches multiple at once for independent nodes), can outlive a single conversation, and isolate failed attempts from main.
 
