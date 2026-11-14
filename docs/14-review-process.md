@@ -79,7 +79,7 @@ Not edited: every existing `Spec Review` and `Implementation Review` section, `l
 
 ### The result
 
-`verification-signoff.md` is the only place that says how a review is judged, including which rows produce which disposition. The playbook and the prompts point there. They do not restate the mapping, and they do not list the disposition words. The script schema's `disposition` field is the closed set of legal values. It does not say when each value applies. That set is not a second definition. The table below is the only statement of which rows produce which result. It is written into `verification-signoff.md` and nowhere else.
+`verification-signoff.md` is the only place that says how a review is judged, including which rows produce which disposition. The playbook and the prompts point there. They do not restate the mapping. The prompts do not list the disposition words. The playbook may name a disposition where it branches, and that naming is not the mapping. The script schema's `disposition` field is the closed set of legal values. It does not say when each value applies. That set is not a second definition. The table below is the only statement of which rows produce which result. It is written into `verification-signoff.md` and nowhere else.
 
 Row verdicts stay `PASS`, `FAIL`, `PARTIAL`, `N/A`. A `PASS` without something checkable is stored as `FAIL`.
 
@@ -291,6 +291,23 @@ Independent review of the revised design. Verdict under the current rules: **NEE
 | S1 | The finished schema block was both a pointer and a list of the three values | Applied. The schema block names the values. The persona sentences point and do not list them. |
 | S2 | A fully specified partial was both re-reviewed and not re-reviewed | Applied. `applied` is valid only on a `FAIL`. A `PARTIAL` is closed only by `waived`. |
 
+## Spec Review (2026-11-13, fifth pass)
+
+Independent review of the revised design. Verdict under the current rules: **NEEDS_REVISIONS**. This commit is the resolution. The node stays at `SPEC_REVIEW`.
+
+| # | Item | Verdict | Resolution |
+|---|------|---------|------------|
+| F1-1 through F1-9 | Acceptance lines | PASS | — |
+| F2-1 through F2-17 | Requirements bullets | PASS | — |
+| F3 | Amendments explain the requirements diff | PASS | Requirements text unchanged in this commit. |
+| P1 | §6.2 replacement is described, and the project document is not yet edited | PASS | — |
+| C1 | The playbook both omits `changes-required` and uses it | FAIL | Revised. The playbook may name a disposition where it branches. The prompts still do not list those words. |
+| C2 through C5 | Waiver, the result table, the failed-review status, and the finished-spec split | PASS | — |
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| C1 | Verification item 1 forbade `changes-required` in the playbook while the pattern bullets require it | Applied. The search covers the prompts only. |
+
 ## Implementation Notes
 
 *(none yet — pre-implementation)*
@@ -309,11 +326,10 @@ The acceptance checks, now runnable. No new outcome.
      server/src/dispatcher/prompts
    ```
 
-   `followups` and `changes-required` appear in `.claude/workflows/leaf-workflow.js` and in `.ledger/process/verification-signoff.md`. This returns no matches:
+   `followups` and `changes-required` appear in `.claude/workflows/leaf-workflow.js`, in `.ledger/process/verification-signoff.md`, and in the pattern bullets of `.ledger/process/leaf-workflow.md`. This returns no matches:
 
    ```
    rg -n "followups|changes-required" \
-     .ledger/process/leaf-workflow.md \
      server/src/dispatcher/prompts
    ```
 
