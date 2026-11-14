@@ -2,7 +2,7 @@
 
 **Node ID:** `14-review-process`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 **Created:** 2026-11-13
 **Last Updated:** 2026-11-13
 **Dependencies:** `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates`
@@ -310,7 +310,15 @@ Independent review of the revised design. Verdict under the current rules: **NEE
 
 ## Implementation Notes
 
-*(none yet — pre-implementation)*
+Implemented 2026-11-13 on branch `impl/14-review-process`. No dependencies added. This node changes process docs, the workflow script, and the reviewer prompts. It adds no UI panel and no API endpoint, so there is no end-to-end test.
+
+The result, including which rows produce which result, is written only in `.ledger/process/verification-signoff.md`. The playbook names a result where it branches. The script schema names the legal values `pass`, `followups`, and `changes-required`, and the row verdicts. The prompts point at the sign-off doc and do not list those result words.
+
+`pnpm -C server exec vitest run test/dispatcher/prompts` exited 0: 11 files, 66 tests. Snapshots regenerated for `specReview`, `verify`, and `reverify`.
+
+`.claude/scripts/sync-process` reported `sync` for `leaf-workflow.md` and `verification-signoff.md` in `/Users/dennis/code/worldgen`, and `ok` for the other playbooks.
+
+Deviation: the script's inspect result uses `none` when a review section is absent. That word is not a review disposition. The review object's `disposition` stays the three legal values.
 
 ## Verification
 

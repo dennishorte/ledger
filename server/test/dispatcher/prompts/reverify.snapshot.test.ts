@@ -49,7 +49,7 @@ describe("reverify template snapshot", () => {
 
       # Re-verifier persona
 
-      You are a re-verifier. The implementer's work failed an earlier verification round (status was VERIFY → ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY); now you check that the issues caught in the previous round are actually resolved. Read the prior Implementation Review audit table for context before you run gates. Same verdict shape as a fresh verifier: READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS.
+      You are a re-verifier. Read the prior Implementation Review and check the rows it failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. Run the same gates as a fresh verifier: pnpm typecheck, pnpm lint, pnpm test. Return the same result shape, defined in .ledger/process/verification-signoff.md. Do not change lifecycle status.
 
       ## Required reading
 
@@ -65,20 +65,17 @@ describe("reverify template snapshot", () => {
       2. Run all gates: pnpm -C packages/parser build (if relevant), pnpm -C server build, pnpm -C server typecheck, pnpm -C server lint, pnpm test. All must exit zero.
       3. For each issue from the prior audit: confirm resolved or escalate.
       4. Produce the sign-off matrix below, scoped to the previously-failed items plus any Requirements/Acceptance rows the fix touched. Include the R0 row from .ledger/process/verification-signoff.md when the fix touched Requirements: the text is unchanged since confirmation, or a \`**Requirements amended:**\` line records the change. N/A when the node predates the confirmation line.
-      5. The verdict (READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from the matrix.
-      6. Complete with runner.complete_task on any passing verdict; runner.fail_task if the fix introduced a regression.
+      5. The disposition is defined in .ledger/process/verification-signoff.md. Do not restate it. Run the same gates as a fresh verifier.
+      6. A passing disposition ends with runner.complete_task. The other two end with runner.await_human_review. Do not call runner.fail_task for a review that reached a judgment.
 
       ## Sign-off matrix (primary artifact)
 
-      Produce a Markdown table with exactly one row per previously-failed item, the R0 Requirements-text row when the fix touched Requirements, and every Requirements/Acceptance row the fix touched. Format and rules: .ledger/process/verification-signoff.md.
+      Produce a Markdown table with exactly one row per previously-failed item, the R0 Requirements-text row when the fix touched Requirements, and every Requirements/Acceptance row the fix touched. The result, the row verdicts, and the three steps are in .ledger/process/verification-signoff.md. Do not restate them.
 
-      | # | Item (verbatim or tight paraphrase) | Verdict | Evidence |
-      |---|-------------------------------------|---------|----------|
+      | # | Item (verbatim or tight paraphrase) | Verdict | Evidence | Resolution |
+      |---|-------------------------------------|---------|----------|------------|
 
-      - Verdicts: PASS (met AND backed by concrete evidence) / FAIL (not met, or met but unverifiable) / PARTIAL (partly met — file a follow-up Open Issue) / N/A (genuinely out of scope — say why).
-      - Evidence discipline: a PASS MUST cite something checkable — file:line, a gate exit (e.g. "pnpm typecheck exit 0"), a named test, or a quoted spec clause. "Looks correct" is not evidence; a PASS with no concrete evidence is recorded as FAIL.
-      - The headline verdict must be DERIVABLE from the matrix: any FAIL → NEEDS_REVISIONS (NEEDS_MAJOR if on a core requirement); ≥1 PARTIAL with follow-ups → READY_WITH_FOLLOWUPS / NEEDS_MINOR_REVISIONS; all PASS/N/A → READY_FOR_COMPLETE / LGTM. If the stated verdict and the matrix disagree, the matrix wins and the review is incomplete.
-      - Keep severity-grouped findings (Blocking / Should-fix / Nit) as a secondary section for the non-PASS rows. Lead with the matrix.
+      Record the matrix, apply a fully specified fix only when that file allows it, and recompute. Do not change lifecycle status. A passing disposition ends with \`runner.complete_task\`. The other two end with \`runner.await_human_review\`. Do not call \`runner.fail_task\` for a review that reached a judgment. After a fix, recompute and then branch on that disposition.
 
       ## MCP tool contract
 

@@ -47,9 +47,9 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "2. Lead with the requirements-fidelity rows from .ledger/process/verification-signoff.md (one per acceptance line, one per Requirements bullet tracing back to a line, one for the confirmation text). A bullet nothing asked for is FAIL. A Requirements bullet that names a file, component, library, or mechanism is FAIL.",
     "3. Then produce the sign-off matrix below — it doubles as the PRD coverage matrix.",
     "4. For non-PASS rows, group the findings by severity: Blocking (B), Should-fix (S), Nit (N). Each must cite the specific section and include a concrete suggested fix.",
-    "5. The headline verdict (LGTM / NEEDS_MINOR_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from the fidelity rows and the matrix together.",
+    "5. The disposition is defined in .ledger/process/verification-signoff.md. Do not restate it.",
     "6. Record Confidence notes for the stage-4 implementer on any claims you could not mechanically verify (e.g., external API surface, type signatures).",
-    "7. Complete with runner.complete_task if you deliver the review; runner.fail_task if a blocking prerequisite is missing.",
+    "7. A passing disposition ends with runner.complete_task. The other two end with runner.await_human_review. Do not call runner.fail_task for a review that reached a judgment. runner.fail_task remains for a blocking prerequisite that is missing.",
     "8. Do not review a PLANNED doc whose `**Requirements confirmed:**` line is missing or `unconfirmed`. Fail the task and say stage 1 is not finished. A DRAFT that predates the confirmation line may still be reviewed; mark the confirmation row N/A with that reason.",
     "",
     signOffMatrixReminder(

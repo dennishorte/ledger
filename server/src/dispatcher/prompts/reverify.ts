@@ -45,8 +45,8 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "2. Run all gates: pnpm -C packages/parser build (if relevant), pnpm -C server build, pnpm -C server typecheck, pnpm -C server lint, pnpm test. All must exit zero.",
     "3. For each issue from the prior audit: confirm resolved or escalate.",
     "4. Produce the sign-off matrix below, scoped to the previously-failed items plus any Requirements/Acceptance rows the fix touched. Include the R0 row from .ledger/process/verification-signoff.md when the fix touched Requirements: the text is unchanged since confirmation, or a `**Requirements amended:**` line records the change. N/A when the node predates the confirmation line.",
-    "5. The verdict (READY_FOR_COMPLETE / READY_WITH_FOLLOWUPS / NEEDS_REVISIONS / NEEDS_MAJOR_REVISIONS) must be derivable from the matrix.",
-    "6. Complete with runner.complete_task on any passing verdict; runner.fail_task if the fix introduced a regression.",
+    "5. The disposition is defined in .ledger/process/verification-signoff.md. Do not restate it. Run the same gates as a fresh verifier.",
+    "6. A passing disposition ends with runner.complete_task. The other two end with runner.await_human_review. Do not call runner.fail_task for a review that reached a judgment.",
     "",
     signOffMatrixReminder(
       "previously-failed item, the R0 Requirements-text row when the fix touched Requirements, and every Requirements/Acceptance row the fix touched",
