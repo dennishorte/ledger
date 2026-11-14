@@ -364,6 +364,21 @@ Independent review of `main..HEAD` on `impl/14-review-process`. Disposition: **c
 | R4 | A `changes-required` re-entry still tries to commit `DRAFT → SPEC_REVIEW`. | The guard is in the same commit. This row is PARTIAL, so the resolution is not `applied`. |
 | A3 | Same empty commit on the path that must dispatch the review again. | The guard is in the same commit. This row is PARTIAL, so the resolution is not `applied`. |
 
+### Implementation Review (2026-11-13, second pass)
+
+Rerun of the failed rows and the rows the fix touched. Disposition: **pass**. 0 FAIL, 0 unwaived PARTIAL, 0 waived PARTIAL, 6 PASS, 0 N/A. The earlier section stays. Status stays `VERIFY`. This review does not mark the node complete.
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| R0 | Requirements section unchanged in `3a53a3c` | PASS | `git diff 3a53a3c^ 3a53a3c` of the Requirements section exits 0. The commit changes resolution cells only. | |
+| R3 | A node at `SPEC_REVIEW` with no recorded review must not start implementation | PASS | `.claude/workflows/leaf-workflow.js:465` treats `none` as a spec review. `:600` skips the status commit. `:613` dispatches the review. `:656-661` returns before `:694` unless that new disposition is `pass`. | |
+| R4 | A `changes-required` re-entry must not commit `DRAFT → SPEC_REVIEW` again | PASS | The only such commit is `.claude/workflows/leaf-workflow.js:605`, inside `:600` `currentStatus !== 'SPEC_REVIEW'`. `:465` still dispatches the review at `:613`. | |
+| A2 | Advance or open the operator gate only on `pass`. The missing-review path must not implement | PASS | Spec review returns at `.claude/workflows/leaf-workflow.js:656-661` when the new disposition is not `pass`. Implementation review returns at `:923-930` before the gate at `:938`. | |
+| A3 | The re-entry that dispatches the review again does not repeat the status commit | PASS | Same guard as R4: `.claude/workflows/leaf-workflow.js:600` wraps `:605`. Dispatch stays at `:613`. | |
+| S1 | `SPEC_REVIEW` is not safe to implement | PASS | `:469` still sets `runImpl` for `SPEC_REVIEW`, but `:656-661` returns before `phase('Implement')` at `:695` unless the new review is `pass`. Approval at `:663-669` comes first. | |
+
+`node --check .claude/workflows/leaf-workflow.js` exits 0.
+
 ## Verification
 
 The acceptance checks, now runnable. No new outcome.
