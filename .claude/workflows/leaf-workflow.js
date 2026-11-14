@@ -462,7 +462,7 @@ const specDisposition = (docStatus && docStatus.latestSpecDisposition) || 'none'
 const implDisposition = (docStatus && docStatus.latestImplDisposition) || 'none'
 const runSpecReview = !skipSpecReview && (
   ((runDesign || currentStatus === 'DRAFT') && specDisposition !== 'pass') ||
-  (currentStatus === 'SPEC_REVIEW' && specDisposition === 'changes-required')
+  (currentStatus === 'SPEC_REVIEW' && (specDisposition === 'changes-required' || specDisposition === 'none'))
 )
 const runApprove = (skipSpecReview && (runDesign || currentStatus === 'DRAFT' || currentStatus === 'SPEC_REVIEW'))
   || (specDisposition === 'pass' && (runDesign || currentStatus === 'DRAFT' || currentStatus === 'SPEC_REVIEW'))
@@ -596,15 +596,17 @@ if (skipSpecReview) {
 } else if (runSpecReview) {
   phase('Spec Review')
 
-  // Bump DRAFT → SPEC_REVIEW transition commit
-  await callAgent(
-    'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
-    'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
-    'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
-    'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
-    'Return "done".',
-    { label: 'bump-spec-review', phase: 'Spec Review', model: 'sonnet', effort: 'low' }
-  )
+  // A node already at SPEC_REVIEW is a re-entry. Do not commit the transition again.
+  if (currentStatus !== 'SPEC_REVIEW') {
+    await callAgent(
+      'In "' + specPath + '", change **Status:** to SPEC_REVIEW.\n' +
+      'Update the parent manifest row for ' + nodeId + ' to SPEC_REVIEW in "' + repoPath + '/' + docsDir + '/' + parentDocName + '.md".\n' +
+      'git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +
+      'git -C ' + repoPath + ' commit -m "docs(' + leafId + '): DRAFT → SPEC_REVIEW"\n' +
+      'Return "done".',
+      { label: 'bump-spec-review', phase: 'Spec Review', model: 'sonnet', effort: 'low' }
+    )
+  }
 
   // Independent review — clean context
   const typesLine = typesPath ? '- "' + typesPath + '" (existing types)\n' : ''

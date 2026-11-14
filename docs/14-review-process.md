@@ -329,7 +329,7 @@ Independent review of `main..HEAD` on `impl/14-review-process`. Disposition: **c
 | R0 | Requirements unchanged since `471b485`, or an amendment explains the difference | PASS | `git diff 471b485` of the Requirements section. Three amendment lines at `docs/14-review-process.md:16-20`. | |
 | R1 | Outcome: the two reviews are specified once, and those places agree | PASS | `.ledger/process/verification-signoff.md:67` is the only mapping. Playbook points there. Prompts point there at `server/src/dispatcher/prompts/shared.ts:104`. | |
 | R2 | One definition. None of the three states which rows produce which result. The script may name the legal values. | PASS | Mapping search exits 1. Schema names the values at `.claude/workflows/leaf-workflow.js:79` and the row verdicts at `:89`. | |
-| R3 | Same steps. Record before the status change. Apply a fully specified fix. Advance only when no row failed and every partial is waived. | FAIL | Record-before-status is at `.claude/workflows/leaf-workflow.js:641` and `:906`. A `SPEC_REVIEW` node with disposition `none` does not review or approve, and `:469` still sets `runImpl`, so `:692` starts implementation. | |
+| R3 | Same steps. Record before the status change. Apply a fully specified fix. Advance only when no row failed and every partial is waived. | FAIL | Record-before-status is at `.claude/workflows/leaf-workflow.js:641` and `:906`. A `SPEC_REVIEW` node with disposition `none` does not review or approve, and `:469` still sets `runImpl`, so `:692` starts implementation. | applied |
 | R4 | A partial stops for the operator. A failure is changed and that review runs again. | PARTIAL | Partials stop at `.claude/workflows/leaf-workflow.js:474-480`. A `changes-required` re-entry still runs the `DRAFT → SPEC_REVIEW` commit at `:599-607` when status is already `SPEC_REVIEW`. | |
 | R5 | Spec review checks the design against confirmed requirements. Implementation review checks the code, including build, lint, types, and tests. | PASS | Fidelity rows at `.claude/workflows/leaf-workflow.js:621` and `specReview.ts:47`. Gates at `verify.ts:45`, `reverify.ts:45`, and `leaf-workflow.js:873-874`. | |
 | R6 | Finished review records keep their words. | PASS | `git diff main..HEAD -U0 -- '*.md'` changes no heading matching `Spec Review` or `Implementation Review`. | |
@@ -345,24 +345,24 @@ Independent review of `main..HEAD` on `impl/14-review-process`. Disposition: **c
 | R16 | Out of scope: no automatic refusal to finish when no independent review ran. | PASS | `git diff main..HEAD -- .claude/workflows/leaf-workflow-finish.js` is empty. | |
 | R17 | Out of scope: do not change how requirements are confirmed. | PASS | Confirmation check unchanged at `.claude/workflows/leaf-workflow.js:438`. | |
 | A1 | One definition. Old headline words absent. Result words absent from the prompts. Schema names the three values. Persona sentences point. | PASS | Both searches exit 1. Allowed hits at `leaf-workflow.js:79`, `verification-signoff.md:73-75`, `leaf-workflow.md:367`. | |
-| A2 | Same steps. Advance or open the gate only on `pass`. Prompt tests exit 0. | FAIL | Non-pass returns at `.claude/workflows/leaf-workflow.js:654-659` and `:921-928`. Prompt tests exit 0, 66 tests. The `none` path still implements, against `.ledger/process/leaf-workflow.md:130`. | |
+| A2 | Same steps. Advance or open the gate only on `pass`. Prompt tests exit 0. | FAIL | Non-pass returns at `.claude/workflows/leaf-workflow.js:654-659` and `:921-928`. Prompt tests exit 0, 66 tests. The `none` path still implements, against `.ledger/process/leaf-workflow.md:130`. | applied |
 | A3 | A partial stops. A failure is reviewed again. A heading is not review-done. `reverify` runs the gates. | PARTIAL | Followups return `:474-480`. Heading rule `:437`. Rerun rows `:878-880`. The re-entry still tries the `DRAFT → SPEC_REVIEW` commit at `:599-607`. | |
 | A4 | The two reviews still check different work. | PASS | F1–F3 at `.claude/workflows/leaf-workflow.js:621`. Gates at `verify.ts:45` and `reverify.ts:45`. `pure literal` and `stage coverage` search exits 1. | |
 | A5 | Old records stay. | PASS | Changed headings are playbook stages 3 and 7, and `verification-signoff.md` `## The result` / `## The three steps`. | |
 | A6 | The four constraint checks, including the §6.2 sentence. | PASS | `docs/00-project.md:168` keeps a failed review at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` is the operator rejecting during the walk. | |
 | A7 | `sync-process` reports `sync` or `ok`. | PASS | `verification-signoff.md` matches worldgen. `leaf-workflow.md` differs only by worldgen's section-number lines. The new sentences are in the child file. | |
-| S1 | Spec conformance, including that `SPEC_REVIEW` is not safe to implement. | FAIL | `.claude/workflows/leaf-workflow.js:469` and `:692` start implementation while status is `SPEC_REVIEW` and no review section exists. | |
+| S1 | Spec conformance, including that `SPEC_REVIEW` is not safe to implement. | FAIL | `.claude/workflows/leaf-workflow.js:469` and `:692` start implementation while status is `SPEC_REVIEW` and no review section exists. | applied |
 | S2 | Build, lint, and typecheck where this change can break them. | PASS | `pnpm -C server build` exits 0. `pnpm -C server typecheck` exits 0. Prompt tests exit 0. `pnpm -C server lint` exits 1 at `server/src/runner/store.ts:433`, a line identical on `main` and not in this diff. | |
 | S3 | No `any`, no eslint-disable, no `console.log`, no dead code in the edited script and prompts. | PASS | The only hit is the prohibition string at `.claude/workflows/leaf-workflow.js:876`. `node --check` exits 0. | |
 | S4 | End-to-end test. | N/A | Operator gate. This node adds no UI panel and no API endpoint. | |
 
 | # | Finding | Resolution |
 |---|---------|------------|
-| R3 | A `SPEC_REVIEW` node with no review section starts implementation. | |
-| A2 | Verification item 2 says advance only on `pass`. This path implements instead. | |
-| S1 | `SPEC_REVIEW` is not safe to implement. Same hole as R3. | |
-| R4 | A `changes-required` re-entry still tries to commit `DRAFT → SPEC_REVIEW`. | |
-| A3 | Same empty commit on the path that must dispatch the review again. | |
+| R3 | A `SPEC_REVIEW` node with no review section starts implementation. | applied. A missing review now dispatches spec review. The verdict stays FAIL until the next review. |
+| A2 | Verification item 2 says advance only on `pass`. This path implements instead. | applied. Same edit as R3. The verdict stays FAIL until the next review. |
+| S1 | `SPEC_REVIEW` is not safe to implement. Same hole as R3. | applied. Same edit as R3. The verdict stays FAIL until the next review. |
+| R4 | A `changes-required` re-entry still tries to commit `DRAFT → SPEC_REVIEW`. | The guard is in the same commit. This row is PARTIAL, so the resolution is not `applied`. |
+| A3 | Same empty commit on the path that must dispatch the review again. | The guard is in the same commit. This row is PARTIAL, so the resolution is not `applied`. |
 
 ## Verification
 
