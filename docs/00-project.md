@@ -1,8 +1,8 @@
 # LLM Project Framework
  
 **Status:** COMPLETE (PRD §14 manifest fully COMPLETE; `07-health-daemon` v2 shipped 2026-06-07)
-**Version:** 0.5.19
-**Last Updated:** 2026-11-13
+**Version:** 0.5.20
+**Last Updated:** 2026-11-17
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
@@ -27,6 +27,7 @@ v0.5.16 — New node **`14-review-process`** (PLANNED). Requirements for one sha
 v0.5.17 — `14-review-process` PLANNED → DRAFT. Design: one disposition (`pass` / `followups` / `changes-required`) defined only in `verification-signoff.md`; both reviews record it before any status change and advance only on `pass`.
 v0.5.18 — `14-review-process` SPEC_REVIEW → APPROVED. Operator approved after the fifth-pass fix, without another review.
 v0.5.19 — `14-review-process` VERIFY → COMPLETE (v1, 2026-11-13). Operator sign-off after the passing rerun. One review result, in `verification-signoff.md`. Both reviews record it before any status change and advance only on `pass`.
+v0.5.20 — New node **`15-review-decisions`** (PLANNED). Outcome only: important decisions about the project are included in reviews of the work they govern. §14 gains the row. Acceptance and design wait on the operator.
  
 ---
  
@@ -425,6 +426,7 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 | `12-workflow-decomposition` | Decomposition checkpoint — adds a break-if-yes signal list at the end of leaf-workflow stage 1 so operators exit to decomposition.md before submitting an oversized or multi-responsibility DRAFT for spec review; doc-only change, no new lifecycle state | `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6 | COMPLETE (v1, 2026-06-12) |
 | `13-reference-layer` | Reference layer — `docs/_reference/` current-state docs as a framework convention (pilot proven in worldgen); VERIFY→COMPLETE gate in leaf-workflow + its automation script, enumeration updates (`decomposition.md`, `new-project` template), maintenance-round staleness sweep, worldgen propagation; doc/script-only, no parser change | `.ledger/process/leaf-workflow.md`, `.claude/workflows/leaf-workflow-finish.js`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
 | `14-review-process` | One shared judgment and one shared procedure for spec review and implementation review, so the playbook, the workflow script, and the reviewer prompts stop disagreeing | `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates` | COMPLETE (v1, 2026-11-13) |
+| `15-review-decisions` | Important decisions about the project are included in reviews of the work they govern | `14-review-process` | PLANNED |
 
 Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` follows the runner. `07-health-daemon` was sequenced after the dispatcher under the original v1 design (its enqueued `doc_refactor`/`reverify`/`issue_triage` tasks needed the dispatcher's executors). The v2 redesign dropped the enqueue model entirely — the scanner is report-only — so that coupling no longer applies; the sequencing is now just historical.
 
