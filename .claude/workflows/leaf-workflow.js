@@ -528,7 +528,7 @@ if (runRequirements) {
     '- Out of scope: what this node will not do\n' +
     'A requirement that names a file, a component, a library, or a mechanism does not belong here.\n' +
     'If outcome, acceptance, or out of scope was not given, leave that heading as _(operator)_. Do not invent it.\n' +
-    'Verification repeats the same checks in the same words.\n' +
+    'Verification is the test plan. For each acceptance check, write the setup, the action, and what a person looks at to decide it passed. The acceptance wording stays in Acceptance. Do not add an outcome. Commands and test-file names wait for design.\n' +
     'Design, Decisions, Open Issues, Implementation Notes: *(not started)* — unless they already contain more than that placeholder, in which case leave them untouched.\n' +
     'Children: None.\n' +
     'Front-matter Status: PLANNED. Node ID and Parent must be correct.\n\n' +
@@ -558,7 +558,7 @@ if (runDesign) {
     'If **Requirements confirmed:** is missing, says unconfirmed, or Outcome / Acceptance / Out of scope is still _(operator)_, set advanced: false and do not write Design.\n\n' +
     'Otherwise write Design, Decisions (a # / Decision / Rationale table), and priority-tagged Open Issues.\n' +
     'Every design choice names the acceptance line it serves. Leave out a choice that serves no line.\n' +
-    'Tighten Verification into runnable checks. Do not add an outcome the confirmed requirements do not contain.\n' +
+    'Make the Verification test plan runnable. Keep how each check is confirmed, and add commands and test-file names. Do not add an outcome the confirmed requirements do not contain.\n' +
     'Implementation Notes: `*(none yet — pre-implementation)*`.\n' +
     'Bump **Status:** PLANNED → DRAFT in the spec and the parent manifest row.\n' +
     'Commit: git -C ' + repoPath + ' add ' + docsDir + '/' + nodeId + '.md ' + docsDir + '/' + parentDocName + '.md\n' +

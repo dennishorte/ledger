@@ -1,7 +1,7 @@
 # Leaf-node Implementation Workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-11-04 (requirements phase — Requirements is confirmed at PLANNED, before any design)
+**Last Updated:** 2026-11-17 (Verification is the test plan for the acceptance checks; it does not repeat them)
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
 
@@ -51,7 +51,7 @@ Create `docs/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. The
   - **Acceptance.** The checks that prove it. Each one names something a person can point at.
   - **Constraints.** What must stay as it is.
   - **Out of scope.** What this node will not do.
-- **Verification** — the same checks, in the same words. Runnable commands and test-file names are filled in at 1c. This pass does not add a new outcome there.
+- **Verification** — the test plan. For each acceptance check, write the setup, the action, and what a person looks at to decide it passed. The acceptance wording stays in Acceptance. Commands and test-file names are filled in at 1c. This pass does not add a new outcome.
 - **Design, Decisions, Open Issues, Implementation Notes** — `*(not started)*`.
 - **Children** — None, unless this node is already a parent.
 
@@ -79,7 +79,7 @@ The design author writes:
 - **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
 - **Open Issues** — priority-tagged (HIGH / MEDIUM / LOW / TRIVIAL).
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
-- **Verification** — the confirmed checks, now runnable. For any node that introduces or changes UI panels or API endpoints, name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface. Naming a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
+- **Verification** — the test plan, now runnable. Keep the explanation of how each check is confirmed, and add the commands and test-file names. For any node that introduces or changes UI panels or API endpoints, name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface. Naming a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
 
 Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md` (the gold standard) and `01-ui/06-health.md` (a recent thorough DRAFT).
 
