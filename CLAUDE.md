@@ -4,8 +4,7 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Start here
 
-- **`docs/00-project.md`** — this project's root. Read it for purpose and standing decisions.
-- **`docs/README.md`** — present-tense notes. Living docs are the markdown files at the top of `docs/`.
+- **`docs/00-project.md`** — this project's root. Read it for purpose, how the docs are organized, and the standing decisions.
 - **`.ledger/process/leaf-workflow.md`** — how a leaf goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 - **`.ledger/process/decomposition.md`** — when a plan is too big to be one piece of work.
