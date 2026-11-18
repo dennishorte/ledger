@@ -1,9 +1,9 @@
-# Leaf-node Implementation Workflow
+# Plan workflow
 
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
 **Last Updated:** 2026-11-17 (Verification is the test plan for the acceptance checks; it does not repeat them)
 
-The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
+The standardised procedure for taking a plan from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
 
 A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
 
@@ -42,7 +42,7 @@ The spec is written in two passes. Pass A freezes Requirements while the node is
 
 #### 1a. Requirements — Status stays PLANNED
 
-Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_plans/NN-name.md`. The doc still carries every required heading. Only Requirements and Verification have content.
+Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level plan is `docs/_plans/NN-name.md`. The doc still carries every required heading. Only Requirements and Verification have content.
 
 - **Front-matter:** Node ID, Parent, Status: PLANNED, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
 - **Requirements** — the whole brief, under a page:

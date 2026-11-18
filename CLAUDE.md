@@ -5,14 +5,14 @@ This repo is the written process for running a project with an LLM. Work is spec
 ## Start here
 
 - **`docs/00-project.md`** — this project's root. Read it for purpose, how the docs are organized, and the standing decisions.
-- **`.ledger/process/leaf-workflow.md`** — how a leaf goes from PLANNED through COMPLETE. Read it before driving a node.
+- **`.ledger/process/plan-workflow.md`** — how a plan goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 
 ## Documentation discipline
 
 A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
 
-Every plan follows the sections and the lifecycle in `leaf-workflow.md`.
+Every plan follows the sections and the lifecycle in `plan-workflow.md`.
 
 - **Required sections:** Requirements, Design, Decisions, Open Issues, Implementation Notes, Verification, Children.
 - **Lifecycle:** DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE (or → ISSUE_OPEN → back).
@@ -23,7 +23,7 @@ Every plan follows the sections and the lifecycle in `leaf-workflow.md`.
 
 ## How work proceeds
 
-Follow `leaf-workflow.md`. Each lifecycle change is its own git commit, and it updates both the node doc and the parent's children manifest. An independent reviewer writes the sign-off matrix into the doc before status moves. The operator, not the reviewer, promotes VERIFY to COMPLETE.
+Follow `plan-workflow.md`. Each lifecycle change is its own git commit, and it updates both the node doc and the parent's children manifest. An independent reviewer writes the sign-off matrix into the doc before status moves. The operator, not the reviewer, promotes VERIFY to COMPLETE.
 
 The software that once automated this process — the React UI, the API server, the task runner, the agent dispatcher, the health scanner, and the workflow scripts — was removed on 2026-11-17. The node docs that specified that software were removed on 2026-11-18. The playbooks are the process.
 
@@ -45,7 +45,7 @@ Do not edit a child project unless the operator specifically asks. A change in t
 ## Hard constraints
 
 - **No implementation until a node reaches APPROVED.**
-- **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `leaf-workflow.md`, which branches from the local integration branch (`main`).
+- **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `plan-workflow.md`, which branches from the local integration branch (`main`).
 - Status changes update the node doc and the parent's children manifest in the same commit.
 - The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. Decisions that stay only in conversation are not durable; write them down.
 - Do not edit a registered child project unless the operator specifically asks for that change.

@@ -122,13 +122,13 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 ## Start here
 
 - **`docs/00-project.md`** — project root. Read first for purpose, standing decisions, and the list of plans.
-- **`.ledger/process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
+- **`.ledger/process/plan-workflow.md`** — standardised operator playbook for taking a plan from PLANNED through COMPLETE. Read before driving any node.
 
 **To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
 
 ## How work proceeds
 
-Follow `.ledger/process/leaf-workflow.md`. There is no ledger server and no ledger UI.
+Follow `.ledger/process/plan-workflow.md`. There is no ledger server and no ledger UI.
 
 ## Documentation discipline
 
@@ -159,7 +159,7 @@ A top-level leaf is `docs/_plans/NN-name.md`. A parent created with children is 
 ## Hard constraints
 
 - **No implementation until a node reaches APPROVED.**
-- **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — so during a session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out. Route all file-mutating work through the `leaf-workflow` playbook (it branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `main`.
+- **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — so during a session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out. Route all file-mutating work through the `plan-workflow` playbook (it branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `main`.
 - Every lifecycle transition is its own git commit.
 - Status must be updated in both the node doc AND the parent's children manifest row in the same commit.
 - The doc tree is the source of truth. If code and a doc disagree, either the doc wins or it must be updated to reflect a deliberate change — never silently.

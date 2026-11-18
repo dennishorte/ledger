@@ -1,6 +1,6 @@
 # Per-Requirement Sign-Off Format
 
-The structured output every independent review produces — spec review (leaf-workflow stage 2) and implementation review (stage 6). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
+The structured output every independent review produces — spec review (plan-workflow stage 2) and implementation review (stage 6). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
 
 The person who wrote an artifact cannot reliably check their own work, so the check runs in an independent context and is forced into a shape that a rubber stamp cannot satisfy. A fresh context supplies the independence. This format supplies the check.
 
@@ -104,7 +104,7 @@ The reviewer writes the matrix into the doc, applies a fully specified fix, and 
 
 ## Where it lands
 
-The matrix is durable provenance, exactly like the existing audit tables (`leaf-workflow.md` "Audit tables as durable provenance"):
+The matrix is durable provenance, exactly like the existing audit tables (`plan-workflow.md` "Audit tables as durable provenance"):
 
 - A **spec review** matrix lands in the spec's `Spec Review (YYYY-MM-DD)` section (between Open Issues and Implementation Notes).
 - An **implementation review** matrix lands in the `Implementation Review (YYYY-MM-DD)` subsection of Implementation Notes.
@@ -115,5 +115,5 @@ The matrix is durable provenance, exactly like the existing audit tables (`leaf-
 ## Notes
 
 - The matrix does **not** replace severity-grouped findings. Keep both. Lead with the matrix.
-- A check that needs a person is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's pass is the real sign-off for those rows (leaf-workflow stage 8).
-- This format is the per-requirement half of the self-audit mitigation. The independence half is a review that runs in a fresh context — leaf-workflow stages 2 and 6.
+- A check that needs a person is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's pass is the real sign-off for those rows (plan-workflow stage 8).
+- This format is the per-requirement half of the self-audit mitigation. The independence half is a review that runs in a fresh context — plan-workflow stages 2 and 6.

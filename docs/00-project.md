@@ -1,6 +1,6 @@
 # LLM Project Framework
  
-**Last verified:** `330dc8a4aa5267e50c27667dcda9b037d27dc46f` on `main`
+**Last verified:** `96747a5fb7b350aa9bf76823a0ae38e0b8ec593d` on `main`
 **Last updated:** 2026-11-18
 
 ## What this is for
@@ -19,7 +19,7 @@ The process is the playbooks in `.ledger/process/`. They are the source. This fi
 
 | Playbook | What it is for |
 |---|---|
-| `leaf-workflow.md` | Take one leaf from PLANNED through COMPLETE |
+| `plan-workflow.md` | Take one plan from PLANNED through COMPLETE |
 | `verification-signoff.md` | The review matrix and the only definition of `pass` |
 
 A child project gets these playbooks from `.claude/scripts/sync-process`.
