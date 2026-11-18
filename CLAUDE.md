@@ -10,7 +10,7 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Documentation discipline
 
-A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
+A node is one piece of work under `docs/_plans/`. The lasting description follows the shape of the project: each part has a living doc in that part's folder. A point-in-time writeup stays in `docs/_investigations/`.
 
 Every plan follows the sections and the lifecycle in `plan-workflow.md`.
 

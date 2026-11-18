@@ -132,7 +132,7 @@ Follow `.ledger/process/plan-workflow.md`. There is no ledger server and no ledg
 
 ## Documentation discipline
 
-A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
+A node is one piece of work under `docs/_plans/`. The lasting description follows the shape of the project: each part has a living doc in that part's folder. A point-in-time writeup stays in `docs/_investigations/`.
 
 Every node follows this schema (required sections in order):
 

@@ -1,6 +1,6 @@
 # LLM Project Framework
  
-**Last verified:** `96747a5fb7b350aa9bf76823a0ae38e0b8ec593d` on `main`
+**Last verified:** `b31111e3480801ceaf5f5f9e40214587e90b7471` on `main`
 **Last updated:** 2026-11-18
 
 ## What this is for
@@ -9,7 +9,9 @@ This process keeps a project on course when LLMs do the design and the implement
 
 ## Design
 
-The lasting description of a project is the markdown files at the top of `docs/`, written in the present tense. This file is the project root. A further lasting description is a new file here, named for what it describes. These files have no lifecycle status.
+The lasting description follows the shape of the project. This file is the root. Each part of the project has a living doc in that part's folder, written in the present tense. A part that sits inside another lives in a folder inside it. These files have no lifecycle status.
+
+A plan updates the living doc for the part it changed. A new living doc is added only when that part does not have one yet.
 
 A plan is one piece of work and lives in `docs/_plans/`. A point-in-time writeup stays in `docs/_investigations/`.
 
