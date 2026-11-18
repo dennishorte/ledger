@@ -24,13 +24,13 @@ The playbooks live in `.ledger/process/`. They are the process for every project
 
 ## Living docs
 
-The markdown files directly in `docs/` are the lasting description of the project, written in the present tense. `docs/00-project.md` is the project root: scope, decisions, and the children manifest in §14. `docs/README.md` is the index of the other present-tense notes. A further lasting description is a new file here, named for what it describes.
+The markdown files directly in `docs/` are the lasting description of the project, written in the present tense. `docs/00-project.md` is the project root: purpose, standing decisions, cross-cutting open issues, and the Plans list. `docs/README.md` is the index of the other present-tense notes. A further lasting description is a new file here, named for what it describes.
 
 A living doc has no lifecycle status and no children manifest. When reality changes, rewrite the doc. When a claim can go stale, stamp **Last verified** with `git rev-parse HEAD` immediately before the commit that changes the doc. The doc never names the commit it lives in.
 
 ## Work nodes
 
-A node is the working document for one piece of work. It has the sections in PRD §6.1 and a lifecycle. It lives in `docs/_plans/` from the time it is created until its lasting outcome has been written into a living doc.
+A node is the working document for one piece of work. It has the sections and the lifecycle in `leaf-workflow.md`. It lives in `docs/_plans/` from the time it is created until its lasting outcome has been written into a living doc.
 
 | Case | Where the file goes |
 |------|---------------------|
@@ -41,7 +41,7 @@ A node is the working document for one piece of work. It has the sections in PRD
 
 `NN` and `MM` are zero-padded two-digit numbers. They set display order only. Leave a gap when inserting a file; do not renumber the files that are already there.
 
-While a node exists, `docs/00-project.md` §14 lists it, and a parent node's own children manifest lists its children. A finished child stays in that manifest for as long as the parent node exists.
+While a node exists, the Plans list in `docs/00-project.md` includes it, and a parent node's own children manifest lists its children. A finished child stays in that manifest for as long as the parent node exists.
 
 ## When a node leaves
 

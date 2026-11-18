@@ -3,13 +3,13 @@
 **What this is:** present-tense notes about how the process works today.
 These notes are the markdown files at the top of `docs/`, next to
 `docs/00-project.md`.
-**What it is not:** a work node. Work nodes are temporary and live in
+**What it is not:** a plan. Plans are temporary and live in
 `docs/_plans/`. `docs/_investigations/` is a point-in-time writeup behind an
-Open Issue. [`13-reference-layer`](_plans/13-reference-layer.md).
+open issue. The project itself is [`docs/00-project.md`](00-project.md).
 
 These notes do not carry a lifecycle status.
 
-**Last verified:** `1292352ebc4f7834fcef7877e9e92152ab196a5d` on `main`.
+**Last verified:** `91c61497b42ebe71d46f8b1880ba6cfdb9dccdc9` on `main`.
 A doc never names the commit it lives in. Stamp `git rev-parse HEAD` from
 immediately before the commit that changes this file.
 

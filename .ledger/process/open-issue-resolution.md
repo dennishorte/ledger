@@ -3,7 +3,7 @@
 **Status:** LIVING
 **Last Updated:** 2026-11-17
 
-A structured procedure for working down the accumulation of unstruck open issues across the doc tree. Use this playbook when that backlog is large, when a focused resolution pass is warranted before a new phase, or when the PRD §11 roll-up has grown stale. This playbook does not replace the per-node ISSUE_OPEN loop (`leaf-workflow.md` stage 8b) or the maintenance-round mechanism (`maintenance-round.md`). It feeds those two paths.
+A structured procedure for working down the accumulation of unstruck open issues across the doc tree. Use this playbook when that backlog is large, when a focused resolution pass is warranted before a new phase, or when the Open issues section of `docs/00-project.md` has grown stale. This playbook does not replace the per-node ISSUE_OPEN loop (`leaf-workflow.md` stage 8b) or the maintenance-round mechanism (`maintenance-round.md`). It feeds those two paths.
 
 ---
 
@@ -115,7 +115,7 @@ For each group, choose exactly one:
 
 ### (a) New leaf node
 
-Use when: the group represents a gap or decision that requires new implementation — new types, new endpoints, new files, new cross-cutting behavior. The scope is bounded enough to be a leaf (run the §6.6 leaf tests from `decomposition.md §Step 0`). If it fails those tests, hand off to `decomposition.md` first.
+Use when: the group represents a gap or decision that requires new implementation — new types, new endpoints, new files, new cross-cutting behavior. The scope is bounded enough to be a leaf (run the leaf tests in `decomposition.md` Step 0). If it fails those tests, hand off to `decomposition.md` first.
 
 Trigger: hand to `leaf-workflow.md`.
 
@@ -206,7 +206,7 @@ When a group touches more than two unrelated nodes with no shared implementation
 
 After each group resolves:
 
-**5a. PRD §11 update.** If the issue (or a version of it) appears in the PRD's §11 roll-up, update that entry: strike it with a forward pointer, or demote it if partially resolved. PRD §11 is the project-level issue register; it must not carry items that are resolved at the node level.
+**5a. Root open-issues update.** If the issue appears in the Open issues section of `docs/00-project.md`, update that entry: strike it with a forward pointer, or demote it if partially resolved. That section is the project-level issue register. An issue resolved on its plan does not stay open there.
 
 **5b. Re-read the affected docs.** Run the same unstruck-priority search as stage 0. An issue that was resolved should be struck through. If it still appears unstruck, the strikethrough is wrong or the item was not the one you closed. Fix that before closing the group.
 
@@ -220,7 +220,7 @@ After each group resolves:
 
 Run this stage when five or more groups from the same pass have resolved.
 
-Add a dated `Open-Issue Resolution (YYYY-MM-DD)` subsection to Implementation Notes on the most relevant parent doc (or PRD §11 if the pass was cross-subtree). Record:
+Add a dated `Open-Issue Resolution (YYYY-MM-DD)` subsection to Implementation Notes on the most relevant parent doc (or the Open issues section of `docs/00-project.md` if the pass crossed plans). Record:
 
 - Total issues collected, groups formed, resolution-type breakdown.
 - Any systemic patterns (e.g., "7 of 12 groups were doc-only — Implementation Notes discipline needs attention", "3 functional-bug groups all traced to missing nil checks in the same module").
@@ -240,7 +240,7 @@ This is provenance, not ceremony. Skip it for small passes (≤5 groups) where t
 
 - **Cross-cutting groups are a design signal.** An issue that touches five unrelated nodes usually means a missing abstraction, not five independent bugs. Check whether the group warrants a new leaf that owns the shared surface rather than a patch on each affected node.
 
-- **Strike at the source, link from the summary.** The authoritative record of an issue's resolution is the strikethrough in the originating doc. PRD §11 and parent summaries carry forward pointers, not duplicates. Start from the originating doc when tracing a resolution.
+- **Strike at the source, link from the summary.** The authoritative record of an issue's resolution is the strikethrough in the originating doc. The project root and parent summaries carry forward pointers, not duplicates. Start from the originating doc when tracing a resolution.
 
 - **Health scanner is the oracle.** The `open_issue` monitor's definition (unstruck, MEDIUM+ priority, stable-state nodes) is the canonical definition of "open". If an issue is struck correctly and the scanner still fires, investigate the scanner. If an issue is not struck but you believe it is resolved, the belief is wrong until the doc is updated.
 

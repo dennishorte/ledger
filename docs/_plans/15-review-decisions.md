@@ -5,7 +5,7 @@
 **Status:** PLANNED
 **Created:** 2026-11-17
 **Last Updated:** 2026-11-17
-**Dependencies:** `14-review-process`
+**Dependencies:** `.ledger/process/verification-signoff.md`
 
 ---
 

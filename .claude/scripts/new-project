@@ -75,72 +75,33 @@ mkdir -p "$PROJECT_PATH/.ledger/process"
 write_file "$PROJECT_PATH/docs/00-project.md" \
 "# $PROJECT_NAME
 
-**Node ID:** 00-project
-**Parent:** (root)
-**Status:** DRAFT
-**Created:** $TODAY
-**Last Updated:** $TODAY
-**Dependencies:** (none)
+**Last updated:** $TODAY
 
----
+## What this is for
 
-## 1. Problem Statement
+*(the problem this project exists to solve)*
 
-*(describe the problem this project solves)*
+## What this project contains
 
----
-
-## 2. Goals
-
-- ...
-
----
-
-## 3. Scope
-
-**In scope:**
-- ...
-
-**Out of scope (v1):**
-- ...
-
----
-
-## Requirements
-
-- R1. ...
-
----
-
-## Design
-
-*(architecture, data contracts, component structure)*
-
----
+*(what the project is, and what is in scope)*
 
 ## Decisions
 
-| # | Decision | Rationale |
-|---|----------|-----------|
+| Decision | Why |
+|---|---|
 
----
+## Open issues
 
-## Open Issues
+An issue that belongs to one plan stays on that plan. This section is for a problem that crosses plans.
 
 *(none yet)*
 
----
+## Plans
 
-## Implementation Notes
+Work documents live in \`docs/_plans/\`. This list is the ones that exist.
 
-*(none yet — pre-implementation)*
-
----
-
-## §14 Children Manifest
-
-| ID | Title | Status | Dependencies |
-|----|-------|--------|--------------|"
+| ID | Title | Depends on | Status |
+|----|-------|------------|--------|"
 
 # ── .ledger/process/ (framework playbooks) ───────────────────────────────────
 for src in "$LEDGER_DIR/.ledger/process/"*.md; do
@@ -160,12 +121,12 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 
 ## Start here
 
-- **`docs/00-project.md`** — project root / PRD. Read first for vision, scope, and decisions. Its §14 holds the top-level children manifest.
+- **`docs/00-project.md`** — project root. Read first for purpose, standing decisions, and the list of plans.
 - **`.ledger/process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
 - **`.ledger/process/decomposition.md`** — how to decompose a parent node into children.
 - **`.ledger/process/docs-layout.md`** — where a file in `docs/` belongs.
 
-**To find current focus:** walk the children manifests starting at `docs/00-project.md` §14 and descend through Status fields. The most-recently-advanced leaf node tells you where work currently lives.
+**To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
 
 ## How work proceeds
 

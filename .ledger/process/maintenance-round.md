@@ -44,7 +44,7 @@ A round is **never re-cycled through ISSUE_OPEN** to address newly-discovered wo
 
 The `00-maintenance.md` parent of each round set carries `**Node Kind:** maintenance-container` in its header and holds `APPROVED` as its permanent steady state — not a pre-implementation stall, but its *operating state*. It never advances past `APPROVED` and never re-cycles (consistent with the "no round re-cycles" rule one level down).
 
-Per PRD §6.2, a `maintenance-container` child is **exempt from the parent-completion predicate**: the subtree parent may advance to `COMPLETE` regardless of the container's `APPROVED` state. The two are lifecycle-independent by design — the subtree completing does not close the maintenance capacity; new rounds may still be instigated on a COMPLETE subtree whenever the punch list grows round-sized again.
+A `maintenance-container` child is **exempt from the parent-completion predicate**: the subtree parent may advance to `COMPLETE` regardless of the container's `APPROVED` state. The two are lifecycle-independent by design — the subtree completing does not close the maintenance capacity; new rounds may still be instigated on a COMPLETE subtree whenever the punch list grows round-sized again.
 
 ---
 
@@ -80,7 +80,7 @@ No deltas. The round goes through implementation in an isolated worktree, rebase
 
 ### 10. Merge — extra cross-doc sync on affected siblings
 
-In addition to the standard cross-doc sync from leaf-workflow §10 (CLAUDE.md, PRD §14, sibling sample-tree pictures), the merge commit also edits each affected sibling's Open Issues section:
+In addition to the standard cross-doc sync from leaf-workflow §10 (`CLAUDE.md`, the Plans list in `docs/00-project.md`, sibling sample-tree pictures), the merge commit also edits each affected sibling's Open Issues section:
 
 - The originating bullet gets struck through with a forward pointer:
   `- ~~Original Open Issues bullet text...~~ → addressed by `99-maintenance/01-round-1` (2026-05-26).`

@@ -16,9 +16,9 @@ Read these before deciding. Cheapest-first; stop early only if a higher rung alr
 |---|---|---|
 | Node lifecycle table | `.claude/scripts/doc-status` | Every node's current status — the spine of the decision. Nodes are the files in `docs/_plans/` (`docs-layout.md`). |
 | Living docs | markdown files at the top of `docs/` | The lasting description. Read these for what is true now; do not treat them as work waiting to be done. |
-| PRD §14 manifest | `docs/00-project.md` §14 | Strategic build order + declared dependency edges. |
-| PRD §11 open issues | `docs/00-project.md` §11 | Roll-up of cross-cutting issues with priority tags; HIGH/strategic items live here. |
-| Per-node Open Issues | the node doc's Open Issues section | Unstruck HIGH/MEDIUM issues not yet escalated to §11. |
+| Plans list | `docs/00-project.md`, Plans | Which plans exist, and the dependencies they declare. |
+| Cross-cutting open issues | `docs/00-project.md`, Open issues | Problems that cross plans, with priority tags. |
+| Per-node Open Issues | the plan's Open Issues section | Unstruck HIGH/MEDIUM issues that stay on that plan. |
 | Decision-blocked specs | DRAFT docs whose body says the operator must choose before the work can continue | Specs that cannot advance without an operator decision. |
 
 ## 3. Algorithm
@@ -40,18 +40,18 @@ Look for a node at `IN_PROGRESS` or `ISSUE_OPEN`, and for a node doc that is mis
 ### R2 — Decision-blocked specs (unblock yourself)
 
 Find DRAFT nodes whose body explicitly awaits an operator decision (a path fork, a scope call) — grep DRAFT docs for "awaiting operator" / "choose before implementing" / a D0-style fork.
-- **≥1 present →** recommend **make that decision**. These are the cheapest high-leverage actions on the board: a single operator choice converts a stalled node into actionable work. If several, pick by (a) PRD priority tag of the issue it resolves, then (b) §14 manifest order. Output the recommended choice *and its rationale*, not just "go decide."
+- **≥1 present →** recommend **make that decision**. These are the cheapest high-leverage actions on the board: a single operator choice converts a stalled node into actionable work. If several, pick by (a) the priority tag of the issue it resolves, then (b) order in the Plans list. Output the recommended choice *and its rationale*, not just "go decide."
 - **0 →** descend to R3.
 
 ### R3 — HIGH-priority open issues (fix what the project itself flags as broken)
 
-Collect all unstruck **HIGH** items from PRD §11 and from per-node Open Issues (a strikethrough or "addressed by" pointer = resolved, skip it).
-- **≥1 actionable HIGH →** recommend the highest. "Actionable" means a node or change can be opened against it now. A HIGH that is explicitly *strategic / roadmap-framing* (e.g. §11 "no autonomous System 4") and has no scoped next node is **not** directly actionable — its actionable form is "draft the spec for its first concrete step," which is what you recommend.
+Collect all unstruck **HIGH** items from the Open issues section of `docs/00-project.md` and from per-plan Open Issues (a strikethrough or "addressed by" pointer = resolved, skip it).
+- **≥1 actionable HIGH →** recommend the highest. "Actionable" means a node or change can be opened against it now. A HIGH that is explicitly strategic and has no scoped next plan is not directly actionable. Its actionable form is "draft the spec for its first concrete step," which is what you recommend.
 - **0 actionable HIGH →** descend to R4.
 
 ### R4 — Advance the manifest (move the plan forward)
 
-Walk PRD §14 top-to-bottom for the first node not COMPLETE/DEFERRED, then verify its **dependency edges are all COMPLETE** (unblocked).
+Walk the Plans list top to bottom for the first plan that is not COMPLETE or DEFERRED, then verify its **dependency edges are all COMPLETE** (unblocked).
 - **An unblocked, non-COMPLETE manifest node exists →** recommend driving it via the lifecycle stage it's currently in:
   - PLANNED with `**Requirements confirmed:**` missing or `unconfirmed` → `leaf-workflow` stage 1a (write or finish requirements). Do not design.
   - PLANNED with `**Requirements confirmed:**` dated → stage 1c (design, in a fresh session). The decomposition checkpoint runs after that design exists.
@@ -59,7 +59,7 @@ Walk PRD §14 top-to-bottom for the first node not COMPLETE/DEFERRED, then verif
   - APPROVED → stage 4 (implement). *(Exclude `Node Kind: maintenance-container` docs — APPROVED is their permanent steady state, never a "next action.")*
   - SPEC_REVIEW / VERIFY → resume the corresponding stage. *(VERIFY usually caught at R1.)*
   - Status `—` / non-existent but listed → stage 1a (requirements only).
-- **Tie-break** between two equally-unblocked nodes: lower §14 row wins (it is earlier in declared build order); if same row depth, the one with more downstream dependents wins (unblocks more).
+- **Tie-break** between two equally-unblocked plans: the earlier row in the Plans list wins; if they are at the same depth, the one with more downstream dependents wins (unblocks more).
 - **All manifest nodes COMPLETE/DEFERRED →** descend to R5.
 
 ### R5 — Maintenance debt (pay down accumulated nits)
@@ -71,7 +71,7 @@ Read the unstruck **MEDIUM/LOW/TRIVIAL** Open Issues across COMPLETE siblings, a
 
 ### R6 — Strategic / no-pending-work
 
-If R0–R5 all empty, the executable plan is exhausted. Recommend the highest-priority **strategic** §11 item's first concrete step (typically the §11 HIGH that R3 classified as non-directly-actionable). This is the rung where "what should the project even build next" — true System-4 / re-planning work — surfaces. Output it as "draft a decision-enabling spec for X," not as implementation.
+If R0–R5 all empty, the executable plan is exhausted. Recommend the highest-priority strategic open issue's first concrete step, the one R3 classified as not directly actionable. Output it as "draft a decision-enabling spec for X," not as implementation.
 
 ## 4. Output
 

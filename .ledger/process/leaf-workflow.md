@@ -15,7 +15,7 @@ Reopening a node that has **already reached COMPLETE** — to finish deferred sc
 
 ## Lifecycle map
 
-Per PRD §6.2:
+The lifecycle:
 
 ```
 DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
@@ -30,7 +30,7 @@ COMPLETE ⤺ reopen (post-COMPLETE back-edge — see Reopen mode):
   Route N  extend, scope separable             → new sibling/child node (not a reopen)
 ```
 
-Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back. The COMPLETE back-edge (Routes F/V) is entered after a node has shipped; see **Reopen mode**. Routes F and V reuse existing lifecycle tokens — no new state is introduced — so PRD §6.2's forward diagram still holds for any single cycle; the version suffix (v1 vs v2) distinguishes cycles.
+Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back. The COMPLETE back-edge (Routes F/V) is entered after a node has shipped; see **Reopen mode**. Routes F and V reuse existing lifecycle tokens — no new state is introduced — so the forward diagram above still holds for any single cycle; the version suffix (v1 vs v2) distinguishes cycles.
 
 ---
 
@@ -44,7 +44,7 @@ The spec is written in two passes. Pass A freezes Requirements while the node is
 
 #### 1a. Requirements — Status stays PLANNED
 
-Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_plans/NN-name.md`. The doc still carries every §6.1 heading. Only Requirements and Verification have content.
+Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_plans/NN-name.md`. The doc still carries every required heading. Only Requirements and Verification have content.
 
 - **Front-matter:** Node ID, Parent, Status: PLANNED, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
 - **Requirements** — the whole brief, under a page:
@@ -129,7 +129,7 @@ exception instead.
 
 ### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
 
-Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. **Commit this transition as its own commit** before dispatching the reviewer — every lifecycle transition produces its own commit (see Patterns below). SPEC_REVIEW is a real lifecycle state per PRD §6.2: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
+Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. **Commit this transition as its own commit** before dispatching the reviewer — every lifecycle transition produces its own commit (see Patterns below). SPEC_REVIEW is a real lifecycle state: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
 
 Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) and brief it:
 
@@ -260,7 +260,7 @@ The `--no-commit` lets you inspect the merge tree and **apply cross-doc summary 
 While the merge is uncommitted, edit:
 
 - `CLAUDE.md` round-2 panels line (or equivalent project-state summary).
-- `docs/00-project.md` §14's parent-node status note.
+- The Plans list in `docs/00-project.md`, when this plan is listed there.
 - Sibling sample-tree pictures that show this node's status.
 
 These files weren't touched by the worktree (they're outside its concern) and the merge doesn't flag them as conflicts. Bundling them into the merge commit gives one atomic transition: main never sits in a half-updated state with a COMPLETE node and stale top-level summaries.
@@ -333,7 +333,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Requirements freeze before design.** Stage 1a commits Requirements at `PLANNED` and stops. The operator writes the confirmation date. Stage 1c is a fresh session that writes Design and does not edit Requirements. The session that wrote Requirements does not continue into design.
 
-- **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase, not only as a decomposition placeholder. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
+- **Lifecycle states are real, not decorative.** Every state in the lifecycle map is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase, not only as a decomposition placeholder. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
 
 - **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. The review audit is its own commit, and it does not change status. A `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. Stages whose only output is a transition (stages 2, 4a, 8b, and the approve commit after a `pass`) commit just the status bump. Stages that bundle a transition with substantive work (stages 1, 4c, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 

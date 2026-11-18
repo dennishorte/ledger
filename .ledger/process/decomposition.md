@@ -2,13 +2,13 @@
 
 The procedure for turning a single node into a **parent** — a coordination manifest plus child nodes — and for deciding when *not* to. The leaf-workflow (`leaf-workflow.md`) explicitly excludes this: it drives a leaf from PLANNED to COMPLETE; decomposition is what happens *before* a node is a leaf at all.
 
-The canonical **rules** (when a node is a leaf vs. when it must split) live in PRD §6.6. This playbook is the operator **procedure** that applies them.
+The leaf tests in Step 0 are the rule for when a node stays whole. The steps after that are the procedure for splitting it.
 
 ---
 
 ## Step 0 — Should this node decompose at all?
 
-Run the §6.6 leaf tests against the node. It is a **leaf — do not decompose** when *any* hold:
+Run the leaf tests against the node. It is a **leaf — do not decompose** when *any* hold:
 
 1. **Single responsibility** — you cannot name ≥2 children with non-overlapping data contracts.
 2. **Single-implementer rule** — one implementer can ship it in one worktree without dispatching sub-agents.
@@ -42,13 +42,13 @@ The original node keeps its document and becomes a coordinator:
 
 ## Step 3 — Create each child at PLANNED
 
-For each child, create `docs/_plans/<parent-path>/<id>.md` at Status `PLANNED` with the full §6.1 heading set. The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`.
+For each child, create `docs/_plans/<parent-path>/<id>.md` at Status `PLANNED` with the full heading set from `leaf-workflow.md`. The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`.
 
 A forward child is a requirements seed, not a design. Requirements holds the one-line responsibility from Step 1 as the Outcome, sets `**Requirements confirmed:** unconfirmed`, and leaves Acceptance, Constraints, and Out of scope as `_(operator)_`. Design, Decisions, Open Issues, Implementation Notes, and Verification say `*(not started)*`. Children is `None`. Do not write a design into a forward child. The leaf-workflow requirements phase (stage 1a) fills the rest.
 
 A retroactive split of already-shipped work is different: those children describe the implemented design and inherit the parent's shipped status. They are not entering the requirements phase.
 
-A child that is itself multi-responsibility re-runs this playbook from Step 0 — but the depth cap (§6.6 rule 4) means that should be rare.
+A child that is itself multi-responsibility re-runs this playbook from Step 0 — but the depth cap means that should be rare.
 
 **File placement rules:**
 
@@ -76,4 +76,4 @@ From here each child is an ordinary leaf — hand it to the leaf-workflow at sta
 
 - **Decomposition is not a lifecycle transition of the parent.** It changes the parent's *shape* (leaf → coordinator), not its status. The parent reaches COMPLETE when its children do and its own coordination concerns are satisfied — not before.
 - **This playbook splits a node that already lives in `docs/_plans/`.** Folder rules for living docs and investigations are in `docs-layout.md`.
-- The recursion bottoms out at the single-implementer rule (§6.6 rule 2). If you find yourself decomposing to a depth where each leaf is trivial, you have over-decomposed — collapse back up.
+- The recursion bottoms out at the single-implementer rule. If you find yourself decomposing to a depth where each leaf is trivial, you have over-decomposed — collapse back up.

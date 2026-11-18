@@ -4,7 +4,7 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Start here
 
-- **`docs/00-project.md`** — this project's root. Read it for scope. Its §14 holds the children manifest.
+- **`docs/00-project.md`** — this project's root. Read it for purpose, standing decisions, and the list of plans.
 - **`docs/README.md`** — present-tense notes. Living docs are the markdown files at the top of `docs/`.
 - **`.ledger/process/leaf-workflow.md`** — how a leaf goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
@@ -16,14 +16,14 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 Where a file in `docs/` belongs is `.ledger/process/docs-layout.md`. A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`.
 
-Every node follows the schema in PRD §6.1:
+Every plan follows the sections and the lifecycle in `leaf-workflow.md`.
 
 - **Required sections:** Requirements, Design, Decisions, Open Issues, Implementation Notes, Verification, Children.
-- **Lifecycle (§6.2):** DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE (or → ISSUE_OPEN → back).
+- **Lifecycle:** DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE (or → ISSUE_OPEN → back).
 - Parents hold a children manifest with declared dependencies.
-- No agent may begin implementation until a node reaches APPROVED (§10).
+- No agent may begin implementation until a plan reaches APPROVED.
 
-**To find current focus:** walk the children manifests starting at `docs/00-project.md` §14 and descend through Status fields. The most-recently-advanced leaf node tells you where work currently lives.
+**To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
 
 ## How work proceeds
 
