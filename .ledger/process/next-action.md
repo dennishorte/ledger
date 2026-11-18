@@ -1,7 +1,7 @@
 # Process: Determining What To Do Next
 
-**Status:** LIVING (revise when the orchestration substrate gains an autonomous next-action selector)
-**Last Updated:** 2026-11-04 (PLANNED splits into unconfirmed requirements vs confirmed, ready for design)
+**Status:** LIVING
+**Last Updated:** 2026-11-17 (the ladder reads the doc tree; the task runner and health scanner are gone)
 **Location:** `.ledger/process/next-action.md`
 
 ## 1. Purpose
@@ -15,8 +15,6 @@ Read these before deciding. Cheapest-first; stop early only if a higher rung alr
 | Source | Command / path | What it yields |
 |---|---|---|
 | Node lifecycle table | `.claude/scripts/doc-status` | Every node's current status — the spine of the decision. |
-| Runner task statuses | `GET /api/tasks` (`api-curl -j /api/tasks`) | `AWAITING_HUMAN_REVIEW` (gates), `RUNNING`/`FAILED` (in-flight, dispatch health). |
-| Latest health scan | `GET /api/health/scans` (`api-curl -j /api/health/scans`) | size / open_issue / schema-invalid findings. Trigger a fresh scan (`POST /api/health/scan`) if the top entry is stale. |
 | PRD §14 manifest | `docs/00-project.md` §14 | Strategic build order + declared dependency edges. |
 | PRD §11 open issues | `docs/00-project.md` §11 | Roll-up of cross-cutting issues with priority tags; HIGH/strategic items live here. |
 | Per-node Open Issues | the node doc's Open Issues section | Unstruck HIGH/MEDIUM issues not yet escalated to §11. |
@@ -24,19 +22,18 @@ Read these before deciding. Cheapest-first; stop early only if a higher rung alr
 
 ## 3. Algorithm
 
-Evaluate rungs **R0 → R6 in order**. The first rung that produces a candidate set wins; recommend from inside it and stop. Rungs are ordered by *reversibility-of-harm*: a stalled human gate or a broken dispatch loop blocks all downstream work, so it outranks any forward progress.
+Evaluate rungs **R0 → R6 in order**. The first rung that produces a candidate set wins; recommend from inside it and stop. Rungs are ordered by *reversibility-of-harm*: a node waiting on the operator, or a node whose current work is stuck, outranks any forward progress.
 
-### R0 — Operator-gating tasks (clear the human bottleneck)
+### R0 — Waiting on the operator
 
-Query `GET /api/tasks` for `AWAITING_HUMAN_REVIEW`.
-- **≥1 present →** the recommendation is **approve/reject that gate** (`POST /api/tasks/:id/approve|reject`), oldest first. A paused `human_review` task holds the runner and any follow-up work behind it. Nothing else is more urgent.
+Look for a node at `VERIFY`.
+- **≥1 present →** the recommendation is **do the operator pass** on the oldest one (`leaf-workflow` stage 8): accept it onward to COMPLETE, or reject it into stage 8b. Nothing else is more urgent.
 - **0 →** descend to R1.
 
-### R1 — Broken in-flight execution (stop the bleeding)
+### R1 — Stuck in-flight work
 
-Inspect `RUNNING` and recent `FAILED` tasks, and the latest health scan's `schema-invalid` findings.
-- **A node is `IN_PROGRESS`/`VERIFY` with a stalled or failed worktree, OR a `RUNNING` task is orphaned/hung, OR any `schema-invalid` finding exists →** recommend **repair that in-flight item**: resume, cancel-and-redispatch, or for `VERIFY` run the operator gate (`leaf-workflow` stage 8). A `schema-invalid` finding is always R1 — it can corrupt the DAG the rest of the process reads.
-  - *Distinguish live failure from historical noise:* a large `FAILED`/`CANCELLED` count from past dispatch experiments is **not** R1. Only a failure on a node you are *currently trying to land* counts. If unsure, check whether the failed task's node is in a pre-COMPLETE lifecycle state.
+Look for a node at `IN_PROGRESS` or `ISSUE_OPEN`, and for a node doc that is missing a required section.
+- **One of those is the work currently being landed →** recommend **repair that item**: finish the implementation, or resume from the stage the doc says it is in. A doc missing a required section is always R1.
 - **Else →** descend to R2.
 
 ### R2 — Decision-blocked specs (unblock yourself)
@@ -58,7 +55,7 @@ Walk PRD §14 top-to-bottom for the first node not COMPLETE/DEFERRED, then verif
   - PLANNED with `**Requirements confirmed:**` missing or `unconfirmed` → `leaf-workflow` stage 1a (write or finish requirements). Do not design.
   - PLANNED with `**Requirements confirmed:**` dated → stage 1c (design, in a fresh session). The decomposition checkpoint runs after that design exists.
   - DRAFT → `leaf-workflow` stage 2 (spec review). *(But if it's decision-blocked, R2 already caught it.)*
-  - APPROVED → stage 4 (dispatch implementer). *(Exclude `Node Kind: maintenance-container` docs — APPROVED is their permanent steady state, never a "next action.")*
+  - APPROVED → stage 4 (implement). *(Exclude `Node Kind: maintenance-container` docs — APPROVED is their permanent steady state, never a "next action.")*
   - SPEC_REVIEW / VERIFY → resume the corresponding stage. *(VERIFY usually caught at R1.)*
   - Status `—` / non-existent but listed → stage 1a (requirements only).
 - **Tie-break** between two equally-unblocked nodes: lower §14 row wins (it is earlier in declared build order); if same row depth, the one with more downstream dependents wins (unblocks more).
@@ -66,9 +63,9 @@ Walk PRD §14 top-to-bottom for the first node not COMPLETE/DEFERRED, then verif
 
 ### R5 — Maintenance debt (pay down accumulated nits)
 
-Read the latest health scan's `size` and `open_issue` findings and the unstruck **MEDIUM/LOW/TRIVIAL** Open Issues across COMPLETE siblings.
+Read the unstruck **MEDIUM/LOW/TRIVIAL** Open Issues across COMPLETE siblings, and notice a doc that has grown too large to work in (`doc-size-resolution.md`).
 - **A subtree has ≥2 batchable items from ≥2 siblings →** recommend **instigate a maintenance round** on that subtree (`maintenance-round.md`), naming the subtree. One round per subtree; pick the subtree with the largest round-sized backlog.
-- **A `size` finding on a doc over threshold →** recommend a `doc_refactor` on that doc (PRD §6.5) — but only if no R0–R4 item fired; size findings are the lowest-urgency rung because they impair readability, not correctness.
+- **A doc is too large to work in →** recommend resolving that doc (`doc-size-resolution.md`) — but only if no R0–R4 item fired. Size impairs readability, not correctness.
 - **No round-sized backlog →** descend to R6.
 
 ### R6 — Strategic / no-pending-work
@@ -81,7 +78,7 @@ A single recommendation object:
 
 ```
 RECOMMENDATION
-  Action:     <verb-first imperative — e.g. "Approve human_review task d8faa4ac">
+  Action:     <verb-first imperative — e.g. "Do the operator pass on 15-review-decisions">
   Target:     <node id / task id / subtree>
   Rung:       <R0–R6, the rung that fired>
   Next step:  <which playbook + stage to run, e.g. leaf-workflow stage 4>
@@ -93,6 +90,8 @@ RECOMMENDATION
 If a rung produced exactly one candidate, `Contenders` is omitted — that is the deterministic case. If a rung produced several and the tie-break was a genuine judgment call (equal priority, equal manifest depth, no dependent-count difference), say so explicitly and present the top two for the operator to choose. Surfacing the ambiguity *is* the correct output; do not fabricate a tiebreaker.
 
 ## 5. Worked example (project state, 2026-06-16)
+
+This example was written when a task runner and a health scanner existed. The rungs above are the current procedure. The walk below is history, kept so the shape of a recommendation is visible.
 
 **Inputs gathered:**
 - `doc-status`: all §14 nodes COMPLETE except `09-transcript-decouple` (**DRAFT**). Stray in-flight: `11-workflow-scripts/99-maintenance/01-portability` (**VERIFY**). Four `99-maintenance/00-maintenance` containers sit APPROVED (steady state).

@@ -313,6 +313,8 @@ Nothing was punted. B1 and S2 required operator judgment; both calls are recorde
 
 ## Implementation Notes
 
+The loader code was removed on 2026-11-17 with `packages/parser/`. `.ledger/project.json` remains the project's identity file.
+
 ### Dependencies added
 
 None. `ajv@8.20.0` and `ajv-formats@3.0.1` were already installed by `02-schema`. No new entries in `app/package.json`.

@@ -2,9 +2,9 @@
 
 **Node ID:** `09-transcript-decouple`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** DRAFT
+**Status:** DEPRECATED (2026-11-17 — the orchestration layer this spec would have changed was removed before this node was built.)
 **Created:** 2026-06-07
-**Last Updated:** 2026-06-07
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `06-agent-dispatcher`, `01-ui/10-orchestration`
 

@@ -1,6 +1,6 @@
 # Per-Requirement Sign-Off Format
 
-The structured output every independent review produces — spec review (leaf-workflow stage 2), implementation review (stage 6), and their dispatched equivalents (`spec_review` / `verify` / `reverify` task personas). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
+The structured output every independent review produces — spec review (leaf-workflow stage 2) and implementation review (stage 6). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
 
 This is the framework's standing mitigation for the **self-audit problem** (PRD §11): the agent that wrote an artifact cannot reliably check its own work, so the check runs in an independent context *and* is forced into a shape that rubber-stamping cannot satisfy. Independence (clean context) supplies the *who*; this format supplies the *rigor*.
 
@@ -94,11 +94,11 @@ Spec review and implementation review do the same three steps.
 
 On `followups`, the operator may write `waived` on a partial and file an Open Issue. Disposition is computed again from the table above. The node advances only when that disposition is `pass`.
 
-On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again on the next entry. Spec review dispatches stage 2 again. Implementation review uses the `reverify` persona. It returns the same result shape and runs the same build, lint, typecheck, and tests. Its rows are the ones named in step 2.
+On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again. Spec review repeats stage 2. Implementation review repeats stage 6 on the rows named in step 2, and runs the same checks as the review it follows.
 
 A heading is not a pass. On a later entry, `pass` advances without a new dispatch. `changes-required` dispatches that review again. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
 
-The dispatched reviewer records the matrix, applies a fully specified fix, and recomputes. It does not change lifecycle status. A passing disposition ends with `runner.complete_task`. The other two end with `runner.await_human_review` and the open rows. It does not call `runner.complete_task` for a non-pass, and it does not call `runner.fail_task` for a review that reached a judgment. After it applies a fix, it recomputes from this table and then branches on that disposition.
+The reviewer writes the matrix into the doc, applies a fully specified fix, and recomputes. The reviewer does not change lifecycle status. After a fix, the reviewer recomputes from this table and follows the disposition.
 
 ---
 
@@ -108,12 +108,12 @@ The matrix is durable provenance, exactly like the existing audit tables (`leaf-
 
 - A **spec review** matrix lands in the spec's `Spec Review (YYYY-MM-DD)` section (between Open Issues and Implementation Notes).
 - An **implementation review** matrix lands in the `Implementation Review (YYYY-MM-DD)` subsection of Implementation Notes.
-- A **dispatched** reviewer (`spec_review` / `verify` / `reverify`) emits the matrix as its review body. A passing disposition references it in `runner.complete_task`. The other two reference it in `runner.await_human_review`. Findings by severity remain a secondary grouping. The matrix is primary. A review record written before this result existed keeps the word it was written with.
+- Findings by severity remain a secondary grouping. The matrix is primary. A review record written before this result existed keeps the word it was written with.
 
 ---
 
 ## Notes
 
 - The matrix does **not** replace severity-grouped findings. Keep both. Lead with the matrix.
-- A check that needs a person in the browser is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's browser pass is the real sign-off for those rows (leaf-workflow stage 8).
-- This format is the per-requirement half of the self-audit mitigation. The independence half (review runs in a fresh context / separate dispatched persona) is already in place — leaf-workflow stages 2 and 6 and the `spec_review` / `verify` / `reverify` task personas.
+- A check that needs a person is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's pass is the real sign-off for those rows (leaf-workflow stage 8).
+- This format is the per-requirement half of the self-audit mitigation. The independence half is a review that runs in a fresh context — leaf-workflow stages 2 and 6.

@@ -2,9 +2,9 @@
 
 **Node ID:** `07-health-daemon`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v2.1, 2026-06-07)
+**Status:** DEPRECATED (2026-11-17 — the health scanner was removed with the server.)
 **Created:** 2026-06-01
-**Last Updated:** 2026-06-07 (DRAFT → COMPLETE reconciliation: v2 code had shipped to main 2026-06-06 while the header still read DRAFT; this transition records the missing independent implementation review + live verification and lands the review-driven fixes. Same day, v2.1 replaced the noisy `orphan` monitor with a priority-aware `open_issue` monitor — see D12 + the v2.1 amendment.)
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `06-agent-dispatcher`
 

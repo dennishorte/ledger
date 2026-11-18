@@ -5,6 +5,8 @@
 
 This file is the durable output of the triage stages (0–3) of `open-issue-resolution.md`. Update it after each pass: mark resolved groups, promote parked groups when their park rationale expires, add new groups discovered mid-pass. Do not delete resolved rows — strike them with a resolution pointer.
 
+**2026-11-17.** The UI, API, task runner, dispatcher, and health scanner were removed. Every row below is about that software. None of it is current work. The rows stay as the record of what was queued.
+
 ---
 
 ## Active queue (tackle in order)

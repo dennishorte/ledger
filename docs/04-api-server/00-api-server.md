@@ -2,9 +2,9 @@
 
 **Node ID:** `04-api-server`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v1, 2026-05-26 — all five children COMPLETE; substrate ready for `05-task-runner`)
+**Status:** DEPRECATED (2026-11-17 — `server/` removed. The written process does not run an API.)
 **Created:** 2026-05-25
-**Last Updated:** 2026-05-26 (decomposed into 5 children after first implementer dispatch wall-clocked out)
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `02-schema`, `03-project-metadata`
 

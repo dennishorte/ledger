@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create a new ledger-managed project.
-# Usage: new-project <project-path> [--name NAME] --api-port N
+# Usage: new-project <project-path> [--name NAME]
 #
 # Idempotent: existing files/dirs are left untouched (skipped with a notice).
 set -euo pipefail
@@ -8,20 +8,18 @@ set -euo pipefail
 LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 usage() {
-  echo "usage: new-project <project-path> [--name NAME] --api-port N" >&2
+  echo "usage: new-project <project-path> [--name NAME]" >&2
   exit 2
 }
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 PROJECT_PATH=""
 PROJECT_NAME=""
-API_PORT=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --name)     PROJECT_NAME="$2"; shift 2 ;;
-    --app-port) echo "new-project: --app-port is ignored; the ledger UI has been removed" >&2; shift 2 ;;
-    --api-port) API_PORT="$2";     shift 2 ;;
+    --app-port|--api-port) echo "new-project: $1 is ignored; ledger does not run a server" >&2; shift 2 ;;
     -h|--help)  usage ;;
     -*)         echo "new-project: unknown option: $1" >&2; usage ;;
     *)
@@ -43,16 +41,6 @@ if [[ "$PROJECT_PATH" != /* ]]; then
 fi
 
 [[ -z "$PROJECT_NAME" ]] && PROJECT_NAME="$(basename "$PROJECT_PATH")"
-
-if [[ -z "$API_PORT" ]]; then
-  echo "new-project: --api-port is required" >&2
-  echo "(example: new-project ~/code/myproject --api-port 4182)" >&2
-  exit 2
-fi
-
-if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || [[ "$API_PORT" -lt 1 || "$API_PORT" -gt 65535 ]]; then
-  echo "new-project: invalid port: $API_PORT" >&2; exit 2
-fi
 
 TODAY="$(date +%Y-%m-%d)"
 
@@ -190,13 +178,9 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 
 **To find current focus:** walk the children manifests starting at `docs/00-project.md` §14 and descend through Status fields. The most-recently-advanced leaf node tells you where work currently lives.
 
-## Running the project
+## How work proceeds
 
-```bash
-./dev.sh        # starts the ledger API at http://localhost:{{API_PORT}}
-```
-
-The API serves the document graph, the task runner, and dispatch. There is no ledger UI.
+Follow `.ledger/process/leaf-workflow.md`. There is no ledger server and no ledger UI.
 
 ## Documentation discipline
 
@@ -239,54 +223,20 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## Process notes
 
-- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are never parsed as project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_schemas/`, `docs/_reference/`) are also framework-internal and skipped by the parser.
+- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are not project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_schemas/`, `docs/_reference/`) are framework-internal too. They are not nodes.
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
 - **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
 - Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.
 CLAUDE_MD_EOF
   sed -i '' \
     -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
-    -e "s/{{API_PORT}}/$API_PORT/g" \
     "$PROJECT_PATH/CLAUDE.md"
   echo "  write $PROJECT_PATH/CLAUDE.md"
 fi
 
 # ── .gitignore ───────────────────────────────────────────────────────────────
 write_file "$PROJECT_PATH/.gitignore" \
-'.DS_Store
-.ledger/runner.db
-.ledger/runner.db-wal
-.ledger/runner.db-shm'
-
-# ── dev.sh ────────────────────────────────────────────────────────────────────
-DEV_SH_CONTENT="#!/usr/bin/env bash
-# Start ledger for: $PROJECT_NAME
-#   API: http://localhost:$API_PORT
-set -euo pipefail
-
-LEDGER_DIR=\"$LEDGER_DIR\"
-PROJECT_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
-
-API_PORT=$API_PORT
-
-echo \"Starting ledger for: \$(basename \"\$PROJECT_DIR\")\"
-echo \"  API: http://localhost:\$API_PORT\"
-echo \"\"
-
-LEDGER_PORT=\$API_PORT pnpm -C \"\$LEDGER_DIR/server\" dev \"\$PROJECT_DIR\" &
-SERVER_PID=\$!
-
-cleanup() { kill \"\$SERVER_PID\" 2>/dev/null || true; }
-trap cleanup INT TERM
-wait \"\$SERVER_PID\""
-
-if [[ -e "$PROJECT_PATH/dev.sh" ]]; then
-  echo "  skip  $PROJECT_PATH/dev.sh  (already exists)"
-else
-  printf '%s\n' "$DEV_SH_CONTENT" > "$PROJECT_PATH/dev.sh"
-  chmod +x "$PROJECT_PATH/dev.sh"
-  echo "  write $PROJECT_PATH/dev.sh"
-fi
+'.DS_Store'
 
 # ── register in child-projects ───────────────────────────────────────────────
 REGISTRY="$LEDGER_DIR/.ledger/child-projects"
@@ -299,5 +249,4 @@ fi
 
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
-echo "Done. To start:"
-echo "  $PROJECT_PATH/dev.sh"
+echo "Done. Playbooks are in $PROJECT_PATH/.ledger/process/"

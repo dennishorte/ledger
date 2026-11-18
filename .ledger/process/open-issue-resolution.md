@@ -1,26 +1,15 @@
 # Open-Issue Resolution Playbook
 
-**Status:** LIVING (revise when the health daemon gains triage-automation or the issue taxonomy stabilises)
-**Last Updated:** 2026-06-12
+**Status:** LIVING
+**Last Updated:** 2026-11-17
 
-A structured procedure for working down the accumulation of unstruck open issues across the doc tree. Use this playbook when the health scanner surfaces a non-trivial backlog, when a focused resolution sprint is warranted before a new build phase, or when the PRD §11 roll-up has grown stale. This playbook does not replace the per-node ISSUE_OPEN loop (`leaf-workflow.md §8b`) or the maintenance-round mechanism (`maintenance-round.md`) — it orchestrates them. Think of it as the triage layer that feeds those two execution paths.
+A structured procedure for working down the accumulation of unstruck open issues across the doc tree. Use this playbook when that backlog is large, when a focused resolution pass is warranted before a new phase, or when the PRD §11 roll-up has grown stale. This playbook does not replace the per-node ISSUE_OPEN loop (`leaf-workflow.md` stage 8b) or the maintenance-round mechanism (`maintenance-round.md`). It feeds those two paths.
 
 ---
 
 ## Stage 0 — Collect
 
-### 0a. Pull the machine-readable list
-
-Trigger a fresh scan and dump all `open_issue` findings:
-
-```bash
-.claude/scripts/api-curl -X POST /api/health/scan
-.claude/scripts/api-curl -j /api/health/scans
-```
-
-The response is a newest-first list of scan snapshots; take the first entry's `findings` array and filter to `monitor === "open_issue"`. Each finding carries `nodeId` and `detail` (count + priority breakdown + top-issue snippet). This gives you the set of affected nodes.
-
-### 0b. Enumerate raw issue bullets
+### 0a. Enumerate raw issue bullets
 
 For each affected node, pull the full Open Issues section text. The fastest path:
 
@@ -219,14 +208,7 @@ After each group resolves:
 
 **5a. PRD §11 update.** If the issue (or a version of it) appears in the PRD's §11 roll-up, update that entry: strike it with a forward pointer, or demote it if partially resolved. PRD §11 is the project-level issue register; it must not carry items that are resolved at the node level.
 
-**5b. Targeted health scan.** Trigger a new scan and confirm the `open_issue` monitor no longer fires for the affected nodes:
-
-```bash
-.claude/scripts/api-curl -X POST /api/health/scan
-.claude/scripts/api-curl -j /api/health/scans
-```
-
-If the monitor still fires after a (c) or (d) resolution, the scanner parsed the strikethrough incorrectly or the item was not properly struck — investigate before closing.
+**5b. Re-read the affected docs.** Run the same unstruck-priority search as stage 0. An issue that was resolved should be struck through. If it still appears unstruck, the strikethrough is wrong or the item was not the one you closed. Fix that before closing the group.
 
 **5c. Verify the transition.** For (a) and (b) resolutions, confirm the relevant node has advanced to COMPLETE (or VERIFY, pending operator gate). A node that was ISSUE_OPEN before the resolution pass should not remain ISSUE_OPEN after.
 

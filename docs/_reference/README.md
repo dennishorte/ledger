@@ -1,47 +1,31 @@
-# docs/_reference — current-state reference docs
+# docs/_reference — current-state notes
 
-**What this is:** a curated layer describing the system as it exists today —
-module maps, data contracts, invariants, entry points. Tables and claims, not
-narrative.
-
+**What this is:** present-tense notes about how the process works today.
 **What it is not:** history. The node docs (`docs/NN-*`) are the append-only
-audit trail — decisions, review findings, abandoned directions. Do not
-retroactively clean them, and do not copy them here. `docs/_investigations/`
-is point-in-time analysis backing an Open Issue. This folder is present tense
-only, rewritten when reality changes. [`13-reference-layer`](../13-reference-layer.md).
+audit trail. `docs/_investigations/` is a point-in-time writeup behind an
+Open Issue. [`13-reference-layer`](../13-reference-layer.md).
 
-These files are framework-internal. Any `docs/` path with an `_`-prefixed
-directory segment is skipped by the parser (`packages/parser/src/schema/parseDocNode.ts`,
-`packages/parser/src/docs/buildDocGraph.ts`),
-so nothing here appears in the document graph or carries a lifecycle status.
+Underscore-prefixed folders under `docs/` are framework-internal. They are
+not nodes and they do not carry a lifecycle status.
 
-## Index
+**Last verified:** `5814ceb54fd3e54dac1f3288de62533b30e4e19d` on `main`.
+A doc never names the commit it lives in. Stamp `git rev-parse HEAD` from
+immediately before the commit that changes this file.
 
-| Doc | Subsystem | Owns |
-|---|---|---|
-| [`parser.md`](parser.md) | `@ledger/parser` | Doc schema, doc graph, shared domain types |
-| [`api-server.md`](api-server.md) | `@ledger/server` HTTP + CLI | Routes, boot, `ProjectContext` |
-| [`task-runner.md`](task-runner.md) | SQLite runner | Tasks, events, scheduler, human review |
-| [`dispatcher.md`](dispatcher.md) | Agent dispatch | MCP tools, `claude` subprocess, prompts |
-| [`health-scanner.md`](health-scanner.md) | On-demand scanner | Size, open-issue, schema-invalid findings |
-| [`workflow.md`](workflow.md) | Operator playbooks + scripts | Leaf workflow stages, `project.json` `workflow` block |
+## The process
 
-## Rules
+The process is the playbooks in `.ledger/process/`. They are the source.
+This folder does not restate them.
 
-1. One doc per subsystem, structured: module map / entry points / data
-   contracts / state surfaces / invariants / active migration.
-2. Every non-obvious claim cites its owning node id or a source file, so a
-   promoting node can grep this directory for the paths or the id it touched.
-3. Prefer generated tables over hand-written lists. Each doc records the
-   command that regenerates its tables. Line counts are `wc -l` at the
-   **Last verified** commit and will drift; regenerate rather than editing
-   them by hand.
-4. Each doc carries a **Last verified** commit: `git rev-parse HEAD` run
-   immediately before the update is committed. A doc never names the commit
-   it lives in. Updates do not ride merge commits; if one must, stamp
-   `git rev-parse MERGE_HEAD`.
-5. Creating a doc is opt-in and needs no approval. Leaf-workflow stage 9
-   checks whether a promoting node's diff touched anything a doc here cites,
-   and folds a stale-section fix into the promotion commit. A maintenance
-   round treats a doc whose cited files changed after its stamp as punch-list
-   material (`git log <stamp>..HEAD -- <cited paths>`).
+| Playbook | What it is for |
+|---|---|
+| `leaf-workflow.md` | Take one leaf from PLANNED through COMPLETE |
+| `verification-signoff.md` | The review matrix and the only definition of `pass` |
+| `next-action.md` | Choose the single next action |
+| `decomposition.md` | Split a node that is too big to be one leaf |
+| `maintenance-round.md` | Batch small fixes on an already-complete subtree |
+| `doc-size-resolution.md` | What to do when a doc has grown too large to work in |
+| `open-issue-queue.md` | The standing list of deferred issues |
+| `open-issue-resolution.md` | Work down a backlog of open issues |
+
+A child project receives these files from `.claude/scripts/sync-process`. It does not run a server from this repo.

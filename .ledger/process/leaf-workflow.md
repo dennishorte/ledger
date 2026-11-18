@@ -159,25 +159,11 @@ Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
 - Required context: spec docs of any dependencies, parent doc, CLAUDE.md, the actual source files it will touch.
 - Process steps — **two commits**, one per status transition:
   - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
-  - **4b. Implementation.** Implement → run `pnpm typecheck` / `lint` / `build` → add or update E2E tests (see below) → fill Implementation Notes (deps + decisions + bundle delta + any deviations).
+  - **4b. Implementation.** Implement what the spec says. Run the checks the project already uses for that kind of change. Fill Implementation Notes (decisions, deviations, and which checks were run).
     - **Compute-heavy exception.** If the compute-heavy gating checkpoint fired at stage 1, 4b stops once the probe/harness is wired and runnable — the implementer commits the harness, not a completed run, and notes in Implementation Notes that the probe result is pending operator execution. The operator then runs the real probe from the main session (background job, re-invoked on completion) and records the verdict in Implementation Notes before 4c. Do not claim VERIFY on a probe result the implementer's own turn could not have witnessed completing — that includes a background job it kicked off and then reported "done" without waiting for.
-  - **4b½. Post-implementation gate (optional, project-configured).** If the project's
-    `.ledger/project.json` sets `workflow.postImplementationGate`, run its `command` inside
-    the implementation worktree and create a `human_review` task pointing at the resulting
-    artifact. **4c does not land until this gate is approved** — same deferral pattern as the
-    compute-heavy exception above. Projects with no `postImplementationGate` configured skip
-    straight to 4c; it exists because some project domains produce an artifact (a rendered
-    map, a generated report) that benefits from a direct look before rebase/review proceed —
-    a diff review alone doesn't substitute for eyeballing the actual output.
-    - **On reject:** the task's rejection rationale briefs a patch agent working in the same
-      worktree (no new branch). It commits a fix, the gate command re-runs, and a new
-      `human_review` task is created for the next round. The node stays `IN_PROGRESS`
-      throughout — no `ISSUE_OPEN` detour, since `VERIFY` was never claimed to begin with.
-    - **On approve:** 4c proceeds as originally specified.
+  - **4b½. Look at the artifact, when the work produces one.** Some nodes produce a thing a diff does not show (a rendered map, a generated report). The operator looks at it before the exit commit. The node stays `IN_PROGRESS`. A rejection is a note that briefs a fix in the same worktree; the operator looks again. Acceptance is what lets 4c proceed. A node with nothing to look at skips this.
   - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event. For a compute-heavy node, this commit does not land until the operator's probe verdict (above) is recorded.
-- Reporting: files changed, `workflow.gates` exit codes, and — when `workflow.e2eGate` is set — that command's exit code. Also list acceptance-check items the agent could not verify in its headless environment.
-
-**E2E.** Run `workflow.e2eGate` inside the worktree when the project sets one. This repo does not. A red configured gate blocks the exit commit.
+- Reporting: files changed, which checks were run and what they returned, and acceptance-check items the agent could not verify itself.
 
 Why worktree isolation:
 
@@ -203,7 +189,7 @@ This stage also tests the **multi-worktree shared-file gap** (see Known Limitati
 
 Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the (now-rebased) worktree branch. Because the diff is clean post-rebase, the reviewer can use `git diff main..HEAD` directly without artifact confusion.
 
-Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. The reviewer runs `workflow.gates` and cites the exit codes. A check that needs a person is `N/A — operator gate`. The operator's stage-8 pass is their real sign-off.
+Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. The reviewer runs the checks the change calls for and cites what they returned. A check that needs a person is `N/A — operator gate`. The operator's stage-8 pass is their real sign-off.
 
 **No shortcut.** Unlike the spec review (stage 2), the implementation review is mandatory for every node. The headless reviewer catches type errors, spec-conformance gaps, and discipline violations (no `any`, no dead code).
 
@@ -214,7 +200,7 @@ Evaluation criteria expand to include:
 - **Build/lint/typecheck** — run them; report exit codes and bundle numbers.
 - **Code discipline** — no `any`, no suppressions (especially `eslint-disable-next-line ...`), no `console.log`, no dead code.
 - **Bundle delta sanity** — compare to the named baseline from stage 4.
-- **E2E coverage** — when `workflow.e2eGate` is set, it passes. This repo has no e2e gate; the row is `N/A`.
+- **Checks** — the checks named in the spec's Verification section were run, and the review cites what they returned. A check this project does not have is `N/A`.
 - **Regression checks** for any shared infrastructure the node touched (e.g., DAG panel if shared types or parser logic changed).
 - **Anything the implementer's report glossed over.**
 
@@ -224,19 +210,11 @@ Same pattern as stage 3. The result and the three steps are in `.ledger/process/
 
 If the implementation diverged from the spec in a way the operator approves, update the spec in the same commit. "Doc and code must agree" (CLAUDE.md) is honoured by updating whichever side drifted; silent divergence is not. An edit to Requirements in that commit records a `**Requirements amended:**` line (date and what changed). If the edit adds an outcome the confirmation did not contain, stop after the commit and re-enter at stage 2. Do not promote.
 
-### 8. Operator manual verification
+### 8. Operator verification
 
-Run `workflow.gates`. When `workflow.e2eGate` is set, run that too. A failing gate is a blocking bug; enter stage 8b.
+Read the acceptance checks, including every row marked `N/A — operator gate`. Run any check the reviewer could not run. A failure is a blocking bug; enter stage 8b.
 
-This repo's gates are parser build, then server typecheck, lint, and test. There is no UI to open. Checks marked `N/A — operator gate` are approved or rejected on the `human_review` task:
-
-```bash
-curl -X POST http://127.0.0.1:4180/api/tasks/<id>/approve \
-  -H 'content-type: application/json' \
-  -d '{"dbRowVersion":<n>}'
-```
-
-Reject with `POST /api/tasks/<id>/reject` and a `rationale`. Read `dbRowVersion` from `GET /api/tasks/<id>`. Use the project's `workflow.apiPort` when it is not 4180.
+The operator writes the outcome into the doc. Accepting it is what allows promotion to COMPLETE. Rejecting it names what is wrong and enters stage 8b. There is no task runner and no separate approval request.
 
 #### 8b. If verification finds bugs — VERIFY → ISSUE_OPEN, loop back
 
@@ -284,7 +262,7 @@ While the merge is uncommitted, edit:
 
 These files weren't touched by the worktree (they're outside its concern) and the merge doesn't flag them as conflicts. Bundling them into the merge commit gives one atomic transition: main never sits in a half-updated state with a COMPLETE node and stale top-level summaries.
 
-Run `pnpm typecheck` / `lint` / `build` on the merged + synced tree. If they pass:
+Run the project's checks on the merged tree. If they pass:
 
 ```bash
 git -C /path/to/main commit -m "Merge <branch>: <node-id> → COMPLETE + doc sync"
@@ -298,7 +276,6 @@ The merge bubble in the log now contains both the merge and the doc sync.
 
 Once merged:
 
-- Kill a dev server only when its cwd is the worktree. Check `workflow.apiPort` (this repo: 4180): `lsof -iTCP:4180 -sTCP:LISTEN -P -n`. Leave a server that is serving another checkout.
 - `git worktree remove -f -f <path>` (the second `-f` is needed because Claude-Code worktrees are locked while in use).
 - `git branch -d <worktree-branch>` (lowercase `-d` refuses to delete if not fully merged — a safety net).
 
@@ -351,7 +328,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 ## Patterns to lean on
 
-- **Requirements freeze before design.** Stage 1a commits Requirements at `PLANNED` and stops. The operator writes the confirmation date. Stage 1c is a fresh session that writes Design and does not edit Requirements. The workflow script returns after 1a; it does not continue into design in that run.
+- **Requirements freeze before design.** Stage 1a commits Requirements at `PLANNED` and stops. The operator writes the confirmation date. Stage 1c is a fresh session that writes Design and does not edit Requirements. The session that wrote Requirements does not continue into design.
 
 - **Lifecycle states are real, not decorative.** Every state in PRD §6.2 is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase, not only as a decomposition placeholder. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
 
@@ -369,7 +346,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Promotion bundles doc-and-code.** Status header, parent manifest row, sample-tree pictures, top-level summaries — all change together in one commit. Stage 3 (DRAFT→APPROVED) and stage 10 (merge + cross-doc sync) both bundle the ripple-effect edits with the primary state change. Drift in any of them is a smell.
 
-- **Operator sign-off is the COMPLETE gate.** Not the reviewer agent. Not the typecheck. The human approves the `human_review` task. Stage 8b is the explicit answer for "what if the human says no."
+- **Operator sign-off is the COMPLETE gate.** The reviewer does not promote the node. The operator does, after stage 8. Stage 8b is the explicit answer for "what if the human says no."
 
 - **Finish ≠ extend on a reopen.** A COMPLETE node that needs more work is two operations wearing one phrase. Closing deferred-but-specced requirements (Route F) needs no spec gate; adding never-specced scope needs one — either a sibling node (Route N, preferred) or a re-spec'd version bump (Route V). Never let new requirements ride to COMPLETE under the prior cycle's verification. See **Reopen mode**.
 
@@ -377,7 +354,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 ## Known limitations
 
-- **Parallel-worktree shared-file conflicts.** When two worktrees touch the same file (shared parser types are the obvious surface), there is no automated coordination. Stage 5's rebase surfaces the conflict, but resolving it is manual operator work and the second-to-merge worktree may need to rebase against changes it didn't anticipate. Today's mitigation: when dispatching parallel implementers, pick nodes whose data contracts don't overlap. The eventual fix is PRD §6.3's resource-claim model — the task DAG refuses to schedule conflicting writes. Tracked as an open issue in PRD §11.
+- **Parallel-worktree shared-file conflicts.** When two worktrees touch the same file, nothing coordinates them. Stage 5's rebase surfaces the conflict. Resolving it is manual. When two people implement at once, pick nodes whose files don't overlap.
 
 - **Worktree staleness during long runs.** A worktree dispatched against main HEAD at time T can drift if main advances substantially before the implementer finishes. Stage 5's rebase pulls it back into alignment, but if main has changed the very file the implementer rewrote, the rebase can be substantial. Today: keep dispatches scoped tight so they finish in minutes, not hours.
 
@@ -385,17 +362,6 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 ---
 
-## What changes when the framework is built
+## This process stays written down
 
-Most of this is hand-driven today because the orchestration substrate (PRD §7) does not exist yet. When it does:
-
-- Stage 2 (spec review) becomes a `spec_review` task that the task runner dispatches; SPEC_REVIEW state becomes meaningful to other queued tasks.
-- Stage 4 (implementation) becomes an `implement` task with declared resource claims on the node's doc + relevant source files. Resource claims address the multi-worktree shared-file gap.
-- Stage 5 (rebase) becomes implicit — the task runner schedules implementers against the current state, no drift.
-- Stage 6 (implementation review) becomes a `verify` task — possibly with a separate reviewer-agent persona (MetaGPT-style role specialisation, see PRD §4.1).
-- Stage 8 (operator manual verification) becomes a `human_review` task gate that pauses the runner and surfaces the diff for explicit approval. Configured gates still run headlessly; the human_review step covers what they cannot check.
-- Stage 8b (ISSUE_OPEN loop-back) becomes an automatic task-runner transition: failed `human_review` enqueues a follow-up `implement` task with the operator's findings as input.
-- Stage 10's cross-doc sync is partially automated by the health daemon's staleness checks (PRD §6.4).
-- Stage 11 (worktree cleanup) becomes the task runner's normal lifecycle teardown.
-
-The *shape* of the workflow — review-in-clean-context, audit-trail, isolated-implementation, rebase-before-review, merge-with-provenance — stays the same. The orchestration layer just removes the operator from the per-step driving.
+An operator and a fresh-context reviewer carry every stage. A task runner, a dispatcher, and a health scanner were built for this repo and removed on 2026-11-17. Do not wait for them, and do not recreate them in order to finish a node. The shape that stays is review in a clean context, an audit trail, isolated implementation, rebase before review, and a merge that keeps that history.

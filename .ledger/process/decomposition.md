@@ -36,7 +36,7 @@ The original node keeps its document and becomes a coordinator:
 - **Requirements / Design / Decisions** stay, but at the *parent* altitude — the cross-child concerns, shared contracts, and sequencing rationale. Per-child detail moves to the child specs.
 - The parent's **Verification** section must enumerate an acceptance artifact per sequencing tier — something the operator can inspect after each tier's children land, before advancing to the next (a runnable test suite, a curl-able endpoint, or a UI surface). A Verification section that only describes the final-state check ("all children COMPLETE") is incomplete and will be flagged at spec review.
 - Add a **Children** manifest section: one row per child with its `Node ID`, one-line responsibility, declared `Dependencies` on sibling children, and a `Status` column (all start `PLANNED`).
-- Do **not** change the parent's own lifecycle status as a side effect of decomposition. (If a `doc_decompose` agent ran this, it adds a `Decomposed YYYY-MM-DD` subsection to Implementation Notes per the prompt template — see `server/src/dispatcher/prompts/docDecompose.ts`.)
+- Do **not** change the parent's own lifecycle status as a side effect of decomposition. Add a `Decomposed YYYY-MM-DD` subsection to the parent's Implementation Notes saying what was split and why.
 
 ---
 

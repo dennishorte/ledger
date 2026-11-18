@@ -309,6 +309,8 @@ Nothing was punted. S2 was the only finding that required operator judgment; the
 
 ## Implementation Notes
 
+The TypeScript validator was removed on 2026-11-17 with `packages/parser/`. The JSON Schema files in `docs/_schemas/` remain the written contract for a node doc.
+
 ### Dependencies added
 
 - `ajv@8.20.0` (production) — JSON Schema draft 2020-12 validator

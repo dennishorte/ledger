@@ -2,9 +2,9 @@
 
 **Node ID:** `06-agent-dispatcher`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE
+**Status:** DEPRECATED (2026-11-17 — the dispatcher was removed with the server.)
 **Created:** 2026-05-28
-**Last Updated:** 2026-06-06 (resolved the HIGH dispatcher-hang Open Issue in `345dfaa` — per-session MCP transports + watchdog + stream-json telemetry; filed its LOW residual, the MCP turn-0 startup race, as a separate Open Issue; see `docs/_investigations/dispatcher-hang-issue.md` §Resolution)
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `05-task-runner`
 

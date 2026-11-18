@@ -1,16 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(.claude/scripts/api-curl *)",
       "Bash(.claude/scripts/lines *)",
-      "Bash(.claude/scripts/wait-ready)",
-      "Bash(.claude/scripts/wait-ready *)",
-      "Bash(.claude/scripts/kill-port *)",
       "Bash(.claude/scripts/doc-status)",
       "Bash(.claude/scripts/doc-status *)",
-      "Bash(.claude/scripts/node-info)",
-      "Bash(.claude/scripts/node-info *)",
-      "Bash(.claude/scripts/clean)"
+      "Bash(.claude/scripts/new-project)",
+      "Bash(.claude/scripts/new-project *)",
+      "Bash(.claude/scripts/sync-process)",
+      "Bash(.claude/scripts/sync-process *)"
     ]
   }
 }

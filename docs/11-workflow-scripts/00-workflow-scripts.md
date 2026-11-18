@@ -2,9 +2,9 @@
 
 **Node ID:** `11-workflow-scripts`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v1, 2026-06-10)
+**Status:** DEPRECATED (2026-11-17 — the workflow scripts were removed. `.ledger/process/leaf-workflow.md` is the process.)
 **Created:** 2026-06-10
-**Last Updated:** 2026-07-12
+**Last Updated:** 2026-11-17
 **Dependencies:** `.ledger/process/leaf-workflow.md`, `.ledger/process/verification-signoff.md`, `server/src/runner/types.ts` (TaskType `"human_review"`), POST /api/tasks endpoint (`05-task-runner/04-api-endpoints`), `app/src/lib/types.ts` (Stage 2 reviewer context), `docs/00-project.md` §14 (Stage 3/10 cross-doc sync target), parent children manifest (stages 1–3, 9 all write it)
 
 ---

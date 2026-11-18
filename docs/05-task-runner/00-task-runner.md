@@ -2,9 +2,9 @@
 
 **Node ID:** `05-task-runner`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v1, 2026-05-28)
+**Status:** DEPRECATED (2026-11-17 — the task runner was removed with the server.)
 **Created:** 2026-05-27
-**Last Updated:** 2026-05-28 (APPROVED → COMPLETE — all 5 children COMPLETE; `05-ui-hook-migration` closed the parent via stage-8b Fix A for the Approve/Reject button flicker)
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `04-api-server`
 
