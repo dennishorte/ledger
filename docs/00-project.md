@@ -1,8 +1,8 @@
 # LLM Project Framework
  
-**Status:** COMPLETE (the written process is the product; the UI, API, runner, dispatcher, scanner, and workflow scripts are DEPRECATED as of 2026-11-17)
-**Version:** 0.5.23
-**Last Updated:** 2026-11-17
+**Status:** COMPLETE (the written process is the product. The node docs for the UI, API, runner, dispatcher, scanner, and workflow scripts were removed 2026-11-18.)
+**Version:** 0.5.25
+**Last Updated:** 2026-11-18
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
 v0.3 — Revised scope: full orchestration framework is an explicit long-term goal.  
@@ -30,7 +30,9 @@ v0.5.19 — `14-review-process` VERIFY → COMPLETE (v1, 2026-11-13). Operator s
 v0.5.20 — New node **`15-review-decisions`** (PLANNED). Important decisions are recorded where later work can find them, and the design and review of that work consider those decisions. §14 gains the row. Constraints, out of scope, and design wait on the operator.
 v0.5.21 — Removed the React UI (`app/`) and the Playwright suite (`e2e/`). `01-ui` and `10-e2e-testing` are DEPRECATED. The API server, runner, dispatcher, scanner, and workflow scripts remain. The CLI no longer opens a browser.
 v0.5.22 — Removed the failure-push channel (`08-alerts`): no webhook, no `/api/alerts`, no `Alert` type. A failed task stays in the runner. `08-alerts` is DEPRECATED.
-v0.5.23 — Removed the automation. `server/`, `packages/parser/`, and the workflow scripts are gone. Ledger is the written process in `.ledger/process/`. `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, `09-transcript-decouple`, and `11-workflow-scripts` are DEPRECATED. The JSON Schemas in `docs/_schemas/` and `.ledger/project.json` remain.
+v0.5.23 — Removed the automation. `server/`, `packages/parser/`, and the workflow scripts are gone. Ledger is the written process in `.ledger/process/`. `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, `09-transcript-decouple`, and `11-workflow-scripts` are DEPRECATED. The JSON Schemas in `docs/_schemas/` remain.
+v0.5.24 — Removed `.ledger/project.json`. Nothing read it after the server and workflow scripts were gone. `03-project-metadata` is DEPRECATED.
+v0.5.25 — Removed the node docs for the UI, the API, the task runner, the dispatcher, the health scanner, alerts, transcript decoupling, browser tests, the workflow scripts, and the parser schema node. Removed `docs/_schemas/`. The shape of a leaf is the sections in §6.1. `12-workflow-decomposition`, `13-reference-layer`, `14-review-process`, and `15-review-decisions` remain.
  
 ---
  
@@ -345,13 +347,9 @@ Cross-graph navigation:
 - Dependency impact preview: given a proposed document edit or task injection, show which downstream tasks would be invalidated.
 ---
  
-## 9. Document Schema
- 
-All document nodes conform to a versioned JSON schema. Free-form prose is permitted within defined sections, but section presence and metadata fields are required. This ensures any agent instance can parse and update documents consistently across sessions.
- 
-The schema is itself a first-class project artifact, versioned and stored in the document tree root. A separate child document specifies the refactor protocol — when and how documents are split or archived — so the refactor behavior is itself governed by the same documentation discipline as the rest of the project.
- 
-Document schema design should draw on the SpecKit per-feature chain structure (spec → plan → tasks) as a reference for what fields have proven useful in practice.
+## 9. Document shape
+
+A node is the sections in §6.1. Prose inside a section is free. The headings and the status line are required so a later session can read the node the same way. How a node is split is in §6.6 and `.ledger/process/decomposition.md`.
  
 ---
  
@@ -375,7 +373,7 @@ Document schema design should draw on the SpecKit per-feature chain structure (s
 - ~~**Self-audit problem**~~ — *Both named deliverables resolved (v0.5.10, 2026-06-07).* **(1) Independent reviewer persona (the *who*)** shipped at `06-agent-dispatcher` COMPLETE: `spec_review` / `verify` / `reverify` dispatch as separate clean-context `claude` subprocesses — the author no longer checks its own work. **(2) Structured per-requirement sign-off format (the *rigor*)** now lives in `docs/_process/verification-signoff.md`, wired into those three prompt templates and leaf-workflow stages 2 & 6: one row per Requirements/Acceptance/coverage item, PASS/FAIL/PARTIAL/N/A with evidence, a PASS-without-evidence recorded as FAIL, headline verdict derivable from the matrix. VSM diagnosis framed this as an S3\*/S4 independence + requisite-variety failure (`docs/_investigations/vsm-diagnosis.md` finding 4). **Residual (LOW):** the format shapes a review's *output* but nothing *enforces* that an independent review actually runs before COMPLETE — an operator can still skip the gate (the 07-health-daemon reconciliation was exactly that: v2 shipped, reviewed only after the fact). True enforcement is a task-runner COMPLETE-transition gate that refuses without a recorded sign-off matrix; deferred until dispatch is the default path rather than the manual exception. *(Was HIGH, blocked verification design; residual LOW.)*
 - ~~**Decomposition termination criteria**~~ — *Resolved (v0.5.9, 2026-06-07): explicit leaf/decompose rules now live in §6.6 — single-responsibility, the single-implementer recursion floor, the size floor, and a 4-level depth cap — with operator procedure in `docs/_process/decomposition.md`. The VSM "recursion not operational below the leaf" gap (finding 5) is closed by the single-implementer rule: a node is a leaf exactly when its implementer needs no internal coordination.*
 - **Parallel-worktree shared-file conflicts (Phase-1 manual workflow only)** — When two implementers run in parallel worktrees and both touch the same file (`app/src/lib/types.ts` is the obvious shared surface as panel-specific types arrive), there is no automated coordination. The operator currently picks dispatches whose data contracts don't overlap, or accepts that the second-to-merge worktree will surface the conflict at rebase time (`docs/_process/leaf-workflow.md` stage 5). The eventual fix is §6.3's resource-claim model on the task DAG, which refuses to schedule conflicting writes. VSM diagnosis: the other half of the requisite-variety bottleneck (finding 4); a concrete sub-case is that S2's conflict primitive is blind to the repo-global git index — the very resource the v1 daemon's parallel commits raced. *(Priority: MEDIUM — mitigated by current single-operator scale; revisit when parallel dispatch frequency grows.)*
-- ~~**Document schema is implicit in `parseDocs.ts`.**~~ — *Closed (v0.5.4): resolved by `02-schema` COMPLETE (v1). The first-class versioned schema artifact + validator now lives in `docs/_schemas/` and `@ledger/parser`; the parser is no longer the implicit source of truth.*
+- ~~**Document schema is implicit in `parseDocs.ts`.**~~ — *Closed (v0.5.4) by a JSON schema and a parser validator. Both were removed on 2026-11-18. The shape of a leaf is §6.1.*
 - ~~**No project metadata file.**~~ — *Closed (v0.5.4): resolved by `03-project-metadata` COMPLETE (v1). `.ledger/project.json` + loader provide project identity and scoping (§7.1); the topbar "untitled project" fallback is gone.*
 - **No framework / instance separation.** The framework code (`app/`) lives inside the project it dashboards. A second project would have to copy the codebase. The framework story needs an install path that points a package at any `docs/` tree. *(Priority: MEDIUM — surfaces when the extensibility test is run.)*
 - **Transcript ingestion couples the orchestration data layer to one agent runtime.** `01-ui/10-orchestration` parses Claude Code transcript JSONL. This is a bootstrap, not a target architecture; the eventual MCP-based dispatch (§5) emits a different shape. **Now specced as `09-transcript-decouple` (DRAFT, 2026-06-07)** — a decision-enabling spec posing three resolution paths (A drop the source / B adapter boundary / C runner-native ingestion), B recommended; awaiting operator approval of the path in its D0 before implementation. *(Priority: MEDIUM — revisit when the task runner ships and dispatch becomes the data source; the runner shipped, so the node is now actionable.)*
@@ -415,22 +413,9 @@ This document is the root of the project's implementation tree. Per §6.1, paren
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
-| `01-ui` | UI — operator-facing surface for the framework | — | DEPRECATED (2026-11-17 — `app/` removed. The operator does not use the UI. Child docs stay as the audit trail of the removed app. `07-replay` was already DEFERRED.) |
-| `02-schema` | Document schema artifact (JSON Schema + validator; formalises what `parseDocs.ts` assumes today) | — | COMPLETE (v1) |
-| `03-project-metadata` | Project metadata file (`.ledger/project.json`) and loader; provides project identity and scoping (§7.1) | — | COMPLETE (v1) |
-| `04-api-server` | API server — project-scoped REST + SSE over git + runner; CLI launcher (§7.1); UI's per-endpoint migration target (§7.2) | `02-schema`, `03-project-metadata` | DEPRECATED (2026-11-17 — `server/` removed) |
-| `05-task-runner` | In-house task runner (tasks table, append-only event log, scheduler tick, HITL gates, resource claims; §5) | `04-api-server` | DEPRECATED (2026-11-17 — the runner was removed with the server) |
-| `06-agent-dispatcher` | Agent dispatcher — MCP-based interface; Claude Code as first integration; transcript ingestion stays additive (D15) — full retirement deferred to a future node | `05-task-runner` | DEPRECATED (2026-11-17 — the dispatcher was removed with the server) |
-| `07-health-daemon` | Document health scanner — on-demand scan via `POST /api/health/scan`; three monitors (size, open_issue, schema-invalid); durable append log; report-only, no task enqueue (§6.4 v2) | `06-agent-dispatcher` | DEPRECATED (2026-11-17 — the scanner was removed with the server) |
-| `08-alerts` | Algedonic alert channel — pushes critical task failures to the operator over two paths (webhook + always-mounted UI banner) off a report-only global EventBus observer; closes the §11 passive-algedonic issue (VSM finding 3) | `05-task-runner`, `01-ui/01-shell` | DEPRECATED (2026-11-17 — removed with the UI. Failures stay on the task row.) |
-| `09-transcript-decouple` | Decouple the orchestration data layer from the Claude Code transcript format (§11 issue; §7.2 migration seam) — behind a runtime-agnostic ingestion-adapter boundary | `06-agent-dispatcher`, `01-ui/10-orchestration` | DEPRECATED (2026-11-17 — the orchestration layer this spec would have changed was removed before the node was built) |
-| `10-e2e-testing` | Playwright browser-driven acceptance suite — `e2e/` workspace package, `webServer` boots full stack, tests for every COMPLETE UI panel and primary interaction flows (dispatch, HITL approve/reject, health scan, alert banner) | `04-api-server`, `01-ui` | DEPRECATED (2026-11-17 — `e2e/` removed with the UI) |
-| `11-workflow-scripts` | Workflow scripts — two `.claude/workflows/` JS scripts automating the leaf-workflow playbook (stages 1–8 in `leaf-workflow.js`; stages 9–11 in `leaf-workflow-finish.js`); idempotent re-entry; structured review output via sign-off matrix | `.ledger/process/leaf-workflow.md`, `05-task-runner/04-api-endpoints` | DEPRECATED (2026-11-17 — the scripts were removed. `.ledger/process/leaf-workflow.md` is the process) |
-| `12-workflow-decomposition` | Decomposition checkpoint — adds a break-if-yes signal list at the end of leaf-workflow stage 1 so operators exit to decomposition.md before submitting an oversized or multi-responsibility DRAFT for spec review; doc-only change, no new lifecycle state | `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6 | COMPLETE (v1, 2026-06-12) |
-| `13-reference-layer` | Reference layer — `docs/_reference/` current-state docs as a framework convention (pilot proven in worldgen); VERIFY→COMPLETE gate in leaf-workflow + its automation script, enumeration updates (`decomposition.md`, `new-project` template), maintenance-round staleness sweep, worldgen propagation; doc/script-only, no parser change | `.ledger/process/leaf-workflow.md`, `.claude/workflows/leaf-workflow-finish.js`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
-| `14-review-process` | One shared judgment and one shared procedure for spec review and implementation review, so the playbook, the workflow script, and the reviewer prompts stop disagreeing | `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates` | COMPLETE (v1, 2026-11-13) |
+| `12-workflow-decomposition` | Decomposition checkpoint — a break-if-yes signal list at the end of leaf-workflow stage 1, so an oversized node is split before spec review | `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6 | COMPLETE (v1, 2026-06-12) |
+| `13-reference-layer` | `docs/_reference/` — present-tense notes, separate from the node-doc audit trail | `.ledger/process/leaf-workflow.md`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
+| `14-review-process` | One shared judgment and one shared procedure for spec review and implementation review | `.ledger/process/verification-signoff.md`, `.ledger/process/leaf-workflow.md` | COMPLETE (v1, 2026-11-13) |
 | `15-review-decisions` | Important decisions are recorded where later work can find them, and the design and review of that work consider those decisions | `14-review-process` | PLANNED |
 
-Build order is determined by the dependency edges above. Practical sequencing: `02-schema` and `03-project-metadata` can be drafted and implemented in parallel — they share no files. `04-api-server` waits for both. `05-task-runner` waits for the API server. `06-agent-dispatcher` follows the runner. `07-health-daemon` was sequenced after the dispatcher under the original v1 design (its enqueued `doc_refactor`/`reverify`/`issue_triage` tasks needed the dispatcher's executors). The v2 redesign dropped the enqueue model entirely — the scanner is report-only — so that coupling no longer applies; the sequencing is now just historical.
-
-The git repo is the document store (§5) — it is not a buildable component, just the working tree. Today's `parseDocs.ts` and `01-ui/10-orchestration` transcript ingestion are bootstraps to be replaced as the substrate lands, per §7.2's per-endpoint UI migration strategy.
+`15-review-decisions` is the unfinished node. The node docs for the UI, the API, the task runner, the dispatcher, the health scanner, alerts, browser tests, and the workflow scripts were removed on 2026-11-18.

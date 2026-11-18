@@ -25,7 +25,7 @@ Every node in `docs/` follows the schema in PRD §6.1:
 
 Follow `leaf-workflow.md`. Each lifecycle change is its own git commit, and it updates both the node doc and the parent's children manifest. An independent reviewer writes the sign-off matrix into the doc before status moves. The operator, not the reviewer, promotes VERIFY to COMPLETE.
 
-The software that once automated this process — the React UI, the API server, the task runner, the agent dispatcher, the health scanner, and the workflow scripts — was removed on 2026-11-17. The node docs under `docs/` stay as the record of what was built. The playbooks are the process.
+The software that once automated this process — the React UI, the API server, the task runner, the agent dispatcher, the health scanner, and the workflow scripts — was removed on 2026-11-17. The node docs that specified that software were removed on 2026-11-18. The playbooks are the process.
 
 ## Scripts
 
@@ -33,7 +33,7 @@ Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`):
 
 - `.claude/scripts/doc-status [prefix]` — table of node → lifecycle status across `docs/`
 - `.claude/scripts/lines <file> <start> [end]` — numbered line range
-- `.claude/scripts/new-project <path> [--name NAME]` — scaffold a child project: `docs/`, `.ledger/project.json`, a `CLAUDE.md`, and a copy of these playbooks
+- `.claude/scripts/new-project <path> [--name NAME]` — scaffold a child project: `docs/`, a `CLAUDE.md`, and a copy of these playbooks
 - `.claude/scripts/sync-process [<path> ...]` — copy `.ledger/process/*.md` from here to every registered child. **Run this after editing a playbook.**
 
 ## Other projects
@@ -43,6 +43,6 @@ A child project holds its own `docs/` tree, `.ledger/` config, and the playbooks
 ## Hard constraints
 
 - **No implementation until a node reaches APPROVED.**
-- **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `leaf-workflow.md`, which branches from the local integration branch (`workflow.baseBranch` in `.ledger/project.json`, default `main`).
+- **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `leaf-workflow.md`, which branches from the local integration branch (`main`).
 - Status changes update the node doc and the parent's children manifest in the same commit.
 - The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. Decisions that stay only in conversation are not durable; write them down.

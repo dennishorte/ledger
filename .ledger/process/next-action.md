@@ -18,7 +18,7 @@ Read these before deciding. Cheapest-first; stop early only if a higher rung alr
 | PRD §14 manifest | `docs/00-project.md` §14 | Strategic build order + declared dependency edges. |
 | PRD §11 open issues | `docs/00-project.md` §11 | Roll-up of cross-cutting issues with priority tags; HIGH/strategic items live here. |
 | Per-node Open Issues | the node doc's Open Issues section | Unstruck HIGH/MEDIUM issues not yet escalated to §11. |
-| Decision-blocked specs | DRAFT docs whose body says "awaiting operator approval" (e.g. `09-transcript-decouple` D0) | Specs that cannot advance without an operator decision. |
+| Decision-blocked specs | DRAFT docs whose body says the operator must choose before the work can continue | Specs that cannot advance without an operator decision. |
 
 ## 3. Algorithm
 

@@ -79,9 +79,9 @@ The design author writes:
 - **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
 - **Open Issues** — priority-tagged (HIGH / MEDIUM / LOW / TRIVIAL).
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
-- **Verification** — the test plan, now runnable. Keep the explanation of how each check is confirmed, and add the commands and test-file names. For any node that introduces or changes UI panels or API endpoints, name the E2E spec file(s) expected to cover the new surface and state what they assert. "Passes existing suite" is acceptable only if the node touches no new UI surface. Naming a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
+- **Verification** — the test plan. Keep the explanation of how each check is confirmed. Naming a command or a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
 
-Tone: opinionated, terse, decision-explicit. Match the depth of `01-ui/02-dag.md` (the gold standard) and `01-ui/06-health.md` (a recent thorough DRAFT).
+Tone: opinionated, terse, decision-explicit. Match the depth of `docs/14-review-process.md` and `docs/12-workflow-decomposition.md`.
 
 The design author does not edit Requirements. If the confirmation line is missing, still says `unconfirmed`, or any of Outcome / Acceptance / Out of scope is still `_(operator)_`, stop without writing Design.
 

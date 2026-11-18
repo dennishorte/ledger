@@ -5,7 +5,7 @@
 **Status:** COMPLETE (v1, 2026-11-13)
 **Created:** 2026-11-13
 **Last Updated:** 2026-11-13
-**Dependencies:** `11-workflow-scripts`, `06-agent-dispatcher/04-prompt-templates`
+**Dependencies:** `.ledger/process/verification-signoff.md`, `.ledger/process/leaf-workflow.md`
 
 ---
 

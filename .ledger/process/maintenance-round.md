@@ -29,14 +29,14 @@ A round is appropriate when the curated punch list contains at least two items f
 `docs/<subtree>/99-maintenance/00-maintenance.md` is the parent doc (created lazily when the first round is instigated). Children are rounds, numbered sequentially:
 
 ```
-docs/01-ui/99-maintenance/
+docs/NN-name/99-maintenance/
   00-maintenance.md       # parent — holds the rounds manifest
   01-round-1.md           # first round (COMPLETE)
   02-round-2.md           # second round (any state)
   ...
 ```
 
-Each round's Node ID is its path slug (e.g., `01-ui/99-maintenance/01-round-1`). The parent's children manifest gains one row per round and never shrinks — completed rounds stay visible as durable provenance of past maintenance work.
+Each round's Node ID is its path slug (e.g., `NN-name/99-maintenance/01-round-1`). The parent's children manifest gains one row per round and never shrinks — completed rounds stay visible as durable provenance of past maintenance work.
 
 A round is **never re-cycled through ISSUE_OPEN** to address newly-discovered work. New work goes into the next round. This keeps each round's lifecycle linear and its audit tables interpretable.
 
@@ -44,7 +44,7 @@ A round is **never re-cycled through ISSUE_OPEN** to address newly-discovered wo
 
 The `00-maintenance.md` parent of each round set carries `**Node Kind:** maintenance-container` in its header and holds `APPROVED` as its permanent steady state — not a pre-implementation stall, but its *operating state*. It never advances past `APPROVED` and never re-cycles (consistent with the "no round re-cycles" rule one level down).
 
-Per PRD §6.2, a `maintenance-container` child is **exempt from the parent-completion predicate**: the subtree parent (e.g. `01-ui`) may advance to `COMPLETE` regardless of the container's `APPROVED` state. The two are lifecycle-independent by design — the subtree completing does not close the maintenance capacity; new rounds may still be instigated on a COMPLETE subtree whenever the punch list grows round-sized again.
+Per PRD §6.2, a `maintenance-container` child is **exempt from the parent-completion predicate**: the subtree parent may advance to `COMPLETE` regardless of the container's `APPROVED` state. The two are lifecycle-independent by design — the subtree completing does not close the maintenance capacity; new rounds may still be instigated on a COMPLETE subtree whenever the punch list grows round-sized again.
 
 ---
 
@@ -55,7 +55,7 @@ Per PRD §6.2, a `maintenance-container` child is **exempt from the parent-compl
 Same schema as leaf-workflow §1 with these section-specific specifics:
 
 - **Requirements** is a curated punch list. One bullet per item with three fields each:
-  - Source: `01-ui/04-tasks` Open Issues bullet *N* (or verbatim quote if the bullet is short).
+  - Source: the originating node's Open Issues bullet (or a verbatim quote if the bullet is short).
   - Originating priority tag (HIGH / MEDIUM / LOW / TRIVIAL).
   - Why this round: 1–2 sentences (e.g., "groups with two other token-naming nits in this round" / "blocking the maintenance pass on `06-health` next round").
 - **Out of scope** lists Open Issues from the same subtree that were **considered and rejected**, with reasoning. This is the SPEC_REVIEW pass's primary scrutiny surface — "why these and not those" is exactly what the reviewer must validate.
@@ -63,7 +63,7 @@ Same schema as leaf-workflow §1 with these section-specific specifics:
 - **Decisions** records non-obvious calls (e.g., "round-1 rewrites type X across three callers rather than patching at each call site").
 - **Verification** lists the acceptance check **per curated item**, not just an overall pass/fail. The operator walks them all in stage 8.
 
-Add the round to the `99-maintenance/00-maintenance.md` children manifest in the same commit. If this is the first round, also create `00-maintenance.md` itself and add the `99-maintenance` row to the subtree parent's manifest (e.g., `01-ui/00-ui.md`) in the same commit.
+Add the round to the `99-maintenance/00-maintenance.md` children manifest in the same commit. If this is the first round, also create `00-maintenance.md` itself and add the `99-maintenance` row to the subtree parent's manifest in the same commit.
 
 ### 2. SPEC_REVIEW — extra reviewer focus
 
@@ -90,7 +90,7 @@ If a round only partially addresses an originating bullet (fixed the symptom but
 
 **Scrub in-prose code references too, not just Open Issues bullets.** When a round renames a file, moves a module, renames a field, or otherwise changes a code-level identifier, sibling specs may carry buried mentions in their Design sections, Implementation Notes, Decisions tables, or acceptance checks. The strikethrough convention above only catches Open Issues bullets — it does **not** catch lines like "`StatusChip` lives at `src/components/dag/StatusChip.tsx`" buried in §Design > Components. Before finalizing the merge commit, grep the affected siblings for every identifier the round changed (old file paths, old interface field names, old function names) and rewrite each stale mention to the new truth. Preserve provenance with an inline "(relocated by `99-maintenance/01-round-N` …)" note where a future reader might be confused by the change; pure replacements are fine where the historical detail no longer matters. This was added after round-1 missed seven such mentions across `03-docs`, `05-logs`, `06-health`, and `10-orchestration`; a follow-up `docs(01-ui): clean up references stale after round-1` commit was required.
 
-The merge commit message follows the standard format: `Merge <branch>: 01-ui/99-maintenance/01-round-1 → COMPLETE + doc sync`.
+The merge commit message follows the standard format: `Merge <branch>: <round-id> → COMPLETE + doc sync`.
 
 ### 11. Worktree cleanup
 

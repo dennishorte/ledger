@@ -4,7 +4,7 @@
 #
 # Usage:
 #   doc-status                # all nodes
-#   doc-status 01-ui          # filter by path prefix (relative to docs/)
+#   doc-status 14-review      # filter by path prefix (relative to docs/)
 set -euo pipefail
 
 root="/Users/dennis/code/ledger/docs"
