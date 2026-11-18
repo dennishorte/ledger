@@ -5,7 +5,7 @@
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
 
-Where a file goes in `docs/` is `docs-layout.md`. A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
+A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
 
 Parent decomposition — writing the children manifest of a node that doesn't have one yet — is a different procedure and is not covered here.
 
@@ -83,7 +83,7 @@ The design author writes:
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
 - **Verification** — the test plan. Keep the explanation of how each check is confirmed. Naming a command or a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
 
-Tone: opinionated, terse, decision-explicit. Match the depth of `docs/_plans/14-review-process.md` and `docs/_plans/12-workflow-decomposition.md`.
+Tone: opinionated, terse, decision-explicit.
 
 The design author does not edit Requirements. If the confirmation line is missing, still says `unconfirmed`, or any of Outcome / Acceptance / Out of scope is still `_(operator)_`, stop without writing Design.
 
@@ -243,7 +243,7 @@ Once verification passes, bump:
   doc's **last-verified** stamp to `git rev-parse HEAD` — run it
   *before* committing, since a doc never names the commit it lives in.
   Skipping it silently is how the living docs rot.
-- **Removal** — once the lasting outcome is in a living doc, delete the node and drop its manifest row as `docs-layout.md` describes. That removal is its own commit, after this COMPLETE commit.
+- **Removal** — once the lasting outcome is in a living doc, delete the node and drop its row from the parent's children manifest. That removal is its own commit, after this COMPLETE commit.
 
 Single commit in the worktree for the COMPLETE transition. The removal, when it happens, is a later commit.
 
@@ -286,7 +286,7 @@ Once merged:
 
 ## Reopen mode — finishing or extending a COMPLETE node
 
-Stages 1–11 assume a node moves through its lifecycle once. A node that has already reached COMPLETE sometimes needs more work. Stage 8b (ISSUE_OPEN) only covers loop-back *before* COMPLETE; this section covers loop-back *after*. Closing a deferred Open Issue on a COMPLETE node via the triage layer is a different entry point — see `open-issue-resolution.md` — and routes here only when the resolution type is "reopen this node."
+Stages 1–11 assume a node moves through its lifecycle once. A node that has already reached COMPLETE sometimes needs more work. Stage 8b (ISSUE_OPEN) only covers loop-back *before* COMPLETE; this section covers loop-back *after*.
 
 ### Classify first — finish ≠ extend
 

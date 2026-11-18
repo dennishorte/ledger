@@ -124,7 +124,6 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 - **`docs/00-project.md`** — project root. Read first for purpose, standing decisions, and the list of plans.
 - **`.ledger/process/leaf-workflow.md`** — standardised operator playbook for taking a leaf node from PLANNED through COMPLETE. Read before driving any node.
 - **`.ledger/process/decomposition.md`** — how to decompose a parent node into children.
-- **`.ledger/process/docs-layout.md`** — where a file in `docs/` belongs.
 
 **To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
 
@@ -134,7 +133,7 @@ Follow `.ledger/process/leaf-workflow.md`. There is no ledger server and no ledg
 
 ## Documentation discipline
 
-Where a file in `docs/` belongs is `.ledger/process/docs-layout.md`. A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`.
+A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
 
 Every node follows this schema (required sections in order):
 
@@ -156,7 +155,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## File naming and placement
 
-`.ledger/process/docs-layout.md` is the layout. A top-level leaf is `docs/_plans/NN-name.md`. A parent created with children is `docs/_plans/NN-name/00-name.md`, with children at `docs/_plans/NN-name/MM-child.md`. A leaf that is later split stays at `docs/_plans/NN-name.md` and its children go in `docs/_plans/NN-name/`. `NN` and `MM` are zero-padded two-digit numbers. Leave a gap when inserting; do not renumber.
+A top-level leaf is `docs/_plans/NN-name.md`. A parent created with children is `docs/_plans/NN-name/00-name.md`, with children at `docs/_plans/NN-name/MM-child.md`. A leaf that is later split stays at `docs/_plans/NN-name.md` and its children go in `docs/_plans/NN-name/`. `NN` and `MM` are zero-padded two-digit numbers. Leave a gap when inserting; do not renumber.
 
 ## Hard constraints
 
@@ -169,7 +168,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## Process notes
 
-- **Framework playbooks** live in `.ledger/process/`. The layout of `docs/` is `docs-layout.md`.
+- **Framework playbooks** live in `.ledger/process/`.
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
 - **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
 - Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.

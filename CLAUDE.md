@@ -4,17 +4,15 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Start here
 
-- **`docs/00-project.md`** — this project's root. Read it for purpose, standing decisions, and the list of plans.
+- **`docs/00-project.md`** — this project's root. Read it for purpose and standing decisions.
 - **`docs/README.md`** — present-tense notes. Living docs are the markdown files at the top of `docs/`.
 - **`.ledger/process/leaf-workflow.md`** — how a leaf goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
-- **`.ledger/process/next-action.md`** — how to choose the single next thing to do.
-- **`.ledger/process/docs-layout.md`** — where a file in `docs/` belongs.
-- The other playbooks in **`.ledger/process/`**: `decomposition.md`, `maintenance-round.md`, `doc-size-resolution.md`, `open-issue-queue.md`, `open-issue-resolution.md`.
+- **`.ledger/process/decomposition.md`** — when a plan is too big to be one piece of work.
 
 ## Documentation discipline
 
-Where a file in `docs/` belongs is `.ledger/process/docs-layout.md`. A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`.
+A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
 
 Every plan follows the sections and the lifecycle in `leaf-workflow.md`.
 
@@ -23,7 +21,7 @@ Every plan follows the sections and the lifecycle in `leaf-workflow.md`.
 - Parents hold a children manifest with declared dependencies.
 - No agent may begin implementation until a plan reaches APPROVED.
 
-**To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
+**To find current focus:** read the plans in `docs/_plans/`. The most-recently-advanced plan tells you where work currently lives.
 
 ## How work proceeds
 

@@ -15,9 +15,7 @@ Run the leaf tests against the node. It is a **leaf — do not decompose** when 
 3. **Size floor** — the DRAFT spec is comfortably under the size threshold and the diff is bounded.
 4. **Depth cap** — decomposing would push the tree past 4 levels without a coordination justification.
 
-Decompose **only** when the single-responsibility test fails *and* the size-floor *or* single-implementer test also fails. One failing test is a nudge; resist splitting a node that merely *feels* big. The smallest tree that satisfies the constraints wins.
-
-If a `size` health finding is what brought you here, also read `doc-size-resolution.md` — a large doc is sometimes noise, not genuine multi-responsibility (Option A there is a manual cleanup, not a decomposition).
+Decompose **only** when the single-responsibility test fails *and* the size-floor *or* single-implementer test also fails. One failing test is a nudge; resist splitting a node that merely *feels* big. A doc that is large because it repeats itself or keeps finished history is cleaned in place. The smallest tree that satisfies the constraints wins.
 
 ---
 
@@ -58,7 +56,7 @@ A child that is itself multi-responsibility re-runs this playbook from Step 0 �
 | Decomposed former-leaf (doc already exists at `docs/_plans/NN-name.md`) | stays at `docs/_plans/NN-name.md` | `docs/_plans/NN-name/MM-child.md` |
 | Top-level leaf (no children) | `docs/_plans/NN-name.md` | — |
 
-`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. They set display order only. Leave a gap when inserting; do not renumber. Which folder a file belongs in is `docs-layout.md`.
+`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. They set display order only. Leave a gap when inserting; do not renumber. A lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
 
 ---
 
@@ -75,5 +73,5 @@ From here each child is an ordinary leaf — hand it to the leaf-workflow at sta
 ## Notes
 
 - **Decomposition is not a lifecycle transition of the parent.** It changes the parent's *shape* (leaf → coordinator), not its status. The parent reaches COMPLETE when its children do and its own coordination concerns are satisfied — not before.
-- **This playbook splits a node that already lives in `docs/_plans/`.** Folder rules for living docs and investigations are in `docs-layout.md`.
+- **This playbook splits a node that already lives in `docs/_plans/`.** A lasting description is a markdown file at the top of `docs/`. A point-in-time writeup stays in `docs/_investigations/`.
 - The recursion bottoms out at the single-implementer rule. If you find yourself decomposing to a depth where each leaf is trivial, you have over-decomposed — collapse back up.
