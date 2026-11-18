@@ -5,14 +5,16 @@ This repo is the written process for running a project with an LLM. Work is spec
 ## Start here
 
 - **`docs/00-project.md`** — this project's root. Read it for scope. Its §14 holds the children manifest.
+- **`docs/README.md`** — present-tense notes. Living docs are the markdown files at the top of `docs/`.
 - **`.ledger/process/leaf-workflow.md`** — how a leaf goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 - **`.ledger/process/next-action.md`** — how to choose the single next thing to do.
+- **`.ledger/process/docs-layout.md`** — where a file in `docs/` belongs.
 - The other playbooks in **`.ledger/process/`**: `decomposition.md`, `maintenance-round.md`, `doc-size-resolution.md`, `open-issue-queue.md`, `open-issue-resolution.md`.
 
 ## Documentation discipline
 
-A node is a working document for one piece of work. It lives in `docs/_nodes/` and is removed once that work is finished and its lasting outcome is written into the living docs. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. `docs/00-project.md` stays at the root.
+Where a file in `docs/` belongs is `.ledger/process/docs-layout.md`. A node is one piece of work under `docs/_plans/`. The lasting description is a markdown file at the top of `docs/`.
 
 Every node follows the schema in PRD §6.1:
 
@@ -36,11 +38,13 @@ Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`):
 - `.claude/scripts/doc-status [prefix]` — table of node → lifecycle status across `docs/`
 - `.claude/scripts/lines <file> <start> [end]` — numbered line range
 - `.claude/scripts/new-project <path> [--name NAME]` — scaffold a child project: `docs/`, a `CLAUDE.md`, and a copy of these playbooks
-- `.claude/scripts/sync-process [<path> ...]` — copy `.ledger/process/*.md` from here to every registered child. **Run this after editing a playbook.**
+- `.claude/scripts/sync-process [<path> ...]` — copy `.ledger/process/*.md` from here to every registered child. Run it only when the operator asks.
 
 ## Other projects
 
 A child project holds its own `docs/` tree, `.ledger/` config, and the playbooks it received from here. It does not run software from this repo. The registry is `.ledger/child-projects`.
+
+Do not edit a child project unless the operator specifically asks. A change in this repo stays in this repo. Copying playbooks out with `sync-process` is a child-project edit.
 
 ## Hard constraints
 
@@ -48,3 +52,4 @@ A child project holds its own `docs/` tree, `.ledger/` config, and the playbooks
 - **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `leaf-workflow.md`, which branches from the local integration branch (`main`).
 - Status changes update the node doc and the parent's children manifest in the same commit.
 - The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. Decisions that stay only in conversation are not durable; write them down.
+- Do not edit a registered child project unless the operator specifically asks for that change.

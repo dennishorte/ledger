@@ -14,7 +14,8 @@ Read these before deciding. Cheapest-first; stop early only if a higher rung alr
 
 | Source | Command / path | What it yields |
 |---|---|---|
-| Node lifecycle table | `.claude/scripts/doc-status` | Every node's current status — the spine of the decision. |
+| Node lifecycle table | `.claude/scripts/doc-status` | Every node's current status — the spine of the decision. Nodes are the files in `docs/_plans/` (`docs-layout.md`). |
+| Living docs | markdown files at the top of `docs/` | The lasting description. Read these for what is true now; do not treat them as work waiting to be done. |
 | PRD §14 manifest | `docs/00-project.md` §14 | Strategic build order + declared dependency edges. |
 | PRD §11 open issues | `docs/00-project.md` §11 | Roll-up of cross-cutting issues with priority tags; HIGH/strategic items live here. |
 | Per-node Open Issues | the node doc's Open Issues section | Unstruck HIGH/MEDIUM issues not yet escalated to §11. |

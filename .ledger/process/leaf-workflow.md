@@ -5,7 +5,7 @@
 
 The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
 
-A node is a working document for one piece of work. It lives under `docs/_nodes/` and is removed once that work is finished and its lasting outcome is written into the living docs. It is not the lasting description of the project. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. `docs/00-project.md` stays at the root.
+Where a file goes in `docs/` is `docs-layout.md`. A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
 
 Parent decomposition — writing the children manifest of a node that doesn't have one yet — is a different procedure and is not covered here.
 
@@ -44,7 +44,7 @@ The spec is written in two passes. Pass A freezes Requirements while the node is
 
 #### 1a. Requirements — Status stays PLANNED
 
-Create `docs/_nodes/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_nodes/NN-name.md`. The doc still carries every §6.1 heading. Only Requirements and Verification have content.
+Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_plans/NN-name.md`. The doc still carries every §6.1 heading. Only Requirements and Verification have content.
 
 - **Front-matter:** Node ID, Parent, Status: PLANNED, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
 - **Requirements** — the whole brief, under a page:
@@ -83,7 +83,7 @@ The design author writes:
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
 - **Verification** — the test plan. Keep the explanation of how each check is confirmed. Naming a command or a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
 
-Tone: opinionated, terse, decision-explicit. Match the depth of `docs/_nodes/14-review-process.md` and `docs/_nodes/12-workflow-decomposition.md`.
+Tone: opinionated, terse, decision-explicit. Match the depth of `docs/_plans/14-review-process.md` and `docs/_plans/12-workflow-decomposition.md`.
 
 The design author does not edit Requirements. If the confirmation line is missing, still says `unconfirmed`, or any of Outcome / Acceptance / Out of scope is still `_(operator)_`, stop without writing Design.
 
@@ -234,17 +234,18 @@ Once verification passes, bump:
 - Spec's Status header: VERIFY → COMPLETE (v1, YYYY-MM-DD).
 - Parent manifest row: VERIFY → COMPLETE (v1).
 - Spec's own sample-tree picture (if it has one): row → `[COMPLETE]`.
-- **Reference-doc check** — if the node touched anything a
-  `docs/_reference/` doc describes, fold the delta into this same
-  commit. The check is diff-shaped and cheap: list the files this node
-  touched (`git diff --name-only <base>...HEAD`), grep `docs/_reference/`
-  for docs citing those paths or this node's id. No covering doc (or no
-  `_reference/` dir) → nothing to do. Otherwise update the stale rows
-  and set the doc's **last-verified** stamp to `git rev-parse HEAD` —
-  run it *before* committing, since a doc never names the commit it
-  lives in. Skipping it silently is how the reference layer rots.
+- **Living-doc check** — if the node touched anything a living doc
+  describes, fold the delta into this same commit. The check is
+  diff-shaped and cheap: list the files this node touched
+  (`git diff --name-only <base>...HEAD`), then grep the markdown files
+  at the top of `docs/` for those paths or this node's id. No covering
+  doc → nothing to do. Otherwise update the stale rows and set the
+  doc's **last-verified** stamp to `git rev-parse HEAD` — run it
+  *before* committing, since a doc never names the commit it lives in.
+  Skipping it silently is how the living docs rot.
+- **Removal** — once the lasting outcome is in a living doc, delete the node and drop its manifest row as `docs-layout.md` describes. That removal is its own commit, after this COMPLETE commit.
 
-Single commit in the worktree.
+Single commit in the worktree for the COMPLETE transition. The removal, when it happens, is a later commit.
 
 ### 10. Merge `--no-ff` — bundle the cross-doc sync into the merge commit
 

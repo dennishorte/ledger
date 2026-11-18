@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Snapshot the lifecycle status of every work node under docs/_nodes/.
+# Snapshot the lifecycle status of every work node under docs/_plans/.
 #
 # Usage:
 #   doc-status                # all nodes
-#   doc-status 14-review      # filter by path prefix (relative to docs/_nodes/)
+#   doc-status 14-review      # filter by path prefix (relative to docs/_plans/)
 set -euo pipefail
 
-root="/Users/dennis/code/ledger/docs/_nodes"
+root="/Users/dennis/code/ledger/docs/_plans"
 prefix="${1:-}"
 
 {

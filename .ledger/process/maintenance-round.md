@@ -17,7 +17,7 @@ The round mechanism exists because the per-leaf ISSUE_OPEN loop (leaf-workflow �
 | Bug found during verification of a freshly-completing leaf, regardless of severity | leaf-workflow §8b (COMPLETE → ISSUE_OPEN → ...) on that leaf. |
 | HIGH-priority bug discovered post-COMPLETE on a single leaf | leaf-workflow §8b on the originating leaf. The full single-leaf cycle is appropriate weight for a HIGH. |
 | MEDIUM/LOW/TRIVIAL Open Issues accumulated across multiple COMPLETE siblings in the same subtree | **This playbook.** Batch them into a maintenance round. |
-| `docs/_reference/` doc drifted stale (subsystem changed since its last-verified stamp; the leaf-workflow stage-9 check should catch this at source, but drift accumulates) | Punch-list item in a round — update the stale sections and bump the stamp. Structural rewrites of a reference doc are their own leaf, not a round item. |
+| A living doc at the top of `docs/` drifted stale (what it describes changed since its last-verified stamp; the leaf-workflow stage-9 check should catch this at source, but drift accumulates) | Punch-list item in a round — update the stale sections and bump the stamp. Structural rewrites of a living doc are their own leaf, not a round item. |
 | Maintenance work that spans multiple subtrees | One round per subtree. Each subtree's `99-maintenance/` is independent. Cross-subtree resource-claim sprawl defeats the SPEC_REVIEW pass. |
 
 A round is appropriate when the curated punch list contains at least two items from at least two siblings. A one-item round is just §8b with extra ceremony.
@@ -26,17 +26,17 @@ A round is appropriate when the curated punch list contains at least two items f
 
 ## Where rounds live
 
-`docs/<subtree>/99-maintenance/00-maintenance.md` is the parent doc (created lazily when the first round is instigated). Children are rounds, numbered sequentially:
+A round is a node. `docs-layout.md` says where it lives. `docs/_plans/<subtree>/99-maintenance/00-maintenance.md` is the parent doc (created lazily when the first round is instigated). Children are rounds, numbered sequentially:
 
 ```
-docs/_nodes/NN-name/99-maintenance/
+docs/_plans/NN-name/99-maintenance/
   00-maintenance.md       # parent — holds the rounds manifest
   01-round-1.md           # first round (COMPLETE)
   02-round-2.md           # second round (any state)
   ...
 ```
 
-Each round's Node ID is its path slug (e.g., `NN-name/99-maintenance/01-round-1`). The parent's children manifest gains one row per round and never shrinks — completed rounds stay visible as durable provenance of past maintenance work.
+Each round's Node ID is its path slug (e.g., `NN-name/99-maintenance/01-round-1`). The parent's children manifest gains one row per round. While that node exists, a finished round stays in the manifest. The node itself leaves as `docs-layout.md` describes, once its lasting outcome is in a living doc.
 
 A round is **never re-cycled through ISSUE_OPEN** to address newly-discovered work. New work goes into the next round. This keeps each round's lifecycle linear and its audit tables interpretable.
 
@@ -105,7 +105,7 @@ Identical to leaf-workflow §11.
 - **One round = one subtree.** Cross-subtree maintenance happens via serial rounds, each owned by that subtree's own `99-maintenance/`. This keeps each round's resource claims narrow and each SPEC_REVIEW focused.
 - **Cross-references on siblings are durable.** The strikethrough-plus-pointer convention on stage 10 is the maintenance equivalent of the audit-tables-stay-forever rule. A reader bisecting a regression should be able to trace from a symptom on `04-tasks` to the resolution in `99-maintenance/01-round-1` in one hop.
 - **Discovered-mid-round bugs go to the next round.** The implementer in stage 4 will sometimes find a related bug while patching a curated item. Do not expand the current round's scope. File the new finding into the originating leaf's Open Issues and pick it up in round N+1. Expanding scope mid-stream invalidates the SPEC_REVIEW pass.
-- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." Until the health daemon exists (PRD §6.4), this is a manual reading pass over the subtree's Open Issues sections — plus a `docs/_reference/` stamp sweep: a doc whose cited files have commits after its **Last verified** stamp (`git log <stamp>..HEAD -- <cited paths>`) is punch-list material.
+- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." Until the health daemon exists (PRD §6.4), this is a manual reading pass over the subtree's Open Issues sections — plus a stamp sweep of the living docs at the top of `docs/`: a doc whose cited files have commits after its **Last verified** stamp (`git log <stamp>..HEAD -- <cited paths>`) is punch-list material.
 
 ---
 

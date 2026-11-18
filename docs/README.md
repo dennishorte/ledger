@@ -1,24 +1,26 @@
-# docs/_reference — current-state notes
+# Current-state notes
 
 **What this is:** present-tense notes about how the process works today.
+These notes are the markdown files at the top of `docs/`, next to
+`docs/00-project.md`.
 **What it is not:** a work node. Work nodes are temporary and live in
-`docs/_nodes/`. `docs/_investigations/` is a point-in-time writeup behind an
-Open Issue. [`13-reference-layer`](../_nodes/13-reference-layer.md).
+`docs/_plans/`. `docs/_investigations/` is a point-in-time writeup behind an
+Open Issue. [`13-reference-layer`](_plans/13-reference-layer.md).
 
-These notes stay in `docs/_reference/` until they move to the root of `docs/`.
-They do not carry a lifecycle status.
+These notes do not carry a lifecycle status.
 
-**Last verified:** `bd84c7f2a9932dbf980a3492afa875cdec21aade` on `main`.
+**Last verified:** `1292352ebc4f7834fcef7877e9e92152ab196a5d` on `main`.
 A doc never names the commit it lives in. Stamp `git rev-parse HEAD` from
 immediately before the commit that changes this file.
 
 ## The process
 
 The process is the playbooks in `.ledger/process/`. They are the source.
-This folder does not restate them.
+This file does not restate them.
 
 | Playbook | What it is for |
 |---|---|
+| `docs-layout.md` | Where a file in `docs/` belongs |
 | `leaf-workflow.md` | Take one leaf from PLANNED through COMPLETE |
 | `verification-signoff.md` | The review matrix and the only definition of `pass` |
 | `next-action.md` | Choose the single next action |

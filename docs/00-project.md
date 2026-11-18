@@ -1,7 +1,7 @@
 # LLM Project Framework
  
 **Status:** COMPLETE (the written process is the product. The node docs for the UI, API, runner, dispatcher, scanner, and workflow scripts were removed 2026-11-18.)
-**Version:** 0.5.26
+**Version:** 0.5.29
 **Last Updated:** 2026-11-18
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
@@ -34,6 +34,9 @@ v0.5.23 — Removed the automation. `server/`, `packages/parser/`, and the workf
 v0.5.24 — Removed `.ledger/project.json`. Nothing read it after the server and workflow scripts were gone. `03-project-metadata` is DEPRECATED.
 v0.5.25 — Removed the node docs for the UI, the API, the task runner, the dispatcher, the health scanner, alerts, transcript decoupling, browser tests, the workflow scripts, and the parser schema node. Removed `docs/_schemas/`. The shape of a leaf is the sections in §6.1. `12-workflow-decomposition`, `13-reference-layer`, `14-review-process`, and `15-review-decisions` remain.
 v0.5.26 — Work nodes are temporary and live in `docs/_nodes/`. The living docs stay in `docs/_reference/` until they move to the root of `docs/`.
+v0.5.27 — Living docs moved to the top of `docs/`. `docs/_reference/` is gone.
+v0.5.28 — How `docs/` is organized is written in `.ledger/process/docs-layout.md`.
+v0.5.29 — The work-document folder is `docs/_plans/`.
  
 ---
  
@@ -160,7 +163,7 @@ Projects are represented as a hierarchical tree of documents. Each node correspo
  
 A node may be decomposed into child nodes. When decomposed, the parent retains its document and additionally holds a manifest of its children with declared inter-child dependencies.
 
-A node is a working document. It lives in `docs/_nodes/` and is removed once the work is finished and its lasting outcome is written into the living docs. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. This file stays at the root.
+How these files are arranged is `.ledger/process/docs-layout.md`. This file is a living doc: the project root. Work documents live in `docs/_plans/` and leave once their lasting outcome is written into a living doc.
  
 ### 6.2 Node Lifecycle
  
@@ -412,12 +415,12 @@ A node is the sections in §6.1. Prose inside a section is free. The headings an
 
 ## 14. Children
 
-This document is the root of the project's implementation tree. Per §6.1, parents hold a manifest of their children with declared dependencies. The child docs live in `docs/_nodes/`.
+This document is the root of the project's implementation tree. Per §6.1, parents hold a manifest of their children with declared dependencies. The child docs live in `docs/_plans/`.
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|
 | `12-workflow-decomposition` | Decomposition checkpoint — a break-if-yes signal list at the end of leaf-workflow stage 1, so an oversized node is split before spec review | `.ledger/process/leaf-workflow.md`, `.ledger/process/decomposition.md`, `docs/00-project.md` §6.6 | COMPLETE (v1, 2026-06-12) |
-| `13-reference-layer` | `docs/_reference/` — present-tense notes, separate from the node-doc audit trail | `.ledger/process/leaf-workflow.md`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
+| `13-reference-layer` | Present-tense notes at the top of `docs/`, separate from the temporary work nodes | `.ledger/process/leaf-workflow.md`, `.claude/scripts/new-project` | COMPLETE (v1, 2026-09-18) |
 | `14-review-process` | One shared judgment and one shared procedure for spec review and implementation review | `.ledger/process/verification-signoff.md`, `.ledger/process/leaf-workflow.md` | COMPLETE (v1, 2026-11-13) |
 | `15-review-decisions` | Important decisions are recorded where later work can find them, and the design and review of that work consider those decisions | `14-review-process` | PLANNED |
 
