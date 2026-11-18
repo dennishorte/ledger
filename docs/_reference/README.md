@@ -1,14 +1,14 @@
 # docs/_reference — current-state notes
 
 **What this is:** present-tense notes about how the process works today.
-**What it is not:** history. The node docs (`docs/NN-*`) are the append-only
-audit trail. `docs/_investigations/` is a point-in-time writeup behind an
-Open Issue. [`13-reference-layer`](../13-reference-layer.md).
+**What it is not:** a work node. Work nodes are temporary and live in
+`docs/_nodes/`. `docs/_investigations/` is a point-in-time writeup behind an
+Open Issue. [`13-reference-layer`](../_nodes/13-reference-layer.md).
 
-Underscore-prefixed folders under `docs/` are framework-internal. They are
-not nodes and they do not carry a lifecycle status.
+These notes stay in `docs/_reference/` until they move to the root of `docs/`.
+They do not carry a lifecycle status.
 
-**Last verified:** `5814ceb54fd3e54dac1f3288de62533b30e4e19d` on `main`.
+**Last verified:** `bd84c7f2a9932dbf980a3492afa875cdec21aade` on `main`.
 A doc never names the commit it lives in. Stamp `git rev-parse HEAD` from
 immediately before the commit that changes this file.
 

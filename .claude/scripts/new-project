@@ -172,7 +172,9 @@ Follow `.ledger/process/leaf-workflow.md`. There is no ledger server and no ledg
 
 ## Documentation discipline
 
-Every node in `docs/` follows this schema (required sections in order):
+A node is a working document for one piece of work. It lives in `docs/_nodes/` and is removed once that work is finished and its lasting outcome is written into the living docs. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. `docs/00-project.md` stays at the root.
+
+Every node follows this schema (required sections in order):
 
 - **Front-matter:** Node ID, Parent, Status, Created, Last Updated, Dependencies.
 - **Requirements** — with explicit out-of-scope bullets.
@@ -194,11 +196,11 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 | Case | Location |
 |------|----------|
-| Top-level leaf (no children) | `docs/NN-name.md` |
-| Fresh parent (always had children) | `docs/NN-name/00-name.md` (parent) + `docs/NN-name/MM-child.md` (children) |
-| Decomposed former-leaf | doc stays at `docs/NN-name.md`; children go in `docs/NN-name/MM-child.md` |
+| Top-level leaf (no children) | `docs/_nodes/NN-name.md` |
+| Fresh parent (always had children) | `docs/_nodes/NN-name/00-name.md` (parent) + `docs/_nodes/NN-name/MM-child.md` (children) |
+| Decomposed former-leaf | doc stays at `docs/_nodes/NN-name.md`; children go in `docs/_nodes/NN-name/MM-child.md` |
 
-`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. Underscore-prefixed siblings (`_investigations/`, `_reference/`) never carry `NN-` numbering.
+`NN` / `MM` are zero-padded two-digit sequence numbers within their parent scope. Leave gaps rather than renumber when inserting. `docs/_investigations/` and `docs/_reference/` are not nodes.
 
 ## Hard constraints
 
@@ -211,7 +213,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 
 ## Process notes
 
-- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are not project nodes. Underscore-prefixed `docs/` siblings (`docs/_investigations/`, `docs/_reference/`) are framework-internal too. They are not nodes.
+- **Framework playbooks** live in `.ledger/process/` (not in the `docs/` tree) — they are not project nodes. `docs/_investigations/` and `docs/_reference/` are not nodes either. Work nodes live only in `docs/_nodes/`.
 - Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
 - **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
 - Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.

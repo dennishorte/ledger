@@ -3,7 +3,9 @@
 **Status:** LIVING (revise when the framework's automation reshapes the procedure)
 **Last Updated:** 2026-11-17 (Verification is the test plan for the acceptance checks; it does not repeat them)
 
-The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE under the current Phase-1 / pre-automation state of the framework. The orchestration substrate (PRD §7 — task runner, agent dispatcher, health daemon) will automate most of this when it lands. Until then, the operator drives it manually with LLM sub-agents.
+The standardised procedure for taking a leaf node (a node with no children) from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
+
+A node is a working document for one piece of work. It lives under `docs/_nodes/` and is removed once that work is finished and its lasting outcome is written into the living docs. It is not the lasting description of the project. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. `docs/00-project.md` stays at the root.
 
 Parent decomposition — writing the children manifest of a node that doesn't have one yet — is a different procedure and is not covered here.
 
@@ -42,7 +44,7 @@ The spec is written in two passes. Pass A freezes Requirements while the node is
 
 #### 1a. Requirements — Status stays PLANNED
 
-Create `docs/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. The doc still carries every §6.1 heading so it validates. Only Requirements and Verification have content.
+Create `docs/_nodes/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level leaf is `docs/_nodes/NN-name.md`. The doc still carries every §6.1 heading. Only Requirements and Verification have content.
 
 - **Front-matter:** Node ID, Parent, Status: PLANNED, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
 - **Requirements** — the whole brief, under a page:
@@ -81,7 +83,7 @@ The design author writes:
 - **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
 - **Verification** — the test plan. Keep the explanation of how each check is confirmed. Naming a command or a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
 
-Tone: opinionated, terse, decision-explicit. Match the depth of `docs/14-review-process.md` and `docs/12-workflow-decomposition.md`.
+Tone: opinionated, terse, decision-explicit. Match the depth of `docs/_nodes/14-review-process.md` and `docs/_nodes/12-workflow-decomposition.md`.
 
 The design author does not edit Requirements. If the confirmation line is missing, still says `unconfirmed`, or any of Outcome / Acceptance / Out of scope is still `_(operator)_`, stop without writing Design.
 

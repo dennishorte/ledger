@@ -12,7 +12,9 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Documentation discipline
 
-Every node in `docs/` follows the schema in PRD §6.1:
+A node is a working document for one piece of work. It lives in `docs/_nodes/` and is removed once that work is finished and its lasting outcome is written into the living docs. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. `docs/00-project.md` stays at the root.
+
+Every node follows the schema in PRD §6.1:
 
 - **Required sections:** Requirements, Design, Decisions, Open Issues, Implementation Notes, Verification, Children.
 - **Lifecycle (§6.2):** DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE (or → ISSUE_OPEN → back).

@@ -29,7 +29,7 @@ A round is appropriate when the curated punch list contains at least two items f
 `docs/<subtree>/99-maintenance/00-maintenance.md` is the parent doc (created lazily when the first round is instigated). Children are rounds, numbered sequentially:
 
 ```
-docs/NN-name/99-maintenance/
+docs/_nodes/NN-name/99-maintenance/
   00-maintenance.md       # parent — holds the rounds manifest
   01-round-1.md           # first round (COMPLETE)
   02-round-2.md           # second round (any state)

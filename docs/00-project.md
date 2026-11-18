@@ -1,7 +1,7 @@
 # LLM Project Framework
  
 **Status:** COMPLETE (the written process is the product. The node docs for the UI, API, runner, dispatcher, scanner, and workflow scripts were removed 2026-11-18.)
-**Version:** 0.5.25
+**Version:** 0.5.26
 **Last Updated:** 2026-11-18
 
 **Changelog:** v0.2 — Added landscape research, build-vs-integrate recommendations, and reference projects.  
@@ -33,6 +33,7 @@ v0.5.22 — Removed the failure-push channel (`08-alerts`): no webhook, no `/api
 v0.5.23 — Removed the automation. `server/`, `packages/parser/`, and the workflow scripts are gone. Ledger is the written process in `.ledger/process/`. `04-api-server`, `05-task-runner`, `06-agent-dispatcher`, `07-health-daemon`, `09-transcript-decouple`, and `11-workflow-scripts` are DEPRECATED. The JSON Schemas in `docs/_schemas/` remain.
 v0.5.24 — Removed `.ledger/project.json`. Nothing read it after the server and workflow scripts were gone. `03-project-metadata` is DEPRECATED.
 v0.5.25 — Removed the node docs for the UI, the API, the task runner, the dispatcher, the health scanner, alerts, transcript decoupling, browser tests, the workflow scripts, and the parser schema node. Removed `docs/_schemas/`. The shape of a leaf is the sections in §6.1. `12-workflow-decomposition`, `13-reference-layer`, `14-review-process`, and `15-review-decisions` remain.
+v0.5.26 — Work nodes are temporary and live in `docs/_nodes/`. The living docs stay in `docs/_reference/` until they move to the root of `docs/`.
  
 ---
  
@@ -158,6 +159,8 @@ Projects are represented as a hierarchical tree of documents. Each node correspo
 | **Status** | Current lifecycle state of this node |
  
 A node may be decomposed into child nodes. When decomposed, the parent retains its document and additionally holds a manifest of its children with declared inter-child dependencies.
+
+A node is a working document. It lives in `docs/_nodes/` and is removed once the work is finished and its lasting outcome is written into the living docs. The living docs are `docs/_reference/` today. They move to the root of `docs/` later. This file stays at the root.
  
 ### 6.2 Node Lifecycle
  
@@ -409,7 +412,7 @@ A node is the sections in §6.1. Prose inside a section is free. The headings an
 
 ## 14. Children
 
-This document is the root of the project's implementation tree. Per §6.1, parents hold a manifest of their children with declared dependencies.
+This document is the root of the project's implementation tree. Per §6.1, parents hold a manifest of their children with declared dependencies. The child docs live in `docs/_nodes/`.
 
 | ID | Title | Depends on | Status |
 |----|-------|------------|--------|

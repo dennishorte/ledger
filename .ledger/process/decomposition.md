@@ -42,7 +42,7 @@ The original node keeps its document and becomes a coordinator:
 
 ## Step 3 — Create each child at PLANNED
 
-For each child, create `docs/<parent-path>/<id>.md` at Status `PLANNED` with the full §6.1 heading set. The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`.
+For each child, create `docs/_nodes/<parent-path>/<id>.md` at Status `PLANNED` with the full §6.1 heading set. The children inherit the parent as `Parent:` and declare their inter-child `Dependencies`.
 
 A forward child is a requirements seed, not a design. Requirements holds the one-line responsibility from Step 1 as the Outcome, sets `**Requirements confirmed:** unconfirmed`, and leaves Acceptance, Constraints, and Out of scope as `_(operator)_`. Design, Decisions, Open Issues, Implementation Notes, and Verification say `*(not started)*`. Children is `None`. Do not write a design into a forward child. The leaf-workflow requirements phase (stage 1a) fills the rest.
 
@@ -54,11 +54,11 @@ A child that is itself multi-responsibility re-runs this playbook from Step 0 �
 
 | Case | Parent doc | Child docs |
 |------|-----------|------------|
-| Fresh parent (new node, always had children) | `docs/NN-name/00-name.md` | `docs/NN-name/MM-child.md` |
-| Decomposed former-leaf (doc already exists at `docs/NN-name.md`) | stays at `docs/NN-name.md` | `docs/NN-name/MM-child.md` |
-| Top-level leaf (no children) | `docs/NN-name.md` | — |
+| Fresh parent (new node, always had children) | `docs/_nodes/NN-name/00-name.md` | `docs/_nodes/NN-name/MM-child.md` |
+| Decomposed former-leaf (doc already exists at `docs/_nodes/NN-name.md`) | stays at `docs/_nodes/NN-name.md` | `docs/_nodes/NN-name/MM-child.md` |
+| Top-level leaf (no children) | `docs/_nodes/NN-name.md` | — |
 
-`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. The sequence determines display order in the DAG but carries no semantic meaning — leave gaps rather than renumber when inserting. The `_investigations/` and `_reference/` siblings always use an underscore prefix and never carry `NN-` numbering.
+`NN` and `MM` are zero-padded two-digit sequence numbers within their parent scope. The sequence determines display order but carries no semantic meaning — leave gaps rather than renumber when inserting. `docs/_investigations/` and `docs/_reference/` are not nodes.
 
 ---
 
@@ -75,5 +75,5 @@ From here each child is an ordinary leaf — hand it to the leaf-workflow at sta
 ## Notes
 
 - **Decomposition is not a lifecycle transition of the parent.** It changes the parent's *shape* (leaf → coordinator), not its status. The parent reaches COMPLETE when its children do and its own coordination concerns are satisfied — not before.
-- **Underscore-prefixed paths are not nodes** and cannot be decomposed this way; they are framework-internal material (CLAUDE.md). A `doc_decompose` dispatch against one returns 409.
+- **`docs/_investigations/` and `docs/_reference/` are not nodes** and are not decomposed this way. Work nodes live only in `docs/_nodes/`.
 - The recursion bottoms out at the single-implementer rule (§6.6 rule 2). If you find yourself decomposing to a depth where each leaf is trivial, you have over-decomposed — collapse back up.
