@@ -7,8 +7,6 @@ The standardised procedure for taking a leaf node (a node with no children) from
 
 A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
 
-Parent decomposition — writing the children manifest of a node that doesn't have one yet — is a different procedure and is not covered here.
-
 Reopening a node that has **already reached COMPLETE** — to finish deferred scope or to extend it — is a back-edge the forward stages don't draw. It is covered in **Reopen mode** below. Do not improvise it as an ad-hoc pass; classify it first.
 
 ---
@@ -89,28 +87,13 @@ The design author does not edit Requirements. If the confirmation line is missin
 
 Bump Status `PLANNED → DRAFT` in the spec and the parent manifest. One commit: `docs(<id>): PLANNED → DRAFT`.
 
-#### Decomposition checkpoint — before advancing to stage 2
+#### One piece of work — before advancing to stage 2
 
-Run these signals against the freshly written DRAFT. If **any** fire, stop and follow
-`.ledger/process/decomposition.md` instead of proceeding to stage 2.
-
-- **Unrelated concerns:** you can name ≥2 prospective child responsibilities with
-  non-overlapping data contracts (different files, types, or endpoints each would own).
-- **Single-implementer breach:** one agent cannot ship the full node in one worktree
-  session without itself having to dispatch sub-agents.
-- **Size already large:** the DRAFT spec is already pushing the token-size threshold
-  (default 12 000 tokens) or the implementation diff is clearly unbounded.
-- **Depth headroom exhausted:** this node already sits at nesting level 4, so any
-  children would exceed the depth cap with no written coordination justification in the
-  parent's Decisions section.
-- **≥3 independent top-level files:** the Design section lists ≥3 files that have no
-  shared type or interface dependency — a strong proxy for hidden multi-responsibility.
-
-If none fire, the node is a leaf. Proceed to stage 2.
+If you can name two pieces of work that do not share the same outcome, stop and write them as separate plans.
 
 #### Compute-heavy gating checkpoint — before advancing to stage 2
 
-A separate check from decomposition: does the node's acceptance criterion depend on a
+A separate check: does the node's acceptance criterion depend on a
 long-running probe, simulation, or benchmark (rough wall-clock >~15 min to execute)?
 
 If yes, record it in the Verification section (expected runtime, plus a note that
@@ -333,7 +316,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Requirements freeze before design.** Stage 1a commits Requirements at `PLANNED` and stops. The operator writes the confirmation date. Stage 1c is a fresh session that writes Design and does not edit Requirements. The session that wrote Requirements does not continue into design.
 
-- **Lifecycle states are real, not decorative.** Every state in the lifecycle map is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase, not only as a decomposition placeholder. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
+- **Lifecycle states are real, not decorative.** Every state in the lifecycle map is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
 
 - **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. The review audit is its own commit, and it does not change status. A `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. Stages whose only output is a transition (stages 2, 4a, 8b, and the approve commit after a `pass`) commit just the status bump. Stages that bundle a transition with substantive work (stages 1, 4c, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
