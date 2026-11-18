@@ -4,7 +4,7 @@
 that run them, `.claude/workflows/leaf-workflow.js` (stages 1–8) and
 `leaf-workflow-finish.js` (stages 9–11). Per-project knobs live in
 `.ledger/project.json` under `workflow`.
-**Last verified:** `350789833f56d18ec77f8d22b7062fafa91640b5` on `main`.
+**Last verified:** `f531fad825137e51ba44f49353d6e749d24378fd` on `main`.
 **Owning nodes:** [`11-workflow-scripts`](../11-workflow-scripts/00-workflow-scripts.md),
 [`12-workflow-decomposition`](../12-workflow-decomposition.md),
 [`13-reference-layer`](../13-reference-layer.md),
@@ -19,7 +19,7 @@ Scripts open `.ledger/project.json` themselves.
 
 | File | Lines | Role |
 |---|---:|---|
-| `.claude/workflows/leaf-workflow.js` | 979 | Stages 1–8. Worktree, implement, post-implementation pause, rebase, review, operator gate |
+| `.claude/workflows/leaf-workflow.js` | 977 | Stages 1–8. Worktree, implement, post-implementation pause, rebase, review, operator gate |
 | `.claude/workflows/leaf-workflow-finish.js` | 266 | Stages 9–11. Promote, merge, cleanup. Reference-doc check is in the Promote prompt |
 | `.ledger/process/leaf-workflow.md` | 410 | The playbook the scripts follow |
 | `.ledger/process/verification-signoff.md` | 119 | The one review result both reviews record. A review that ran advances only on `pass`. `skipSpecReview` still moves the node to `APPROVED` with no review section |
@@ -57,11 +57,11 @@ signal stops the draft and moves the operator to `decomposition.md`.
 |---|---|
 | `baseBranch` | `main` |
 | `rootDoc` | `00-project` |
-| `typesEntrypoint` | `app/src/lib/types.ts` |
-| `apiPort` / `uiPort` | `4180` / `4179` |
+| `typesEntrypoint` | `packages/parser/src/index.ts` |
+| `apiPort` | `4180` |
 | `worktreeSetup` | `ln -sf {repo}/.env {dir}/.env` |
-| `gates` | `pnpm -C {dir}/app` typecheck, lint, and build. Implement, rebase, and impl review pass the worktree as `{dir}`. Stage 10 passes the repo root |
-| `e2eGate` | `pnpm -C {dir}/e2e test` |
+| `gates` | parser build, then server typecheck, lint, and test. Implement, rebase, and impl review pass the worktree as `{dir}`. Stage 10 passes the repo root |
+| `e2eGate` | absent. The E2E stage is skipped |
 | `postImplementationGate` | absent. The pause does not run |
 
 `{dir}` is the worktree (or the repo, depending on the stage). `{repo}` is
@@ -79,7 +79,8 @@ on both the project object and the workflow object). Fields:
 | `baseBranch` | no | `main` |
 | `rootDoc` | no | `00-project` |
 | `typesEntrypoint` | no | Spec-review prompt skips the types bullet |
-| `apiPort`, `uiPort` | no | The schema text says default `4180` / `4179`, overridable by `LEDGER_PORT` / `LEDGER_UI_PORT`. The scripts do not read those env vars. Omitted `apiPort` stops `leaf-workflow.js` during Inspect. Both scripts default only `uiPort` to `4179` |
+| `apiPort` | no | Omitted `apiPort` stops `leaf-workflow.js` during Inspect. The script does not read `LEDGER_PORT`. `leaf-workflow-finish.js` defaults the cleanup port check to `4180` |
+| `uiPort` | no | Still accepted by the schema. Neither workflow script reads it |
 | `gates[]` | no | `{ label, command }`. Empty means no gate commands |
 | `e2eGate` | no | E2E stage skipped |
 | `worktreeSetup[]` | no | No setup after `git worktree add`. Steps must be idempotent and uncommitted |

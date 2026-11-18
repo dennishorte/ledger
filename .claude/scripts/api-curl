@@ -6,14 +6,10 @@
 # server endpoint introduced by 06-agent-dispatcher/01-mcp-server) — the
 # wrapper prepends http://localhost:<port>. Host is hardcoded to localhost
 # (resolves to either 127.0.0.1 or ::1, matching whichever address family
-# Vite/Hono bind to). Absolute URLs (anything containing "://") are
+# the API server binds to). Absolute URLs (anything containing "://") are
 # rejected, so the wrapper cannot be coerced into calling arbitrary hosts.
 #
-# By default the port is the Hono API server (LEDGER_PORT, default 4180).
-# Pass --via-ui to route through the Vite dev server (LEDGER_UI_PORT,
-# default 4179) instead — needed for endpoints served by Vite middleware
-# that the API proxy never sees (e.g. /api/transcripts/* via
-# app/server/middleware.ts).
+# The port is the Hono API server (LEDGER_PORT, default 4180).
 #
 # Pass -j / --json to suppress the curl progress meter and pretty-print
 # the response body through jq (falling back to python3 -m json.tool, or
@@ -32,27 +28,23 @@
 #   api-curl -N --max-time 3 /api/tasks/<id>/stream                        # SSE — don't combine with -j
 #   api-curl -H 'Last-Event-ID: 0' -N --max-time 3 /api/tasks/<id>/stream
 #   api-curl -o /dev/null -w '%{http_code}\n' /api/tasks/missing
-#   api-curl --via-ui -j /api/transcripts/<id>                             # Vite middleware
 #   api-curl -i -X POST /mcp -H 'Content-Type: application/json' \         # MCP initialize
 #     -H 'Accept: application/json, text/event-stream' \
 #     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}'
 set -euo pipefail
 
 if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
-  sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
-api_port="${LEDGER_PORT:-4180}"
-ui_port="${LEDGER_UI_PORT:-4179}"
-port="$api_port"
+port="${LEDGER_PORT:-4180}"
 json_mode=0
 
 # Pass 1 — peel off wrapper-owned flags + reject absolute URLs.
 filtered=()
 for arg in "$@"; do
   case "$arg" in
-    --via-ui) port="$ui_port" ;;
     -j|--json) json_mode=1 ;;
     *://*)
       echo "api-curl: absolute URLs are not allowed; use /api/<path>" >&2

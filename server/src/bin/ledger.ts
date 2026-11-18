@@ -2,7 +2,6 @@
 import { parseArgs } from "node:util";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
-import open from "open";
 import {
   createServer,
   loadProjectContext,
@@ -10,18 +9,17 @@ import {
   type ProjectContext,
 } from "../index.js";
 
-const USAGE = "usage: ledger <project-path> [--port N] [--no-open] [-h|--help]\n";
+const USAGE = "usage: ledger <project-path> [--port N] [-h|--help]\n";
 
 interface ParsedArgs {
   projectPath: string;
   port: number;
-  open: boolean;
   help: boolean;
 }
 
 function parseCliArgs(argv: string[]): ParsedArgs {
   let positionals!: string[];
-  let values!: { port: string; "no-open": boolean; help: boolean };
+  let values!: { port: string; help: boolean };
   try {
     ({ positionals, values } = parseArgs({
       args: argv,
@@ -29,7 +27,6 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       allowPositionals: true,
       options: {
         port: { type: "string", default: process.env["LEDGER_PORT"] ?? "4180" },
-        "no-open": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
     }));
@@ -66,7 +63,6 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   return {
     projectPath,
     port,
-    open: !values["no-open"],
     help: false,
   };
 }
@@ -106,15 +102,6 @@ async function main() {
         const url = `http://localhost:${boundPort.toString()}/`;
         process.stdout.write(`ledger: ${project.project.name} on ${url}\n`);
 
-        if (args.open) {
-          open(url).catch((err: unknown) => {
-            process.stderr.write(
-              `ledger: could not open browser (${(err as Error).message}); ${url} is ready\n`
-            );
-          });
-        }
-
-        // Graceful shutdown.
         const shutdown = () => {
           process.stdout.write("ledger: shutting down\n");
           server.close(() => process.exit(0));

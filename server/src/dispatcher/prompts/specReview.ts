@@ -24,7 +24,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "CLAUDE.md",
     ...(docPath ? [docPath] : []),
     ...(parentPath ? [parentPath] : []),
-    "app/src/lib/types.ts",
+    "packages/parser/src/index.ts",
     "packages/parser/src/runner/types.ts",
     ".ledger/process/leaf-workflow.md",
     ".ledger/process/verification-signoff.md",

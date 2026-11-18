@@ -108,8 +108,7 @@ export const tasksRoute = new Hono<ServerEnv>()
       // Heartbeat: SSE comment line (`: ping\n\n`) — invisible to EventSource
       // listeners but keeps TCP alive through proxies. S1: use stream.write,
       // NOT stream.writeSSE({event:"ping",...}) which emits a named-event
-      // frame visible to listeners. Same wire format as transcript bootstrap
-      // (app/server/middleware.ts:142) and parent §SSE contract.
+      // frame visible to listeners. Same wire format as the parent §SSE contract.
       const heartbeat = setInterval(() => {
         stream.write(": ping\n\n").catch(() => undefined);
       }, SSE_HEARTBEAT_MS);
@@ -189,7 +188,6 @@ export const tasksRoute = new Hono<ServerEnv>()
     const id = c.req.param("id");
     const deleted = project.runner.store.deleteTask(id);
     if (!deleted) return c.json({ error: "task_not_found" }, 404);
-    project.alerts.evict(id);
     return c.body(null, 204);
   })
   // -------------------------------------------------------------------------

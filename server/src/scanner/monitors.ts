@@ -14,9 +14,8 @@ const STABLE_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 // Priority tag, tolerant of the continuation forms used across the docs
-// ("(Priority: HIGH — …)", "(Priority: HIGH, …)", "(Priority: LOW.)"). Unlike
-// app/src/lib/parseIssues.ts it does NOT require a closing paren right after the
-// word — that parser under-tags the em-dash form (see 07-health-daemon v2.1).
+// ("(Priority: HIGH — …)", "(Priority: HIGH, …)", "(Priority: LOW.)"). It does
+// not require a closing paren right after the word (07-health-daemon v2.1).
 const PRIORITY_RE = /\(Priority:\s*(HIGH|MEDIUM|LOW|TRIVIAL)/i;
 
 type Priority = "HIGH" | "MEDIUM" | "LOW" | "TRIVIAL" | "UNKNOWN";

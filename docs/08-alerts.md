@@ -2,9 +2,9 @@
 
 **Node ID:** `08-alerts`
 **Parent:** project root (`docs/00-project.md`)
-**Status:** COMPLETE (v1, 2026-06-08)
+**Status:** DEPRECATED (2026-11-17 — the failure-push channel was removed with the UI. A failed task stays a failed task in the runner; nothing pushes it.)
 **Created:** 2026-06-07
-**Last Updated:** 2026-06-08 (operator browser sign-off — VERIFY → COMPLETE)
+**Last Updated:** 2026-11-17
 
 **Dependencies:** `05-task-runner`, `01-ui/01-shell`
 
@@ -114,6 +114,8 @@ export interface EventBus {
 - **Ring eviction silently drops resume backfill beyond 50 alerts.** A `Last-Event-ID` resume after >50 alerts since the referenced seq returns only what survives in the ring (review N2). Matches the bounded-ring design (D7); acceptable for v1. *(Priority: TRIVIAL)*
 
 ## Implementation Notes
+
+Removed 2026-11-17. `server/src/alerts/`, `GET /api/alerts`, the webhook, and the `Alert` type are gone. `subscribeAll` is gone with them. The task log still records `FAILED`.
 
 **Shipped 2026-06-07.** Files: `packages/parser/src/alerts/types.ts` (`Alert`, exported via `index.ts`); `server/src/runner/events.ts` (additive `subscribeAll` on the COMPLETE-node EventBus — per-task `subscribe` unchanged); `server/src/alerts/channel.ts` (global observer, dedup `Set`, ring cap 50, report-only — store typed `Pick<Store, "loadTask" | "getEvents">` so writes are structurally impossible); `server/src/alerts/webhook.ts` (fire-and-forget `fetch` POST, 5 s `AbortController`, failures swallowed); `server/src/routes/alerts.ts` (`GET /api/alerts` + `/stream` SSE with idempotent re-entrant flush) mounted in `server.ts`; `context.ts` wires `ctx.alerts`, created + attached **after** `createRunnerForProject` (Req 6). UI: `app/src/lib/useAlertStream.ts`, `app/src/components/layout/AlertBanner.tsx` mounted in `AppShell`, `Alert` re-exported from `app/src/lib/types.ts`.
 

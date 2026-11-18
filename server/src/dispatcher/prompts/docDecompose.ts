@@ -169,7 +169,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
   ].join("\n");
 
   const modeFraming = isRetroactive
-    ? `This target is **${childStatus}** — its work has already shipped. You are **reorganizing existing documentation**, not planning new work. Each child must describe the *actual implemented design* extracted from the parent — read the referenced source under \`app/\`, \`server/\`, \`packages/\` as needed to stay accurate. Children inherit the target's \`${childStatus}\` status; write their Verification in the **past tense** (what was built and how it was confirmed). Do NOT invent scope or write forward-looking stubs.`
+    ? `This target is **${childStatus}** — its work has already shipped. You are **reorganizing existing documentation**, not planning new work. Each child must describe the *actual implemented design* extracted from the parent — read the referenced source under \`server/\` and \`packages/\` as needed to stay accurate. Children inherit the target's \`${childStatus}\` status; write their Verification in the **past tense** (what was built and how it was confirmed). Do NOT invent scope or write forward-looking stubs.`
     : `This target is **${targetStatus ?? "not yet built"}** — its work is not yet implemented. You are **decomposing forward scope**. New children start at \`PLANNED\` as requirements seeds, not designs. Requirements holds the child's one-line responsibility as the Outcome, leaves Acceptance, Constraints, and Out of scope as \`_(operator)_\`, and sets \`**Requirements confirmed:** unconfirmed\`. Design is \`*(not started — requirements unconfirmed)*\`. Do not write a design into a forward child. The leaf-workflow requirements phase fills the rest.`;
 
   const statusStep = isRetroactive

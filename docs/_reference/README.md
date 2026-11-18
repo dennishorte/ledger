@@ -12,7 +12,7 @@ only, rewritten when reality changes. [`13-reference-layer`](../13-reference-lay
 
 These files are framework-internal. Any `docs/` path with an `_`-prefixed
 directory segment is skipped by the parser (`packages/parser/src/schema/parseDocNode.ts`,
-`packages/parser/src/docs/buildDocGraph.ts`, `app/server/serverIdForPath.ts`),
+`packages/parser/src/docs/buildDocGraph.ts`),
 so nothing here appears in the document graph or carries a lifecycle status.
 
 ## Index
@@ -24,8 +24,6 @@ so nothing here appears in the document graph or carries a lifecycle status.
 | [`task-runner.md`](task-runner.md) | SQLite runner | Tasks, events, scheduler, human review |
 | [`dispatcher.md`](dispatcher.md) | Agent dispatch | MCP tools, `claude` subprocess, prompts |
 | [`health-scanner.md`](health-scanner.md) | On-demand scanner | Size, open-issue, schema-invalid findings |
-| [`alerts.md`](alerts.md) | Failure push channel | In-memory alerts, SSE, webhook |
-| [`ui.md`](ui.md) | `app/` | Routes, data hooks, two task sources |
 | [`workflow.md`](workflow.md) | Operator playbooks + scripts | Leaf workflow stages, `project.json` `workflow` block |
 
 ## Rules

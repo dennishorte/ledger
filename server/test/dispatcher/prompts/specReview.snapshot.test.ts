@@ -56,7 +56,7 @@ describe("specReview template snapshot", () => {
       Load these files via the Read tool before acting. They establish constraints you must honour:
 
       - CLAUDE.md
-      - app/src/lib/types.ts
+      - packages/parser/src/index.ts
       - packages/parser/src/runner/types.ts
       - .ledger/process/leaf-workflow.md
       - .ledger/process/verification-signoff.md

@@ -1,9 +1,7 @@
 /**
  * Tests for validateProjectMetadata — pure validator for .ledger/project.json.
  *
- * Fixture-based tests only. The module-singleton test (projectMetadata.ok === true)
- * stays in app/src/lib/project/loadProjectMetadata.test.ts because it requires
- * the Vite-import of .ledger/project.json.
+ * Fixture-based tests only. The Vite singleton check left with the UI.
  */
 
 import { describe, it, expect } from "vitest";

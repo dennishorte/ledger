@@ -3,7 +3,7 @@
 **Scope:** `server/src/dispatcher/`. Turns a runner task into a `claude`
 subprocess, and exposes five MCP tools that subprocess uses to write events
 and finish.
-**Last verified:** `350789833f56d18ec77f8d22b7062fafa91640b5` on `main`.
+**Last verified:** `f531fad825137e51ba44f49353d6e749d24378fd` on `main`.
 **Owning nodes:** [`06-agent-dispatcher`](../06-agent-dispatcher/00-agent-dispatcher.md)
 children `01-mcp-server`, `02-runner-tools`, `03-claude-code-executor`,
 `04-prompt-templates`, `05-dispatch-api`.
@@ -152,10 +152,9 @@ does not. Boot already refused a missing key (`context.ts`).
 
 ## 6. Active migration
 
-Transcript ingestion is still a second path beside this dispatcher. Runner
-events written by these tools are the dispatch source of truth; Claude Code
-JSONL is parsed only by the Vite middleware. Retirement is
-[`09-transcript-decouple`](../09-transcript-decouple.md) (DRAFT).
+Runner events written by these tools are the task log.
+[`09-transcript-decouple`](../09-transcript-decouple.md) is still DRAFT and
+has no code in this package.
 
 `15-review-decisions` is PLANNED. It does not yet change these prompts.
 Review behavior they already encode is the matrix in

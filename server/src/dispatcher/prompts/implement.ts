@@ -23,8 +23,8 @@ export default function render(task: Task, ctx: ProjectContext): string {
     "CLAUDE.md",
     ...(docPath ? [docPath] : []),
     ...(parentPath ? [parentPath] : []),
+    "packages/parser/src/index.ts",
     "packages/parser/src/runner/types.ts",
-    "app/src/lib/types.ts",
   ];
 
   const docRef = docPath ?? `(spec doc for node ${task.id} — resolve via resolveDocPath)`;

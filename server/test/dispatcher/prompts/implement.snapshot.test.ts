@@ -56,8 +56,8 @@ describe("implement template snapshot", () => {
       Load these files via the Read tool before acting. They establish constraints you must honour:
 
       - CLAUDE.md
+      - packages/parser/src/index.ts
       - packages/parser/src/runner/types.ts
-      - app/src/lib/types.ts
 
       ## Success criteria
 

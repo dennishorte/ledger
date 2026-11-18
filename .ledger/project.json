@@ -6,17 +6,16 @@
   "workflow": {
     "baseBranch": "main",
     "rootDoc": "00-project",
-    "typesEntrypoint": "app/src/lib/types.ts",
+    "typesEntrypoint": "packages/parser/src/index.ts",
     "apiPort": 4180,
-    "uiPort": 4179,
     "worktreeSetup": [
       { "label": "link-env", "command": "ln -sf {repo}/.env {dir}/.env" }
     ],
     "gates": [
-      { "label": "typecheck", "command": "pnpm -C {dir}/app typecheck" },
-      { "label": "lint",      "command": "pnpm -C {dir}/app lint" },
-      { "label": "build",     "command": "pnpm -C {dir}/app build" }
-    ],
-    "e2eGate": "pnpm -C {dir}/e2e test"
+      { "label": "parser-build", "command": "pnpm -C {dir}/packages/parser build" },
+      { "label": "server-typecheck", "command": "pnpm -C {dir}/server typecheck" },
+      { "label": "server-lint", "command": "pnpm -C {dir}/server lint" },
+      { "label": "server-test", "command": "pnpm -C {dir}/server test" }
+    ]
   }
 }

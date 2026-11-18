@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create a new ledger-managed project.
-# Usage: new-project <project-path> [--name NAME] [--app-port N] [--api-port N]
+# Usage: new-project <project-path> [--name NAME] --api-port N
 #
 # Idempotent: existing files/dirs are left untouched (skipped with a notice).
 set -euo pipefail
@@ -8,20 +8,19 @@ set -euo pipefail
 LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 usage() {
-  echo "usage: new-project <project-path> [--name NAME] [--app-port N] [--api-port N]" >&2
+  echo "usage: new-project <project-path> [--name NAME] --api-port N" >&2
   exit 2
 }
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 PROJECT_PATH=""
 PROJECT_NAME=""
-APP_PORT=""
 API_PORT=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --name)     PROJECT_NAME="$2"; shift 2 ;;
-    --app-port) APP_PORT="$2";     shift 2 ;;
+    --app-port) echo "new-project: --app-port is ignored; the ledger UI has been removed" >&2; shift 2 ;;
     --api-port) API_PORT="$2";     shift 2 ;;
     -h|--help)  usage ;;
     -*)         echo "new-project: unknown option: $1" >&2; usage ;;
@@ -45,20 +44,14 @@ fi
 
 [[ -z "$PROJECT_NAME" ]] && PROJECT_NAME="$(basename "$PROJECT_PATH")"
 
-if [[ -z "$APP_PORT" || -z "$API_PORT" ]]; then
-  echo "new-project: --app-port and --api-port are required" >&2
-  echo "(example: new-project ~/code/myproject --app-port 4181 --api-port 4182)" >&2
+if [[ -z "$API_PORT" ]]; then
+  echo "new-project: --api-port is required" >&2
+  echo "(example: new-project ~/code/myproject --api-port 4182)" >&2
   exit 2
 fi
 
-for port in "$APP_PORT" "$API_PORT"; do
-  if ! [[ "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 || "$port" -gt 65535 ]]; then
-    echo "new-project: invalid port: $port" >&2; exit 2
-  fi
-done
-
-if [[ "$APP_PORT" == "$API_PORT" ]]; then
-  echo "new-project: --app-port and --api-port must be different" >&2; exit 2
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || [[ "$API_PORT" -lt 1 || "$API_PORT" -gt 65535 ]]; then
+  echo "new-project: invalid port: $API_PORT" >&2; exit 2
 fi
 
 TODAY="$(date +%Y-%m-%d)"
@@ -200,10 +193,10 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 ## Running the project
 
 ```bash
-./dev.sh        # starts the ledger UI at http://localhost:{{APP_PORT}}
+./dev.sh        # starts the ledger API at http://localhost:{{API_PORT}}
 ```
 
-The ledger UI (`/dag` panel) shows the live document DAG, node statuses, and inspector. The task runner panel shows dispatched agent tasks.
+The API serves the document graph, the task runner, and dispatch. There is no ledger UI.
 
 ## Documentation discipline
 
@@ -253,7 +246,7 @@ DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
 CLAUDE_MD_EOF
   sed -i '' \
     -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
-    -e "s/{{APP_PORT}}/$APP_PORT/g" \
+    -e "s/{{API_PORT}}/$API_PORT/g" \
     "$PROJECT_PATH/CLAUDE.md"
   echo "  write $PROJECT_PATH/CLAUDE.md"
 fi
@@ -268,30 +261,24 @@ write_file "$PROJECT_PATH/.gitignore" \
 # ── dev.sh ────────────────────────────────────────────────────────────────────
 DEV_SH_CONTENT="#!/usr/bin/env bash
 # Start ledger for: $PROJECT_NAME
-#   App UI:  http://localhost:$APP_PORT
-#   API:     http://localhost:$API_PORT
+#   API: http://localhost:$API_PORT
 set -euo pipefail
 
 LEDGER_DIR=\"$LEDGER_DIR\"
 PROJECT_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
 
-APP_PORT=$APP_PORT
 API_PORT=$API_PORT
 
 echo \"Starting ledger for: \$(basename \"\$PROJECT_DIR\")\"
-echo \"  App UI: http://localhost:\$APP_PORT\"
-echo \"  API:    http://localhost:\$API_PORT\"
+echo \"  API: http://localhost:\$API_PORT\"
 echo \"\"
 
 LEDGER_PORT=\$API_PORT pnpm -C \"\$LEDGER_DIR/server\" dev \"\$PROJECT_DIR\" &
 SERVER_PID=\$!
 
-LEDGER_APP_PORT=\$APP_PORT LEDGER_API_PORT=\$API_PORT pnpm -C \"\$LEDGER_DIR/app\" dev &
-APP_PID=\$!
-
-cleanup() { kill \"\$SERVER_PID\" \"\$APP_PID\" 2>/dev/null || true; }
+cleanup() { kill \"\$SERVER_PID\" 2>/dev/null || true; }
 trap cleanup INT TERM
-wait \"\$SERVER_PID\" \"\$APP_PID\""
+wait \"\$SERVER_PID\""
 
 if [[ -e "$PROJECT_PATH/dev.sh" ]]; then
   echo "  skip  $PROJECT_PATH/dev.sh  (already exists)"

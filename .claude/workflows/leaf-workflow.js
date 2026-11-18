@@ -206,14 +206,12 @@ const wf = projectCfg.workflow ?? {}
 const docsDir      = projectCfg.docs ?? 'docs'
 const rootDoc      = wf.rootDoc ?? '00-project'
 const apiPort      = wf.apiPort
-const uiPort       = wf.uiPort ?? 4179
 
 if (!apiPort) {
-  return { status: 'manual-needed', message: 'API port not configured: set LEDGER_PORT env var or add "workflow.apiPort" to .ledger/project.json' }
+  return { status: 'manual-needed', message: 'API port not configured: set workflow.apiPort in .ledger/project.json' }
 }
 
 const apiBaseUrl   = 'http://localhost:' + apiPort
-const uiBaseUrl    = 'http://localhost:' + uiPort
 const gateCommands = wf.gates ?? []
 const worktreeSetup = wf.worktreeSetup ?? []
 const e2eCommand   = wf.e2eGate ?? null
@@ -296,7 +294,7 @@ async function runPostImplGate(round, wtPath, brName) {
   // false) — the sanctioned vehicles are resourceClaims (structured) and reviewPayload
   // (human_review-specific: summary + diffRef). worktreePath/branchName/round are not
   // read back from the task by the resume path (see resumeRoundArg above); reviewPayload
-  // here is purely for the operator to read in the Tasks panel.
+  // here is purely for the operator to read on the task (GET /api/tasks/:id).
   const taskPayload = JSON.stringify({
     type: 'human_review',
     title: 'Operator gate: ' + nodeId + ' post-implementation artifact ready for review (round ' + round + ')',
@@ -879,7 +877,7 @@ if (runImplReview) {
     'Return REVIEW_SCHEMA. The result is defined in verification-signoff.md. Do not restate which rows produce which result.\n' +
     (implDisposition === 'changes-required'
       ? 'This is a rerun. Rows: the ones the previous review failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. Run the same gates.\n'
-      : 'Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. A check that needs a person in the browser is N/A — operator gate.\n') +
+      : 'Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. A check that needs a person is N/A — operator gate.\n') +
     'PASS requires file:line or gate exit code.',
     { schema: REVIEW_SCHEMA, label: 'impl-review', phase: 'Impl Review' }
   )
@@ -947,7 +945,7 @@ const taskPayload = JSON.stringify({
   resourceClaims: [{ kind: 'node', nodeId: nodeId, mode: 'write' }],
   reviewPayload: {
     summary: 'Node ' + nodeId + '. Worktree: ' + worktreePath + '. Branch: ' + branchName + '. ' +
-      'Walk browser acceptance items, then approve or reject.',
+      'Check the worktree, then approve or reject with POST /api/tasks/:id/approve or /reject.',
     diffRef: worktreePath,
   },
 })
@@ -965,7 +963,7 @@ const gateResult = await callAgent(
 
 const humanReviewTaskId = gateResult.id
 log('Gate task: ' + humanReviewTaskId)
-log('Open ' + uiBaseUrl + ' → Tasks to approve/reject')
+log('Approve or reject via POST ' + apiBaseUrl + '/api/tasks/' + humanReviewTaskId + '/approve or /reject')
 
 return {
   nodeId,
@@ -974,6 +972,6 @@ return {
   branchName,
   humanReviewTaskId,
   implReviewDisposition: implReview ? implReview.disposition : 'skipped',
-  nextStep: 'Walk acceptance checks, then approve/reject the human_review task in the Tasks panel.',
+  nextStep: 'Check the worktree, then approve or reject the human_review task with POST /api/tasks/' + humanReviewTaskId + '/approve or /reject.',
   finishWorkflow: 'Workflow({ name: "leaf-workflow-finish", args: { nodeId: "' + nodeId + '", worktreePath: "' + worktreePath + '", branchName: "' + branchName + '" } })',
 }

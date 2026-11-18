@@ -2,7 +2,7 @@
 
 **Scope:** `server/src/runner/`. SQLite task store, scheduler, human-review
 gate. Domain types live in `@ledger/parser` ([`parser.md`](parser.md)).
-**Last verified:** `350789833f56d18ec77f8d22b7062fafa91640b5` on `main`.
+**Last verified:** `f531fad825137e51ba44f49353d6e749d24378fd` on `main`.
 **Owning nodes:** [`05-task-runner`](../05-task-runner/00-task-runner.md) and
 its children `01-store-schema`, `02-scheduler`, `03-hitl-gate`, `04-api-endpoints`.
 **Regenerate the module map:** `find server/src/runner -type f \( -name '*.ts' -o -name '*.sql' \) | sort | while read f; do printf '%5d  %s\n' "$(wc -l < "$f")" "$f"; done`
@@ -20,7 +20,7 @@ Database file: `<project>/.ledger/runner.db` (WAL sidecars `runner.db-wal`,
 | `scheduler.ts` | 300 | Tick loop, status reasons, `recoverOrphans` |
 | `conflict.ts` | 28 | `conflicts(a, b)` — write/write or write/read on the same target |
 | `executors.ts` | 55 | `Executor`, `RunnerHandle`, `noop`, `human_review`, default registry |
-| `events.ts` | 134 | In-process bus. `withPublishing` emits after `createTask`, `appendEvent`, and `updateTaskStatus`. `deleteTask`, `updateReviewPayload`, and `insertScan` are not published. `subscribeAll` is what alerts use |
+| `events.ts` | 109 | In-process bus. `withPublishing` emits after `createTask`, `appendEvent`, and `updateTaskStatus`. `deleteTask`, `updateReviewPayload`, and `insertScan` are not published |
 | `ids.ts` | 16 | UUIDv4 task and event ids |
 | `migrations/runner.ts` | 69 | Apply `NNN-*.sql` in order. `PRAGMA user_version` advances after each commit |
 | `migrations/001-initial.sql` | 44 | `tasks`, `events`, `migrations` |
@@ -40,7 +40,7 @@ Current schema version is `user_version=2`. A boot with nothing pending logs
 | `runner.handle.complete` / `fail` | `RUNNING` → `COMPLETE` or `FAILED`, then tick |
 | `runner.handle.awaitHumanReview` | `RUNNING` → `AWAITING_HUMAN_REVIEW`. Does not tick |
 | `runner.handle.emit` | Append a non-status event |
-| `recoverOrphans(store)` | Every `RUNNING` row → `FAILED` reason `orphaned_on_restart`. Runs before the alert channel attaches |
+| `recoverOrphans(store)` | Every `RUNNING` row → `FAILED` reason `orphaned_on_restart` |
 
 Built-in executors (`executors.ts`): `noop` completes immediately.
 `human_review` calls `awaitHumanReview`. `loadProjectContext` then registers
@@ -107,7 +107,7 @@ with a space after the colon and the full message. That string is not in
 | `tasks`, `events`, `health_scans` | SQLite file | Yes |
 | `db_row_version` | Column on the task row | Yes. HITL clients send it back |
 | Executor registry | `Map` on the `Runner` | No. Rebuilt at boot: `noop`, `human_review`, then the nine Claude types |
-| Event bus subscribers | In-process | No. Alert attach happens after orphan recovery so a restart does not re-push old failures |
+| Event bus subscribers | In-process | No. Per-task log streams subscribe for one task id |
 | `ticking` / `pending` | Two booleans on the tick trampoline | No |
 
 `listPendingEligible` is the only read the tick uses for candidates. Claim
@@ -137,8 +137,5 @@ The store is at migration 002. There is no pending migration in
 `server/src/runner/migrations/`.
 
 `TaskSource` still includes `daemon_triggered`. The v2 scanner does not
-create tasks. The value is unused by current writers.
-
-Replay of the event log as a UI mode is deferred (`07-replay`,
-[`00-project`](../00-project.md) §8.6). The log itself is this `events` table.
-The `/replay/:subtree` route renders an empty state ([`ui.md`](ui.md)).
+create tasks. The value is unused by current writers. The task log is the
+`events` table.

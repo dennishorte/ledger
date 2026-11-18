@@ -2,9 +2,9 @@
 
 **Node ID:** `10-e2e-testing`  
 **Parent:** project root (`docs/00-project.md`)  
-**Status:** COMPLETE  
-**Created:** 2026-06-09  
-**Last Updated:** 2026-06-09  
+**Status:** DEPRECATED (2026-11-17 — `e2e/` removed with the UI)
+**Created:** 2026-06-09
+**Last Updated:** 2026-11-17  
 **Dependencies:** `04-api-server`, `01-ui`
 
 ---
@@ -123,6 +123,8 @@ V1 accepts residual test tasks in the DB across runs — seeded tasks accumulate
 ---
 
 ## Implementation Notes
+
+Removed 2026-11-17 with `app/`. The package tested the browser UI. Server tests in `server/test/` remain.
 
 - `@playwright/test@^1.49.0` — chromium headless shell only; other browsers not installed (v1 scope is Chromium).
 - `reuseExistingServer: !process.env.CI` — locally reuses the running stack; boots fresh servers in CI.

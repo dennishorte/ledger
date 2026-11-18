@@ -63,8 +63,8 @@ describe("ledger CLI", () => {
     expect(r.stderr).toMatch(/usage: ledger/);
   });
 
-  it("boots the server with --no-open and serves /api/_health", async () => {
-    const proc = spawn(process.execPath, [binPath, fixturePath, "--port", "0", "--no-open"], {
+  it("boots the server and serves /api/_health", async () => {
+    const proc = spawn(process.execPath, [binPath, fixturePath, "--port", "0"], {
       stdio: ["ignore", "pipe", "pipe"],
     });
     try {
@@ -93,7 +93,7 @@ describe("ledger CLI", () => {
   });
 
   it("respects LEDGER_PORT env var when --port absent", async () => {
-    const proc = spawn(process.execPath, [binPath, fixturePath, "--no-open"], {
+    const proc = spawn(process.execPath, [binPath, fixturePath], {
       env: { ...process.env, LEDGER_PORT: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
