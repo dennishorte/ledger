@@ -122,7 +122,7 @@ export default function render(task: Task, ctx: ProjectContext): string {
     : "*(not started)*";
   const verificationBody = isRetroactive
     ? "What was built and how it was confirmed (past tense)."
-    : "*(not started — same checks as Requirements, written before design)*";
+    : "*(not started)*";
 
   // The exact schema both the reduced parent and every new child must satisfy.
   // (docs/_schemas/document-node.schema.json, validated by @ledger/parser.)

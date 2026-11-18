@@ -164,9 +164,9 @@ Entry-state mapping (requirements phase, 2026-11-04 — a node already at `DRAFT
 
 ### Stage 1 (Requirements, then design) agent prompt outline
 
-Stage 1a, when `NOT_FOUND` or `PLANNED` without a dated confirmation: write Requirements and a matching Verification, leave Design as `*(not started)*` unless it already has real content, Status stays `PLANNED`, commit `"docs(${leafId}): PLANNED requirements"`, and return. The script does not continue into design in that run. Optional `args.ask` is copied verbatim where it already states the outcome, the checks, or the out-of-scope line. Missing pieces stay `_(operator)_`.
+Stage 1a, when `NOT_FOUND` or `PLANNED` without a dated confirmation: write Requirements and a Verification test plan (for each acceptance check, the setup, the action, and what a person looks at; the acceptance wording stays in Acceptance), leave Design as `*(not started)*` unless it already has real content, Status stays `PLANNED`, commit `"docs(${leafId}): PLANNED requirements"`, and return. The script does not continue into design in that run. Optional `args.ask` is copied verbatim where it already states the outcome, the checks, or the out-of-scope line. Missing pieces stay `_(operator)_`.
 
-Stage 1c, on a later run once `**Requirements confirmed:**` is a date: a fresh agent writes Design against that text, does not edit Requirements, bumps `PLANNED → DRAFT`, and commits `"docs(${leafId}): PLANNED → DRAFT"`. If a placeholder is still `_(operator)_`, it returns `advanced: false` and the script stops again.
+Stage 1c, on a later run once `**Requirements confirmed:**` is a date: a fresh agent writes Design against that text, does not edit Requirements, makes the Verification test plan runnable, bumps `PLANNED → DRAFT`, and commits `"docs(${leafId}): PLANNED → DRAFT"`. If a placeholder is still `_(operator)_`, it returns `advanced: false` and the script stops again.
 
 ### Stage 2 (Spec Review) agent prompt outline
 
