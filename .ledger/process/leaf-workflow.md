@@ -134,11 +134,11 @@ Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and upda
 Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) and brief it:
 
 - Pointer to the spec doc.
-- Required reading: relevant PRD sections, parent doc, sibling specs as house-style benchmarks, existing types at `workflow.typesEntrypoint` (this repo: `packages/parser/src/index.ts`).
+- Required reading: relevant sections of `docs/00-project.md`, the parent doc, and sibling specs as house-style benchmarks.
 - Evaluation criteria: requirements fidelity (`.ledger/process/verification-signoff.md`), then schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment.
 - Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: fidelity F1, F2, F3, then one row per product-requirements item the spec must cover and one per Requirements bullet.
 
-The reviewer runs in clean context so it can give independent judgment — the framework's mitigation for the self-audit problem (PRD §11). The agent that wrote the spec cannot reliably check its own work.
+The reviewer runs in a fresh context so the judgment is independent. The agent that wrote the spec cannot reliably check its own work.
 
 Spec review runs against a `DRAFT`. A `PLANNED` node has not finished stage 1. Do not dispatch a reviewer at a doc whose `**Requirements confirmed:**` line is missing or `unconfirmed`, unless the node was already `DRAFT` or later before the requirements phase (no confirmation line, and Design is already written).
 
@@ -337,7 +337,7 @@ Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY 
 
 - **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. The review audit is its own commit, and it does not change status. A `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. Stages whose only output is a transition (stages 2, 4a, 8b, and the approve commit after a `pass`) commit just the status bump. Stages that bundle a transition with substantive work (stages 1, 4c, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
 
-- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. This is the self-audit mitigation from PRD §11. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps. The *spec* review (stage 2) may be skipped on a small, trusted spec — the operator's call. The *implementation* review (stage 6) is non-negotiable; no shortcut applies.
+- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps. The *spec* review (stage 2) may be skipped on a small, trusted spec — the operator's call. The *implementation* review (stage 6) is non-negotiable; no shortcut applies.
 
 - **Rebase before review** (stage 5). Eliminates the branch-divergence "deletion" artifact and surfaces merge conflicts early. Reviewer sees a clean diff; the merge in stage 10 is mechanical.
 

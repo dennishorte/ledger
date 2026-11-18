@@ -23,7 +23,7 @@ If a `size` health finding is what brought you here, also read `doc-size-resolut
 
 ## Step 1 — Name the children by data contract
 
-Before writing anything, list the prospective children and the **distinct data contract each owns** (the file/type/endpoint it is authoritative for). If two children would write the same surface, the boundary is wrong — merge them or move the contested surface to one owner. This is the same set-intersection logic the scheduler's conflict primitive enforces at runtime (§6.3); catching the overlap here is cheaper than catching it at rebase.
+Before writing anything, list the prospective children and the **distinct data contract each owns** (the file/type/endpoint it is authoritative for). If two children would write the same surface, the boundary is wrong — merge them or move the contested surface to one owner. Catching the overlap here is cheaper than catching it when the second worktree is rebased.
 
 Record the contracts — they become the children-manifest dependency declarations.
 

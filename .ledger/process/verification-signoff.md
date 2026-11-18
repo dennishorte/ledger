@@ -2,7 +2,7 @@
 
 The structured output every independent review produces — spec review (leaf-workflow stage 2) and implementation review (stage 6). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
 
-This is the framework's standing mitigation for the **self-audit problem** (PRD §11): the agent that wrote an artifact cannot reliably check its own work, so the check runs in an independent context *and* is forced into a shape that rubber-stamping cannot satisfy. Independence (clean context) supplies the *who*; this format supplies the *rigor*.
+The person who wrote an artifact cannot reliably check their own work, so the check runs in an independent context and is forced into a shape that a rubber stamp cannot satisfy. A fresh context supplies the independence. This format supplies the check.
 
 ---
 

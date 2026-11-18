@@ -105,23 +105,18 @@ Identical to leaf-workflow §11.
 - **One round = one subtree.** Cross-subtree maintenance happens via serial rounds, each owned by that subtree's own `99-maintenance/`. This keeps each round's resource claims narrow and each SPEC_REVIEW focused.
 - **Cross-references on siblings are durable.** The strikethrough-plus-pointer convention on stage 10 is the maintenance equivalent of the audit-tables-stay-forever rule. A reader bisecting a regression should be able to trace from a symptom on `04-tasks` to the resolution in `99-maintenance/01-round-1` in one hop.
 - **Discovered-mid-round bugs go to the next round.** The implementer in stage 4 will sometimes find a related bug while patching a curated item. Do not expand the current round's scope. File the new finding into the originating leaf's Open Issues and pick it up in round N+1. Expanding scope mid-stream invalidates the SPEC_REVIEW pass.
-- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." Until the health daemon exists (PRD §6.4), this is a manual reading pass over the subtree's Open Issues sections — plus a stamp sweep of the living docs at the top of `docs/`: a doc whose cited files have commits after its **Last verified** stamp (`git log <stamp>..HEAD -- <cited paths>`) is punch-list material.
+- **Rounds are operator-triggered, not scheduled.** No cadence is prescribed. The trigger is operator judgement: "the accumulated punch list is round-sized." The operator reads the subtree's Open Issues sections, and sweeps the living docs at the top of `docs/`: a doc whose cited files have commits after its **Last verified** stamp (`git log <stamp>..HEAD -- <cited paths>`) is punch-list material.
 
 ---
 
 ## Known limitations
 
-- **No automatic accumulation surfacing.** The operator decides when a subtree's Open Issues backlog has crossed the round-worth threshold by reading sibling docs manually. The eventual fix is the health daemon (PRD §6.4) emitting a `maintenance_round_ready` signal when a subtree's Open Issues count crosses a configurable threshold.
+- **No automatic accumulation surfacing.** The operator decides when a subtree's Open Issues backlog has crossed the round-worth threshold by reading sibling docs.
 - **No deduplication assistance.** If the same Open Issue text appears across multiple siblings (e.g., one token-naming inconsistency observed by three different panel implementers), the operator dedupes by hand when assembling the round's Requirements punch list.
-- **Strikethrough churn on siblings.** A heavily-maintained subtree's COMPLETE leaves will accumulate strikethrough bullets in their Open Issues sections over time. This is intentional (durable provenance), but a future reader scanning a sibling for "current" issues must visually filter out the addressed-by-round entries. Consider this a sign that the sibling needs `doc_refactor` (PRD §6.5) to archive the resolved history.
+- **Strikethrough churn on siblings.** A heavily-maintained subtree's COMPLETE leaves will accumulate strikethrough bullets in their Open Issues sections over time. A reader scanning a sibling for current issues has to see past the addressed ones. When that history is the bulk of the file, clean or split it with `doc-size-resolution.md`.
 
 ---
 
-## What changes when the framework is built
+## The round stays manual
 
-- The health daemon (PRD §6.4) emits `maintenance_round_ready` tasks when a subtree's Open Issues backlog crosses a configurable threshold — Requirements stage 1 becomes prefilled.
-- The curated-list judgement (which Open Issues batch well together) becomes an `issue_triage` task type, run by the dispatcher with the same reviewer-in-clean-context discipline as today's SPEC_REVIEW pass.
-- Strikethrough cross-references on sibling leaves (stage 10) become bidirectional doc-graph edges maintained by the orchestration layer; the manual edit step disappears.
-- Multi-subtree coordination (today: serial rounds) becomes parallel rounds with resource-claim arbitration handling cross-subtree conflicts.
-
-The *shape* of the workflow — full lifecycle per round, two review gates, audit tables, durable cross-references — stays the same. Automation removes the operator from per-step driving, not from the review discipline.
+The operator notices the punch list by reading. A round starts when someone writes the node. The lifecycle, the two reviews, and the cross-references stay in the documents.
