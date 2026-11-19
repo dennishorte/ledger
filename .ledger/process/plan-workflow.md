@@ -1,355 +1,163 @@
 # Plan workflow
 
-**Status:** LIVING (revise when the framework's automation reshapes the procedure)
-**Last Updated:** 2026-11-17 (Verification is the test plan for the acceptance checks; it does not repeat them)
+The procedure for one plan. The plan is a temporary file in `docs/_plans/`. A plan with no parent is removed when its lasting outcome has been written into the system record. A sub-plan stays until that parent is removed. The record's pages are specified in `.ledger/process/system-record.md`.
 
-The standardised procedure for taking a plan from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
+A plan with one outcome walks seven steps. A plan whose outcome is made of several pieces records the decisions those pieces share, creates a sub-plan for each piece, and waits for them. The person running the project confirms the outcome, confirms the requirements, and accepts the finished work. An agent writes each artifact between those moments, and a different agent reviews it in a fresh session.
 
-A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into the system record, and then the node is removed. The record's pages are specified in `.ledger/process/system-record.md`.
+`verification-signoff.md` is the review matrix and the only definition of `pass`. A step advances only when its disposition is `pass`. The row lists in this file are what that matrix covers for each step.
 
-Reopening a node that has **already reached COMPLETE** — to finish deferred scope or to extend it — is a back-edge the forward stages don't draw. It is covered in **Reopen mode** below. Do not improvise it as an ad-hoc pass; classify it first.
+## The steps
 
----
+1. **Outcome.** What is true when the work is done. A high-level outcome may name the pieces that make it true. The person confirms it.
+2. **Requirements.** The checks, the constraints, and what is out of scope. The person confirms them. A plan that has sub-outcomes does this inside each sub-plan, after the shared decisions.
+3. **Test design.** How each check is decided. An independent review.
+4. **Test implementation.** Those checks become executable tests. An independent review.
+5. **Implementation design.** How the tests will be made to pass. An independent review.
+6. **Implementation.** The tests are made to pass. An independent review, then the person's acceptance.
+7. **Record.** The system record says what is now true, and the plan is removed.
 
-## Lifecycle map
+## Rules for every step
 
-The lifecycle:
+- **Shared decisions come before the pieces.** A high-level outcome may name several sub-outcomes. The plan records the decisions those pieces share, and the person confirms them, before any sub-plan goes into its own requirements, tests, or design.
+- **A fresh session.** A writing step starts in a new session. Put the confirmed text of the earlier steps at the top of the prompt and again at the end. Do not continue the session that wrote the previous step.
+- **The author does not review.** The reviewer has not written the artifact under review.
+- **The next step waits.** Do not start it while this step is still in review, or before its gate commit has landed.
+- **A failed review stays here.** Keep the recorded matrix. Revise the artifact and review it again.
+- **An earlier step is not rewritten from a later one.** If the outcome, the requirements, the test design, the tests, or the design is wrong, return to that step. The person amends the outcome and the requirements. An agent does not.
+- **Each gate is its own commit** on the plan. The message names the step.
 
-```
-DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
-                                                     ↓
-                                                ISSUE_OPEN
-                                                     ↓
-                                            (back to APPROVED or DRAFT)
+## The plan file
 
-COMPLETE ⤺ reopen (post-COMPLETE back-edge — see Reopen mode):
-  Route F  finish deferred-but-specced scope   → IN_PROGRESS  (same version)
-  Route V  extend, scope intrinsic to the node → DRAFT        (version bump, full re-verify)
-  Route N  extend, scope separable             → new sibling/child node (not a reopen)
-```
+A plan is `docs/_plans/NN-name.md`. `NN` is a zero-padded two-digit sequence number. It sets display order only. Leave a gap when inserting a file. Do not renumber the files that are already there.
 
-Every state in this diagram is set explicitly in the spec's Status header as the node progresses. The audit tables in the doc and the rows in the parent's children manifest mirror each transition. ISSUE_OPEN is entered when operator verification (stage 8) finds bugs; see stage 8b for the loop-back. The COMPLETE back-edge (Routes F/V) is entered after a node has shipped; see **Reopen mode**. Routes F and V reuse existing lifecycle tokens — no new state is introduced — so the forward diagram above still holds for any single cycle; the version suffix (v1 vs v2) distinguishes cycles.
+**Status** is one of: `outcome`, `coordinating`, `requirements`, `test-design`, `tests`, `design`, `implementation`, `accepted`.
 
----
+Sections, in order. A section that has not been reached says `*(not started)*`.
 
-## Stages
+- **Part** — the system-record page for the part of the project this work changes
+- **Outcome** — the high-level sentence, then any sub-outcomes
+- **Decisions** — on a coordinating plan, the choices its pieces share; on a single piece, the choices made in its implementation design
+- **Requirements** — Acceptance, Constraints, Out of scope
+- **Test design**
+- **Tests**
+- **Design**
+- **Implementation notes**
+- **Reviews** — one recorded matrix per review, newest last
 
-### 1. Requirements, then design
+## 1. Outcome
 
-The spec is written in two passes. Pass A freezes Requirements while the node is `PLANNED`. The operator confirms that text. Pass B, in a fresh session, writes Design against it and moves the node to `DRAFT`. Design does not start in the session that wrote Requirements. A design written in that same session is how the design replaces the goal.
+Status is `outcome`.
 
-`DRAFT` keeps its meaning: requirements are confirmed and a design has been written against them, so spec review can begin. No new lifecycle status. A node already at `DRAFT` or later when this phase landed is past the gate — do not block it for a missing confirmation line.
+Write the outcome in the person's words: what is true when the work is done. If that outcome is made of distinct pieces, name each piece under it, one sentence each, in the person's words. If the person has already said it, copy that wording. If they have not, ask. Do not invent it.
 
-#### 1a. Requirements — Status stays PLANNED
+Name the part of the project this work changes. **Part** is the path of the system-record page that describes that part. Work on the whole project names `docs/00-project.md`.
 
-Create `docs/_plans/<path>/<id>.md` if it does not exist, or fill a `PLANNED` stub. A top-level plan is `docs/_plans/NN-name.md`. The doc still carries every required heading. Only Requirements and Verification have content.
+The person edits the text and sets `**Outcome confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it. When the outcome names sub-outcomes, the commit sets Status to `coordinating`. When it does not, the commit sets Status to `requirements`.
 
-- **Front-matter:** Node ID, Parent, Status: PLANNED, Created, Last Updated, Dependencies. For direct children of the project root, the Parent line must be `project root (\`docs/00-project.md\`)` — not `` `00-project` `` (which extracts as a literal id that matches nothing and orphans the node).
-- **Requirements** — the whole brief, under a page:
-  - `**Requirements confirmed:** unconfirmed` on its own line. The agent does not write a date here.
-  - **Outcome.** One sentence, in the operator's words: what is true when the work is done.
-  - **Acceptance.** The checks that prove it. Each one names something a person can point at.
-  - **Constraints.** What must stay as it is.
-  - **Out of scope.** What this node will not do.
-- **Verification** — the test plan. For each acceptance check, write the setup, the action, and what a person looks at to decide it passed. The acceptance wording stays in Acceptance. Commands and test-file names are filled in at 1c. This pass does not add a new outcome.
-- **Design, Decisions, Open Issues, Implementation Notes** — `*(not started)*`.
-- **Children** — None, unless this node is already a parent.
+## Facts the plan follows
 
-A requirement that names a file, a component, a library, or a mechanism is a design decision and does not belong in this pass.
+A plan reads the reading set in `.ledger/process/system-record.md` for the part named in **Part**. It follows the facts on those pages. It does not read a page outside that set.
 
-If the operator already stated the outcome, the acceptance checks, and the out-of-scope line, copy that wording verbatim. If any of the three is missing, ask. Do not invent it. Where the operator has not spoken and the parent manifest has only a one-line responsibility, use that line as the Outcome and leave Acceptance, Constraints, and Out of scope as `_(operator)_`.
+A sub-plan names its own part. That part is the parent's part, or a narrower page inside it. The sub-plan reads its own reading set. It also follows the parent plan's confirmed decisions.
 
-If the doc already exists and Design contains more than a not-started placeholder, leave Design, Decisions, and Verification untouched in this pass. Still do not set the confirmed date.
+A fact that later work must follow is written on the page that homes it, in the section named in `.ledger/process/system-record.md`. Step 7 is where that write happens. The reason for the fact is not written on the page.
 
-Add the node to its parent's children manifest at `PLANNED` in the same commit. Commit message: `docs(<id>): PLANNED requirements`. Then stop.
+## Coordinating a plan that has sub-outcomes
 
-#### 1b. Operator confirms
+Status is `coordinating`.
 
-The operator edits the requirements, replaces any `_(operator)_` placeholder, and sets `**Requirements confirmed:** YYYY-MM-DD`. That confirmation is its own commit. The agent does not make it.
+This plan does not continue to requirements, tests, design, or implementation. Those steps happen in the sub-plans, after the decisions they share are confirmed.
 
-A later change to the frozen text adds `**Requirements amended:** YYYY-MM-DD — <what changed>`. If the node is already `DRAFT` or later, an amendment that adds an outcome sends it back through stage 2. Finishing work that was already in the confirmed requirements does not touch them (Reopen mode, Route F).
+Write the decisions that more than one piece has to follow, and the order between the pieces. A decision names the pieces it binds and the reason. A decision that chooses a file, a function, or a mechanism inside one piece belongs in that piece's design.
 
-#### 1c. Design — PLANNED → DRAFT
+The person edits the decisions and sets `**Decisions confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it.
 
-Start a fresh session. Seed it with the confirmed Requirements text, verbatim, at the top of the prompt and again at the end, plus the parent doc and a sibling spec for house style. Do not continue the conversation that wrote the requirements.
+**Review.** One row per sub-outcome: it is a piece of the parent outcome, and it is a piece a person could finish on its own. One row per decision: it binds more than one piece, and it does not choose a detail inside a single piece. One row for the order: each dependency says which piece has to be finished first, and why. On `pass`, one commit records the matrix and creates the sub-plans.
 
-The design author writes:
+The parent file stays where it is. Each sub-plan is a new file in a folder beside it. A parent at `docs/_plans/NN-name.md` keeps that path. Its pieces go in `docs/_plans/NN-name/`, as `MM-piece.md`. The folder name is the parent's name without `.md`, so the file and the folder sit next to each other. `MM` is a zero-padded sequence number within that parent. Leave a gap when inserting one. Do not renumber the files that are already there.
 
-- **Design** — data contract / new types, layout (ASCII wireframes where they help), components and files, interaction model. Every choice names the acceptance line it serves. A choice that serves no line is left out.
-- **Decisions** — numbered D1...Dn table, one row per choice, with rationale (the *why*, not the *what*).
-- **Open Issues** — priority-tagged (HIGH / MEDIUM / LOW / TRIVIAL).
-- **Implementation Notes** — empty: `*(none yet — pre-implementation)*`.
-- **Verification** — the test plan. Keep the explanation of how each check is confirmed. Naming a command or a test file is allowed. Adding an outcome that the confirmed requirements do not contain is not.
+That pass commit creates the files. Each new file starts at Status `requirements`. Its Outcome is the parent's sentence for that piece, copied verbatim, with the parent's confirmation date. Its Part is the parent's part, or a narrower doc inside it when the piece is already known to be narrower. Its Parent line is the path of the parent plan. The sub-plan then follows this procedure from step 2, and it follows the parent's confirmed decisions. The piece is named once, in the parent's outcome, and that sentence is copied into the sub-plan at creation. After that, the parent does not keep a record of the sub-plan's status or of how the work is going. The order between pieces stays in the parent's decisions.
 
-Tone: opinionated, terse, decision-explicit.
+A piece that itself has pieces does the same thing one level down. The sub-plan file stays at `docs/_plans/NN-name/MM-piece.md`, and its pieces go in `docs/_plans/NN-name/MM-piece/`.
 
-The design author does not edit Requirements. If the confirmation line is missing, still says `unconfirmed`, or any of Outcome / Acceptance / Out of scope is still `_(operator)_`, stop without writing Design.
+A sub-plan with a dependency does not start until every plan it depends on is `accepted` and that piece's outcome is in the system record. Pieces with no dependency can proceed together. Two sub-plans do not own the same files. If they would, the parent decision gives that surface to one of them before either continues.
 
-Bump Status `PLANNED → DRAFT` in the spec and the parent manifest. One commit: `docs(<id>): PLANNED → DRAFT`.
+A sub-plan that needs a decision the parent has not made stops. The decision is added on the parent, confirmed by the person, and reviewed, before the sub-plan continues.
 
-#### One piece of work — before advancing to stage 2
+A sub-plan stays on disk after it is accepted, so its siblings can still read it. The parent does not copy that status. It reads the sub-plan files. It goes to step 7 when every plan file in the folder beside it is `accepted`.
 
-If you can name two pieces of work that do not share the same outcome, stop and write them as separate plans.
+## 2. Requirements
 
-#### Compute-heavy gating checkpoint — before advancing to stage 2
+Status is `requirements`.
 
-A separate check: does the node's acceptance criterion depend on a
-long-running probe, simulation, or benchmark (rough wall-clock >~15 min to execute)?
+Write three parts, and nothing that chooses a mechanism:
 
-If yes, record it in the Verification section (expected runtime, plus a note that
-execution is an operator/main-session step — not part of the implementer's worktree
-turn) and flag it for stage 4's dispatch brief below. A dispatched subagent's
-background jobs die when its own turn ends; a probe that outlives the turn never lands
-its artifact, and the node stalls in IN_PROGRESS with a verdict that never arrives.
-Observed empirically: probes under ~20 min completed cleanly inside the implementer's
-turn, a ~35 min probe left its node's verdict never landing, and an 81 min probe was
-force-closed mid-implementation.
+- **Acceptance.** The checks that prove the outcome. Each one names something a person can point at.
+- **Constraints.** What must stay as it is.
+- **Out of scope.** What this plan will not do.
 
-Do not shrink the probe to fit the dispatch budget — that quietly weakens the
-acceptance criterion instead of fixing the dispatch problem. If the spec needs N steps
-to demonstrate the property, run N steps; route the run to stage 4b's compute-heavy
-exception instead.
+A requirement that names a file, a component, a library, or a mechanism is a design decision and belongs in step 5, not here.
 
-### 2. DRAFT → SPEC_REVIEW — dispatch reviewer in clean context
+The person edits the text, replaces anything still marked `_(operator)_`, and sets `**Requirements confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it. The commit sets Status to `test-design`.
 
-Before dispatching, bump the spec's Status header DRAFT → SPEC_REVIEW and update the parent's children manifest row to match. **Commit this transition as its own commit** before dispatching the reviewer — every lifecycle transition produces its own commit (see Patterns below). SPEC_REVIEW is a real lifecycle state: it tells any reader (human or agent) that the spec is mid-review and not yet safe to base implementation on. Under the manual workflow the state is transient (typically lasts minutes), but persists meaningfully once the framework's reviewer-agent dispatch is queued behind other tasks.
+A later change adds `**Requirements amended:** YYYY-MM-DD — <what changed>` and returns to the earliest step the change affects. An amendment that adds an outcome returns to step 1.
 
-Spawn a Sonnet sub-agent (general-purpose, no isolation needed — read-only) and brief it:
+## 3. Test design
 
-- Pointer to the spec doc.
-- Required reading: relevant sections of `docs/00-project.md`, the parent doc, and sibling specs as house-style benchmarks.
-- Evaluation criteria: requirements fidelity (`.ledger/process/verification-signoff.md`), then schema compliance, PRD coverage, dependency declaration, type additions vs existing types, MVP scoping, internal consistency, house-style alignment.
-- Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: fidelity F1, F2, F3, then one row per product-requirements item the spec must cover and one per Requirements bullet.
+Status is `test-design`.
 
-The reviewer runs in a fresh context so the judgment is independent. The agent that wrote the spec cannot reliably check its own work.
+For each acceptance check, write the setup, the action, and what shows that it passed. The acceptance wording stays in Acceptance. The check stays something a person can run and confirm. The agent is the one who runs it.
 
-Spec review runs against a `DRAFT`. A `PLANNED` node has not finished stage 1. Do not dispatch a reviewer at a doc whose `**Requirements confirmed:**` line is missing or `unconfirmed`, unless the node was already `DRAFT` or later before the requirements phase (no confirmation line, and Design is already written).
+The test design does not name a file, a function, a library, or a mechanism. It does not add an outcome or an acceptance check.
 
-**Shortcut allowed:** if the spec is small, well-established, and you (the operator) trust it cold, skip this stage. Set Status directly to APPROVED with a note in the commit message that no formal review was run. The implementation review (stage 6) is the mandatory gate, not the spec review. The shortcut skips the review. It does not skip the stage-1b confirmation commit.
+**Review.** One row per acceptance check. A row passes when the test design has a setup, an action, and what is looked at, and when it names none of those forbidden things. A check with no test design fails. On `pass`, one commit records the matrix and sets Status to `tests`.
 
-### 3. Record the audit, then advance on `pass`
+## 4. Test implementation
 
-The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them.
+Status is `tests`.
 
-Write the five-column matrix into a **Spec Review (YYYY-MM-DD)** section between Open Issues and Implementation Notes. That commit does not change status. Status stays `SPEC_REVIEW`. The matrix stays in the doc as durable provenance — the implementing agent in stage 4 will read it to know what was already decided.
+Cut a branch from the local integration branch (`main`). File-changing work uses that branch. The read-only harness worktree is not used for this.
 
-When the disposition is `pass`, the next commit moves `SPEC_REVIEW` → `APPROVED`. Update the parent's children manifest row and the cross-doc summary lines in that commit. `followups` stops for the operator and does not dispatch. `changes-required` is reviewed again before the status moves. A heading is not a pass.
+Write the executable tests that are the accepted test design, and no other tests. They fail because the behavior is not implemented yet. A test that already passes is either the wrong test or a check of behavior that already existed. Say which, in Implementation notes.
 
-### 4. APPROVED → IN_PROGRESS → VERIFY — implementer in isolated worktree
+The agent runs the tests and records the result. The person can run the same tests and confirm them. A check that takes longer than a single agent turn is recorded with its expected runtime, and the result is recorded where the review can see it. Do not shorten the check so it fits the turn.
 
-Spawn a Sonnet sub-agent with `isolation: "worktree"`. Brief it with:
+**Review.** One row per test-design item. A row passes when the test matches that item, fails because the behavior is not implemented yet (or the note explains behavior that already existed), and does not depend on a structure the test design did not name. On `pass`, one commit records the matrix and sets Status to `design`. The branch stays unmerged.
 
-- Pointer to the spec doc as source of truth.
-- Specific callouts from the Spec Review audit table. Those are the highest-leverage details that the implementer would otherwise risk missing.
-- Required context: spec docs of any dependencies, parent doc, CLAUDE.md, the actual source files it will touch.
-- Process steps — **two commits**, one per status transition:
-  - **4a. Entry commit (APPROVED → IN_PROGRESS).** First action inside the worktree: bump Status header APPROVED → IN_PROGRESS in the spec and the parent manifest row, commit. Nothing else in this commit — no implementation files. Gives the git log a clean "implementer started" timestamp and makes IN_PROGRESS a real inhabited state instead of a synthetic transition.
-  - **4b. Implementation.** Implement what the spec says. Run the checks the project already uses for that kind of change. Fill Implementation Notes (decisions, deviations, and which checks were run).
-    - **Compute-heavy exception.** If the compute-heavy gating checkpoint fired at stage 1, 4b stops once the probe/harness is wired and runnable — the implementer commits the harness, not a completed run, and notes in Implementation Notes that the probe result is pending operator execution. The operator then runs the real probe from the main session (background job, re-invoked on completion) and records the verdict in Implementation Notes before 4c. Do not claim VERIFY on a probe result the implementer's own turn could not have witnessed completing — that includes a background job it kicked off and then reported "done" without waiting for.
-  - **4b½. Look at the artifact, when the work produces one.** Some nodes produce a thing a diff does not show (a rendered map, a generated report). The operator looks at it before the exit commit. The node stays `IN_PROGRESS`. A rejection is a note that briefs a fix in the same worktree; the operator looks again. Acceptance is what lets 4c proceed. A node with nothing to look at skips this.
-  - **4c. Exit commit (IN_PROGRESS → VERIFY).** Bump Status header IN_PROGRESS → VERIFY in spec + parent manifest, commit. This commit contains the code + Implementation Notes + status bump together — they all belong to the same "implementer finished" event. For a compute-heavy node, this commit does not land until the operator's probe verdict (above) is recorded.
-- Reporting: files changed, which checks were run and what they returned, and acceptance-check items the agent could not verify itself.
+## 5. Implementation design
 
-Why worktree isolation:
+Status is `design`.
 
-- Prevents conflicts when work happens in parallel with other agents or with main-branch changes.
-- Gives the agent a clean directory to write tests, fixtures, and intermediate files without polluting main.
-- Lets the operator inspect via `git diff` before merging, and abort or retry without main-branch consequences.
+Write how the accepted tests will be made to pass. Every choice names the acceptance check it serves. A choice that serves no check is left out.
 
-### 5. Rebase the worktree onto main HEAD
+**Decisions** are a numbered table, D1 onward, one row per choice, with the reason.
 
-After the implementer reports "done", rebase the worktree branch onto current main:
+The design does not change the tests, the test design, the requirements, or the outcome.
 
-```bash
-git -C /path/to/worktree rebase main
-```
+**Review.** One row per acceptance check, naming the part of the design that serves it. A check that nothing serves fails. A choice that serves no check fails. One further row: the tests on the branch are unchanged since their review. Also one row per decision fetched for this plan, including each confirmed decision on the parent plan. On `pass`, one commit records the matrix and sets Status to `implementation`.
 
-Rationale: the worktree was branched from main at the time of dispatch. While the implementer worked, main may have advanced (other merges, PRD edits, doc-sync commits). Without rebasing, the next stage's `git diff main..HEAD` shows main-only files as **deletions** — a branch-divergence artifact that confuses reviewers (we hit this with the 08-markdown reviewer flagging the "deletion" of `06-health.md` as a `Blocking` finding). Rebasing eliminates the artifact at the source: the diff becomes clean, containing only the worktree's actual additions and modifications.
+## 6. Implementation
 
-If the rebase has conflicts, resolve them now — they are the same conflicts the merge would surface, found earlier. Verify the rebased worktree still builds clean (`pnpm typecheck` / `lint` / `build`) before moving on. If conflicts touch the work substantively (not just status-header churn), consider whether the implementer needs another pass.
+Status is `implementation`.
 
-This stage also tests the **multi-worktree shared-file gap** (see Known Limitations below): if main has changed a file your worktree also changed, the conflict surfaces here.
+On the same branch, make the accepted tests pass. Rebase the branch onto local `main` before the review, so the diff is only this work.
 
-### 6. Implementation review — reviewer against the rebased worktree diff
+Do not change the tests or the design. If the design cannot satisfy a test, stop and return to step 5. If a test does not match the accepted test design, return to step 4.
 
-Same pattern as stage 2, but against the implementation. Sonnet sub-agent, clean context, pointed at the (now-rebased) worktree branch. Because the diff is clean post-rebase, the reviewer can use `git diff main..HEAD` directly without artifact confusion.
+**Review.** One row per accepted test, with evidence it passes. One row that the tests are unchanged since their review. One row that the design is unchanged since its review. One row per decision fetched for this plan, including each confirmed decision on the parent plan. On `pass`, one commit records the matrix. Status stays `implementation` until the person accepts.
 
-Output shape: the per-requirement sign-off matrix. The result and the three steps are in `.ledger/process/verification-signoff.md`. This stage does not restate them. Rows, in order: R0, then one row per Requirements bullet and one per acceptance check. The reviewer runs the checks the change calls for and cites what they returned. A check that needs a person is `N/A — operator gate`. The operator's stage-8 pass is their real sign-off.
+**Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. They set `**Accepted:** YYYY-MM-DD`. That commit is theirs. The agent does not make it. It sets Status to `accepted`.
 
-**No shortcut.** Unlike the spec review (stage 2), the implementation review is mandatory for every node. The headless reviewer catches type errors, spec-conformance gaps, and discipline violations (no `any`, no dead code).
+Merge the branch to `main` after that commit. The merge does not change a system-record page and does not delete the plan.
 
-Evaluation criteria expand to include:
+## 7. Record
 
-- **Requirements text** — unchanged since `**Requirements confirmed:**`, or a `**Requirements amended:**` line records the change. A rewrite of Requirements to match the code, with no amendment, is a FAIL. A node that predates the confirmation line gets `N/A` on this row with that reason. This row does not re-litigate design against the goal; stage 2 already did that.
-- **Spec conformance** — especially the Spec Review closures from stage 3, since those were known risk areas.
-- **Build/lint/typecheck** — run them; report exit codes and bundle numbers.
-- **Code discipline** — no `any`, no suppressions (especially `eslint-disable-next-line ...`), no `console.log`, no dead code.
-- **Bundle delta sanity** — compare to the named baseline from stage 4.
-- **Checks** — the checks named in the spec's Verification section were run, and the review cites what they returned. A check this project does not have is `N/A`.
-- **Regression checks** for any shared infrastructure the node touched (e.g., DAG panel if shared types or parser logic changed).
-- **Anything the implementer's report glossed over.**
+On `main`. A single-piece plan enters here after acceptance. A coordinating plan enters here when every plan file in the folder beside it is `accepted`.
 
-### 7. Record the audit, then open the operator gate on `pass`
+Update the page named in **Part**. Write each fact that is now true in the section that homes it, as `.ledger/process/system-record.md` specifies. A coordinating plan adds only facts its pieces have not already recorded. Present tense. Editing a fact sets that page's Checked to `None`. The page does not name the commit that edits it.
 
-Same pattern as stage 3. The result and the three steps are in `.ledger/process/verification-signoff.md`. The audit table goes inside Implementation Notes as a subsection titled **Implementation Review (YYYY-MM-DD)**. Two audit tables now exist in the spec: spec review and implementation review. Both stay for provenance. The audit commit does not change status. Status stays `VERIFY`. When the disposition is `pass`, the operator gate opens. The review does not mark the node complete. `followups` stops for the operator and does not dispatch. `changes-required` is reviewed again before any status moves. A heading is not a pass.
+Add a new page only when that part does not have one yet. A new part is that page and a Parts entry on the containing page, both in this change. The page is placed as `.ledger/process/system-record.md` specifies. If nothing that later work needs to read has changed, leave the pages alone.
 
-If the implementation diverged from the spec in a way the operator approves, update the spec in the same commit. "Doc and code must agree" (CLAUDE.md) is honoured by updating whichever side drifted; silent divergence is not. An edit to Requirements in that commit records a `**Requirements amended:**` line (date and what changed). If the edit adds an outcome the confirmation did not contain, stop after the commit and re-enter at stage 2. Do not promote.
+A plan that has a parent stays at `accepted`. The parent removes it later. A plan that has no parent is deleted in this same commit, together with every plan under its folder.
 
-### 8. Operator verification
-
-Read the acceptance checks, including every row marked `N/A — operator gate`. Run any check the reviewer could not run. A failure is a blocking bug; enter stage 8b.
-
-The operator writes the outcome into the doc. Accepting it is what allows promotion to COMPLETE. Rejecting it names what is wrong and enters stage 8b. There is no task runner and no separate approval request.
-
-#### 8b. If verification finds bugs — VERIFY → ISSUE_OPEN, loop back
-
-Bump Status VERIFY → ISSUE_OPEN. File the discovered bugs into the spec's Open Issues with priority tags. **Commit this transition** (status bump + new Open Issues entries + parent manifest row update) as its own commit before re-entering the cycle. Pick the re-entry point:
-
-- **Mechanical fixes inside the implementation:** re-enter at stage 4 with a brief patch task. The implementer (same or new agent) addresses the issues; a new dated subsection joins Implementation Notes documenting what was fixed.
-- **Spec was wrong:** re-enter at stage 1 (revise the spec, then re-run stage 2's review pass). The original Spec Review and Implementation Review audit tables stay; the new spec revisions land alongside.
-
-Either way the loop-back is durable in the doc: a future reader can trace exactly when ISSUE_OPEN was entered, what was found, and what was done about it. Status transitions through ISSUE_OPEN → APPROVED → IN_PROGRESS → VERIFY → COMPLETE on the second pass mirror the original promotion path.
-
-### 9. VERIFY → COMPLETE in the worktree
-
-Once verification passes, bump:
-
-- Spec's Status header: VERIFY → COMPLETE (v1, YYYY-MM-DD).
-- Parent manifest row: VERIFY → COMPLETE (v1).
-- Spec's own sample-tree picture (if it has one): row → `[COMPLETE]`.
-- **Record check** — if the node touched anything a system-record page
-  describes, fold the delta into this same commit. The check is
-  diff-shaped and cheap: list the files this node touched
-  (`git diff --name-only <base>...HEAD`), then grep the pages under
-  `docs/` (not `docs/_plans/` or `docs/_investigations/`) for those
-  paths or this node's id. No covering page → nothing to do. Otherwise
-  update the facts this change adds, removes, or falsifies, on the
-  pages in the reading set from `.ledger/process/system-record.md`.
-  Editing a fact sets that page's Checked to `None`. The page does not
-  name the commit that edits it. Skipping the check is how the record
-  rots.
-- **Removal** — once the lasting outcome is on the record page, delete the node and drop its row from the parent's children manifest. That removal is its own commit, after this COMPLETE commit.
-
-Single commit in the worktree for the COMPLETE transition. The removal, when it happens, is a later commit.
-
-### 10. Merge `--no-ff` — bundle the cross-doc sync into the merge commit
-
-**Prerequisites:** stage 6 implementation review complete, stage 7 audit committed, stage 8 operator sign-off. Do not merge a worktree that has not cleared all three.
-
-```bash
-git -C /path/to/main merge --no-ff --no-commit <worktree-branch>
-```
-
-The `--no-commit` lets you inspect the merge tree and **apply cross-doc summary updates before the merge commit lands**. With the worktree already rebased (stage 5), the merge surface is essentially the worktree's commits — minimal conflict potential.
-
-While the merge is uncommitted, edit:
-
-- `CLAUDE.md` round-2 panels line (or equivalent project-state summary).
-- A system-record page, when a fact on it was added, removed, or falsified and the stage-9 record check did not already include it.
-- Sibling sample-tree pictures that show this node's status.
-
-These files weren't touched by the worktree (they're outside its concern) and the merge doesn't flag them as conflicts. Bundling them into the merge commit gives one atomic transition: main never sits in a half-updated state with a COMPLETE node and stale top-level summaries.
-
-Run the project's checks on the merged tree. If they pass:
-
-```bash
-git -C /path/to/main commit -m "Merge <branch>: <node-id> → COMPLETE + doc sync"
-```
-
-The merge bubble in the log now contains both the merge and the doc sync.
-
-`--no-ff` preserves the per-step provenance (implement → review → promote) as a merge bubble. A squash flattens it; only do that if you explicitly want a linear history.
-
-### 11. Worktree cleanup
-
-Once merged:
-
-- `git worktree remove -f -f <path>` (the second `-f` is needed because Claude-Code worktrees are locked while in use).
-- `git branch -d <worktree-branch>` (lowercase `-d` refuses to delete if not fully merged — a safety net).
-
----
-
-## Reopen mode — finishing or extending a COMPLETE node
-
-Stages 1–11 assume a node moves through its lifecycle once. A node that has already reached COMPLETE sometimes needs more work. Stage 8b (ISSUE_OPEN) only covers loop-back *before* COMPLETE; this section covers loop-back *after*.
-
-### Classify first — finish ≠ extend
-
-"Reopen-and-extend" almost always conflates two operations that earn different gates:
-
-- **Finish** — completing requirements that were already in the approved spec but were deferred or only partially verified at COMPLETE (the "item 9 deferred to routine use" pattern). These already passed spec review; they need no new spec gate.
-- **Extend** — adding requirements that were **never in the spec**. New scope always needs a gate. The only question is whether it gets its own node or rides a re-spec of this one.
-
-Do not run a single blurry pass that mixes the two. New requirements that ride to COMPLETE under the node's already-granted verification have never been confronted by a review — exactly the failure stages 2 and 6 exist to prevent.
-
-### Route F — finish only (same version)
-
-The work closes already-specced, deferred requirements; nothing is added to the requirement set.
-
-1. **Reopen.** Bump Status COMPLETE → IN_PROGRESS (keep the version — this is still v1's scope). Commit the transition on its own; the message names the deferred items being closed and marks it a finish-reopen. Do not edit Requirements. The confirmed text already contains this work.
-2. **Scope the delta.** Add a dated **Reopen (YYYY-MM-DD) — finish** subsection to Implementation Notes listing the *delta-acceptance items*: exactly the Requirements / acceptance rows being completed this pass. This list — not the whole node — is what stage 6 review and stage 8 verification check.
-3. **Re-enter at stage 4** (implementer worktree). Run stages 4–11 as normal, but stage 6 and stage 8 are scoped to the delta-acceptance list. Promote VERIFY → COMPLETE (still v1) at stage 9.
-
-### Route V — extend, intrinsic scope (version bump)
-
-The new scope is part of this node's identity and cannot live as a separate node (the `07-health-daemon` v1→v2 case: v2 *replaced* v1's design rather than sitting beside it).
-
-1. **Reopen.** Bump Status COMPLETE → DRAFT. The spec is being revised, so the node re-enters at the spec gate, not the implementation gate. Commit the transition.
-2. **Amend Requirements first.** Add `**Requirements amended:**` with the date and the new outcome. The operator confirms the amended text before Design changes. New scope that never passes the requirements text has not been confronted by stage 2.
-3. **Supersede the spec.** Revise Design / Decisions to the new combined set. Keep the prior cycle's audit tables for provenance; add a **Supersede (YYYY-MM-DD): v1 → v2** note stating what v2 adds and *why it could not be a sibling* (that justification is the test for choosing V over N).
-4. **Re-run from stage 2.** The whole node re-verifies against the combined spec — v1's requirements are **not** grandfathered out. A v2 verification covers everything the node now claims. Final Status: COMPLETE (v2, YYYY-MM-DD).
-
-### Route N — extend, separable scope (new node)
-
-The new scope is separable. This is not a reopen at all.
-
-1. Leave the COMPLETE node untouched.
-2. Author a sibling (`<id>.md` beside it) or child (`<id>/NN-<slug>.md`, if it decomposes the parent) with a declared dependency on the original. Run the normal forward flow from stage 1a.
-
-Prefer this whenever the scope *can* be separated. A new node keeps each VERIFY scoped to exactly one declared requirement set — the property version-bumps erode. Route V is the exception reserved for scope that genuinely cannot be carved off.
-
-### Decision rule
-
-**Finish → F. Extend that can be a separate node → N. Extend that cannot → V.** When torn between V and N, choose N — a sibling node is cheaper to reason about than a node whose verification spans two requirement sets.
-
----
-
-## Patterns to lean on
-
-- **Requirements freeze before design.** Stage 1a commits Requirements at `PLANNED` and stops. The operator writes the confirmation date. Stage 1c is a fresh session that writes Design and does not edit Requirements. The session that wrote Requirements does not continue into design.
-
-- **Lifecycle states are real, not decorative.** Every state in the lifecycle map is set explicitly in the spec's Status header as work progresses. DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE is six explicit transitions, not "skip to APPROVED when you feel good." `PLANNED` is inhabited for the requirements phase. Other agents (and future-you reading old commits) rely on the state being accurate at any point in the log.
-
-- **Every status transition is a commit.** Each entry into DRAFT, SPEC_REVIEW, APPROVED, IN_PROGRESS, VERIFY, COMPLETE, or ISSUE_OPEN lands as its own commit in the spec doc (and the parent's children manifest row, when relevant). This gives the git log a complete audit trail of the node's lifecycle that future readers can bisect or reconstruct without parsing the doc body. The review audit is its own commit, and it does not change status. A `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. Stages whose only output is a transition (stages 2, 4a, 8b, and the approve commit after a `pass`) commit just the status bump. Stages that bundle a transition with substantive work (stages 1, 4c, 9) commit the transition together with that work. Stages with no transition (5 rebase, 6 review, 8 operator verification, 11 cleanup) do not require a commit. Commits are cheap; the audit trail is durable.
-
-- **Reviewer in clean context** (stages 2 and 6). Both reviews run in a sub-agent's fresh window. The same context that wrote the artifact cannot reliably check it. Clean context supplies the *who* (independence); the per-requirement **sign-off matrix** (`.ledger/process/verification-signoff.md`) supplies the *rigor* (every requirement confronted individually, with evidence — a PASS without concrete evidence is recorded as FAIL). Both halves together are the mitigation; either alone rubber-stamps. The *spec* review (stage 2) may be skipped on a small, trusted spec — the operator's call. The *implementation* review (stage 6) is non-negotiable; no shortcut applies.
-
-- **Rebase before review** (stage 5). Eliminates the branch-divergence "deletion" artifact and surfaces merge conflicts early. Reviewer sees a clean diff; the merge in stage 10 is mechanical.
-
-- **Audit tables as durable provenance.** Spec reviews land in a "Spec Review (YYYY-MM-DD)" section between Open Issues and Implementation Notes. Implementation reviews land in an "Implementation Review (YYYY-MM-DD)" subsection of Implementation Notes. Both stay in the doc forever — future implementing agents on related nodes will read them.
-
-- **Apply-easy, punt-substantive, discuss-leftovers.** The audit is its own commit. A fully specified fix is applied per `.ledger/process/verification-signoff.md`, and a `changes-required` result is reviewed again before the status moves. `followups` stops for the operator. These bullets do not state which rows produce which result.
-
-- **Worktree-per-implementation.** Every implementing agent runs in its own worktree. Worktrees can run in parallel (operator dispatches multiple at once for independent nodes), can outlive a single conversation, and isolate failed attempts from main.
-
-- **Promotion bundles doc-and-code.** Status header, parent manifest row, sample-tree pictures, top-level summaries — all change together in one commit. Stage 3 (DRAFT→APPROVED) and stage 10 (merge + cross-doc sync) both bundle the ripple-effect edits with the primary state change. Drift in any of them is a smell.
-
-- **Operator sign-off is the COMPLETE gate.** The reviewer does not promote the node. The operator does, after stage 8. Stage 8b is the explicit answer for "what if the human says no."
-
-- **Finish ≠ extend on a reopen.** A COMPLETE node that needs more work is two operations wearing one phrase. Closing deferred-but-specced requirements (Route F) needs no spec gate; adding never-specced scope needs one — either a sibling node (Route N, preferred) or a re-spec'd version bump (Route V). Never let new requirements ride to COMPLETE under the prior cycle's verification. See **Reopen mode**.
-
----
-
-## Known limitations
-
-- **Parallel-worktree shared-file conflicts.** When two worktrees touch the same file, nothing coordinates them. Stage 5's rebase surfaces the conflict. Resolving it is manual. When two people implement at once, pick nodes whose files don't overlap.
-
-- **Worktree staleness during long runs.** A worktree dispatched against main HEAD at time T can drift if main advances substantially before the implementer finishes. Stage 5's rebase pulls it back into alignment, but if main has changed the very file the implementer rewrote, the rebase can be substantial. Today: keep dispatches scoped tight so they finish in minutes, not hours.
-
-- **Subagent turn budget vs. long-running gating probes.** A dispatched implementer's background jobs die when its own turn ends — there is no "detached" background process that outlives the subagent, unlike the operator's main session, which survives a background job and gets re-invoked on completion. Nodes whose acceptance criterion is a long simulation/benchmark can stall (verdict never lands) or force-close mid-implementation if the probe is run inside the implementer's turn. Mitigation: the stage-1 compute-heavy gating checkpoint and stage 4b's compute-heavy exception split the work — implementer wires the probe, operator runs it. Do not fix this by shrinking the probe to fit the budget.
-
----
-
-## This process stays written down
-
-An operator and a fresh-context reviewer carry every stage. A task runner, a dispatcher, and a health scanner were built for this repo and removed on 2026-11-17. Do not wait for them, and do not recreate them in order to finish a node. The shape that stays is review in a clean context, an audit trail, isolated implementation, rebase before review, and a merge that keeps that history.
+Further work is a new plan.

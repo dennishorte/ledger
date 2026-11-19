@@ -1,6 +1,6 @@
 # Per-Requirement Sign-Off Format
 
-The structured output every independent review produces — spec review (plan-workflow stage 2) and implementation review (stage 6). It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
+The structured output every independent review in `plan-workflow.md` produces. It replaces the freeform "verdict + findings by severity" with a **row-per-requirement sign-off matrix**, so a review cannot pass without confronting each requirement individually, with evidence.
 
 The person who wrote an artifact cannot reliably check their own work, so the check runs in an independent context and is forced into a shape that a rubber stamp cannot satisfy. A fresh context supplies the independence. This format supplies the check.
 
@@ -84,17 +84,17 @@ The reviewer returns `disposition` (one of those three words), the matrix, findi
 
 Spec review and implementation review do the same three steps.
 
-1. **Record, before any status change.** Write the matrix into the node in its own commit. Status stays `SPEC_REVIEW` or `VERIFY`. Resolution cells start empty. The spec-review section stays between Open Issues and Implementation Notes. The implementation-review subsection stays inside Implementation Notes.
+1. **Record, before any status change.** Write the matrix into the plan's Reviews section in its own commit. Status stays on the current step. Resolution cells start empty. Newest matrix last.
 
 2. **Apply a fully specified fix, then review again.** `applied` is valid only on a `FAIL`. Set that resolution when the finding's fix text is the whole edit. The next entry dispatches that review. A spec-review rerun is a full spec review. An implementation rerun covers the rows this table calls failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
 
-3. **Advance on `pass`.** When the disposition is `pass`, spec review's next commit moves `SPEC_REVIEW` → `APPROVED`. Implementation review stays at `VERIFY`, and the operator gate opens. The review does not mark the node complete. The operator's sign-off still does that.
+3. **Advance on `pass`.** When the disposition is `pass`, the plan advances as `plan-workflow.md` says. The review does not accept the finished work. The person running the project does that.
 
-`followups` and `changes-required` stop. The audit is already in the doc. A review failure does not move the node. It stays at `SPEC_REVIEW` or `VERIFY`. `ISSUE_OPEN` is the operator rejecting during the walk.
+`followups` and `changes-required` stop. The matrix is already in the plan. A review failure does not move the plan. It stays on that step.
 
 On `followups`, the operator may write `waived` on a partial and file an Open Issue. Disposition is computed again from the table above. The node advances only when that disposition is `pass`.
 
-On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again. Spec review repeats stage 2. Implementation review repeats stage 6 on the rows named in step 2, and runs the same checks as the review it follows.
+On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again.
 
 A heading is not a pass. On a later entry, `pass` advances without a new dispatch. `changes-required` dispatches that review again. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
 
@@ -104,10 +104,8 @@ The reviewer writes the matrix into the doc, applies a fully specified fix, and 
 
 ## Where it lands
 
-The matrix is durable provenance, exactly like the existing audit tables (`plan-workflow.md` "Audit tables as durable provenance"):
+The matrix is recorded in the plan's Reviews section, newest last.
 
-- A **spec review** matrix lands in the spec's `Spec Review (YYYY-MM-DD)` section (between Open Issues and Implementation Notes).
-- An **implementation review** matrix lands in the `Implementation Review (YYYY-MM-DD)` subsection of Implementation Notes.
 - Findings by severity remain a secondary grouping. The matrix is primary. A review record written before this result existed keeps the word it was written with.
 
 ---
@@ -115,5 +113,5 @@ The matrix is durable provenance, exactly like the existing audit tables (`plan-
 ## Notes
 
 - The matrix does **not** replace severity-grouped findings. Keep both. Lead with the matrix.
-- A check that needs a person is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The operator's pass is the real sign-off for those rows (plan-workflow stage 8).
-- This format is the per-requirement half of the self-audit mitigation. The independence half is a review that runs in a fresh context — plan-workflow stages 2 and 6.
+- A check that needs a person is `N/A` with the reason "operator gate". That row does not by itself change the disposition. The person's acceptance is the sign-off for the finished work.
+- This format is the per-requirement half of the self-audit mitigation. The independence half is a review that runs in a fresh context, as `plan-workflow.md` requires.

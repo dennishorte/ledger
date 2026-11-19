@@ -122,7 +122,7 @@ This project uses the **ledger framework** — a document-driven, spec-verified 
 ## Start here
 
 - **`docs/00-project.md`** — project root. Read first for purpose, standing decisions, and the list of plans.
-- **`.ledger/process/plan-workflow.md`** — standardised operator playbook for taking a plan from PLANNED through COMPLETE. Read before driving any node.
+- **`.ledger/process/plan-workflow.md`** — how a plan goes from a confirmed outcome through acceptance. Read it before driving a plan.
 
 **To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
 
@@ -134,43 +134,24 @@ Follow `.ledger/process/plan-workflow.md`. There is no ledger server and no ledg
 
 A node is one piece of work under `docs/_plans/`. The lasting description follows the shape of the project: each part has a living doc in that part's folder. A point-in-time writeup stays in `docs/_investigations/`.
 
-Every node follows this schema (required sections in order):
-
-- **Front-matter:** Node ID, Parent, Status, Created, Last Updated, Dependencies.
-- **Requirements** — with explicit out-of-scope bullets.
-- **Design** — data contracts, layout, components & files, interaction model, acceptance check.
-- **Decisions** — numbered D1...Dn table, one row per choice with rationale.
-- **Open Issues** — priority-tagged HIGH / MEDIUM / LOW / TRIVIAL.
-- **Implementation Notes** — empty pre-implementation; pinned versions and deviations post.
-- **Verification** — what the verifier confirms before promoting to COMPLETE.
-- **Children** — None for leaves; manifest table for parents.
-
-**Lifecycle (§6.2):**
-```
-DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE
-                                                    ↓
-                                               ISSUE_OPEN → (back to APPROVED or DRAFT)
-```
+Every plan follows `.ledger/process/plan-workflow.md`. The sections, the status values, and the steps are in that file.
 
 ## File naming and placement
 
-A top-level leaf is `docs/_plans/NN-name.md`. A parent created with children is `docs/_plans/NN-name/00-name.md`, with children at `docs/_plans/NN-name/MM-child.md`. A leaf that is later split stays at `docs/_plans/NN-name.md` and its children go in `docs/_plans/NN-name/`. `NN` and `MM` are zero-padded two-digit numbers. Leave a gap when inserting; do not renumber.
+A plan is `docs/_plans/NN-name.md`. A plan that has sub-plans stays at that path. Its pieces go in `docs/_plans/NN-name/`, as `MM-piece.md`. `NN` and `MM` are zero-padded two-digit numbers. Leave a gap when inserting; do not renumber.
 
 ## Hard constraints
 
-- **No implementation until a node reaches APPROVED.**
+- **No implementation until the implementation design has passed review.**
 - **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — so during a session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out. Route all file-mutating work through the `plan-workflow` playbook (it branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `main`.
-- Every lifecycle transition is its own git commit.
-- Status must be updated in both the node doc AND the parent's children manifest row in the same commit.
+- Each gate is its own commit on the plan. A parent plan does not keep a copy of a sub-plan's status.
 - The doc tree is the source of truth. If code and a doc disagree, either the doc wins or it must be updated to reflect a deliberate change — never silently.
 - Decisions made in conversation that aren't in the docs are not durable — persist them.
 
 ## Process notes
 
 - **Framework playbooks** live in `.ledger/process/`.
-- Status transitions are tracked in the node's own doc. Update both the doc's `**Status:**` header and the parent's children manifest when transitioning.
-- **Implementation Notes** is where pinned versions, deviations from spec, and follow-up items belong — not the commit message.
-- Open Issues in a node's doc are the primary issue tracker. Struck-through bullets are resolved; unstruck HIGH/MEDIUM issues block promotion to COMPLETE.
+- Status is tracked in the plan's own doc.
 CLAUDE_MD_EOF
   sed -i '' \
     -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \

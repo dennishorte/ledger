@@ -6,25 +6,24 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 - **`docs/00-project.md`** — the root page of the system record. Read it for what this system does and the obligations it keeps.
 - **`.ledger/process/system-record.md`** — how a page is written, read, and edited. Read it before changing a page.
-- **`.ledger/process/plan-workflow.md`** — how a plan goes from PLANNED through COMPLETE. Read it before driving a node.
+- **`.ledger/process/plan-workflow.md`** — how a plan goes from a confirmed outcome through acceptance. Read it before driving a plan.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 
 ## Documentation discipline
 
 A node is one piece of work under `docs/_plans/`. The lasting description is the system record: one page per part under `docs/`, outside `_plans/` and `_investigations/`. How a page is written, read, and edited is `.ledger/process/system-record.md`. A point-in-time writeup stays in `docs/_investigations/`.
 
-Every plan follows the sections and the lifecycle in `plan-workflow.md`.
+Every plan follows `plan-workflow.md`.
 
-- **Required sections:** Requirements, Design, Decisions, Open Issues, Implementation Notes, Verification, Children.
-- **Lifecycle:** DRAFT → SPEC_REVIEW → APPROVED → IN_PROGRESS → VERIFY → COMPLETE (or → ISSUE_OPEN → back).
-- Parents hold a children manifest with declared dependencies.
-- No agent may begin implementation until a plan reaches APPROVED.
+- **Status:** `outcome`, `coordinating`, `requirements`, `test-design`, `tests`, `design`, `implementation`, `accepted`.
+- **Sections:** Part, Outcome, Decisions, Requirements, Test design, Tests, Design, Implementation notes, Reviews.
+- No implementation until the implementation design has passed review.
 
 **To find current focus:** read the plans in `docs/_plans/`. The most-recently-advanced plan tells you where work currently lives.
 
 ## How work proceeds
 
-Follow `plan-workflow.md`. Each lifecycle change is its own git commit, and it updates both the node doc and the parent's children manifest. An independent reviewer writes the sign-off matrix into the doc before status moves. The operator, not the reviewer, promotes VERIFY to COMPLETE.
+Follow `plan-workflow.md`. Each gate is its own commit on the plan. An independent reviewer writes the sign-off matrix. The person running the project accepts the finished work.
 
 The software that once automated this process — the React UI, the API server, the task runner, the agent dispatcher, the health scanner, and the workflow scripts — was removed on 2026-11-17. The node docs that specified that software were removed on 2026-11-18. The playbooks are the process.
 
@@ -45,8 +44,8 @@ Do not edit a child project unless the operator specifically asks. A change in t
 
 ## Hard constraints
 
-- **No implementation until a node reaches APPROVED.**
+- **No implementation until the implementation design has passed review.**
 - **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `plan-workflow.md`, which branches from the local integration branch (`main`).
-- Status changes update the node doc and the parent's children manifest in the same commit.
+- Each gate is its own commit on the plan. A parent plan does not keep a copy of a sub-plan's status.
 - The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. A fact that stays only in conversation is not durable; write it on the page that homes it.
 - Do not edit a registered child project unless the operator specifically asks for that change.
