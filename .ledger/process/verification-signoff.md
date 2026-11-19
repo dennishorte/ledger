@@ -20,7 +20,7 @@ The review's primary artifact is a table with exactly one row per checkable item
 ```
 
 **What gets a row:**
-- **Spec review** — the requirements-fidelity rows below, then one row per standing decision or open issue in `docs/00-project.md` the spec must address, plus one per Requirements bullet the spec declares. The matrix *is* the coverage matrix. Fidelity leads.
+- **Spec review** — the requirements-fidelity rows below, then one row per fact in the reading set (`.ledger/process/system-record.md`) that the spec must address, plus one per Requirements bullet the spec declares. The matrix *is* the coverage matrix. Fidelity leads.
 - **Implementation review / verify / reverify** — one row for the Requirements text itself (unchanged since confirmation, or an amendment is recorded), then one row per **Requirements** bullet *and* one per **Acceptance-check** item in the spec. Nothing is implicitly covered.
 
 ### Requirements fidelity (spec review)

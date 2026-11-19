@@ -4,13 +4,14 @@ This repo is the written process for running a project with an LLM. Work is spec
 
 ## Start here
 
-- **`docs/00-project.md`** — this project's root. Read it for purpose, how the docs are organized, and the standing decisions.
+- **`docs/00-project.md`** — the root page of the system record. Read it for what this system does and the obligations it keeps.
+- **`.ledger/process/system-record.md`** — how a page is written, read, and edited. Read it before changing a page.
 - **`.ledger/process/plan-workflow.md`** — how a plan goes from PLANNED through COMPLETE. Read it before driving a node.
 - **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 
 ## Documentation discipline
 
-A node is one piece of work under `docs/_plans/`. The lasting description follows the shape of the project: each part has a living doc in that part's folder. A point-in-time writeup stays in `docs/_investigations/`.
+A node is one piece of work under `docs/_plans/`. The lasting description is the system record: one page per part under `docs/`, outside `_plans/` and `_investigations/`. How a page is written, read, and edited is `.ledger/process/system-record.md`. A point-in-time writeup stays in `docs/_investigations/`.
 
 Every plan follows the sections and the lifecycle in `plan-workflow.md`.
 
@@ -47,5 +48,5 @@ Do not edit a child project unless the operator specifically asks. A change in t
 - **No implementation until a node reaches APPROVED.**
 - **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `plan-workflow.md`, which branches from the local integration branch (`main`).
 - Status changes update the node doc and the parent's children manifest in the same commit.
-- The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. Decisions that stay only in conversation are not durable; write them down.
+- The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. A fact that stays only in conversation is not durable; write it on the page that homes it.
 - Do not edit a registered child project unless the operator specifically asks for that change.

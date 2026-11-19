@@ -10,6 +10,8 @@ A part contains itself and every part whose page is nested inside its page. The 
 
 Whether work is a new part is a judgment. Once a page exists, a reader follows that page and does not split it. A new part is a new page and a Parts entry on the containing page, both in the same change.
 
+The root page is `docs/00-project.md` and stays there. A child page is a file in the folder beside the page that contains it. The folder has that page's name without `.md`, so the root's children are in `docs/00-project/`. The file is `NN-name.md`. `NN` is a zero-padded two-digit number and sets the order of those children only. A file inserted between two others takes a free number. A file already there keeps its number. One level down is the same: a page keeps its path, and its children sit in a folder of its name.
+
 ## Where a fact lives
 
 Each fact has one home, and that page states it. The homes are in this order. The first one that fits is the home.

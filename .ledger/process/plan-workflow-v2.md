@@ -1,6 +1,6 @@
 # Plan workflow
 
-The procedure for one plan. The plan is a temporary file in `docs/_plans/`. A plan with no parent is removed when its lasting outcome has been written into a living doc. A sub-plan stays until that parent is removed.
+The procedure for one plan. The plan is a temporary file in `docs/_plans/`. A plan with no parent is removed when its lasting outcome has been written into the system record. A sub-plan stays until that parent is removed. The record's pages are specified in `.ledger/process/system-record.md`.
 
 A plan with one outcome walks seven steps. A plan whose outcome is made of several pieces records the decisions those pieces share, creates a sub-plan for each piece, and waits for them. The person running the project confirms the outcome, confirms the requirements, and accepts the finished work. An agent writes each artifact between those moments, and a different agent reviews it in a fresh session.
 
@@ -14,7 +14,7 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 4. **Test implementation.** Those checks become executable tests. An independent review.
 5. **Implementation design.** How the tests will be made to pass. An independent review.
 6. **Implementation.** The tests are made to pass. An independent review, then the person's acceptance.
-7. **Record.** The living docs say what is now true, and the plan is removed.
+7. **Record.** The system record says what is now true, and the plan is removed.
 
 ## Rules for every step
 
@@ -34,7 +34,7 @@ A plan is `docs/_plans/NN-name.md`. `NN` is a zero-padded two-digit sequence num
 
 Sections, in order. A section that has not been reached says `*(not started)*`.
 
-- **Part** — the living doc for the part of the project this work changes
+- **Part** — the system-record page for the part of the project this work changes
 - **Outcome** — the high-level sentence, then any sub-outcomes
 - **Decisions** — on a coordinating plan, the choices its pieces share; on a single piece, the choices made in its implementation design
 - **Requirements** — Acceptance, Constraints, Out of scope
@@ -50,21 +50,17 @@ Status is `outcome`.
 
 Write the outcome in the person's words: what is true when the work is done. If that outcome is made of distinct pieces, name each piece under it, one sentence each, in the person's words. If the person has already said it, copy that wording. If they have not, ask. Do not invent it.
 
-Name the part of the project this work changes. **Part** is the path of the living doc that describes that part. Work on the whole project names `docs/00-project.md`.
+Name the part of the project this work changes. **Part** is the path of the system-record page that describes that part. Work on the whole project names `docs/00-project.md`.
 
 The person edits the text and sets `**Outcome confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it. When the outcome names sub-outcomes, the commit sets Status to `coordinating`. When it does not, the commit sets Status to `requirements`.
 
-## Decisions the plan follows
+## Facts the plan follows
 
-A plan reads every decision that governs its part, and no decision that governs only some other part.
+A plan reads the reading set in `.ledger/process/system-record.md` for the part named in **Part**. It follows the facts on those pages. It does not read a page outside that set.
 
-Start at the doc named in **Part** and read its Decisions section. Then read the Decisions section of the doc for the part that contains it, and repeat until `docs/00-project.md` is included. The doc that contains another is the living doc for the parent folder, or `docs/00-project.md` when the part is a top-level system. Stop there. Do not read a sibling part.
+A sub-plan names its own part. That part is the parent's part, or a narrower page inside it. The sub-plan reads its own reading set. It also follows the parent plan's confirmed decisions.
 
-A civilization plan reads the civilization doc and the project root. It does not read the geography doc. A plan on one piece of civilization also reads that piece's doc, then civilization, then the project root.
-
-A sub-plan names its own part. That part is the parent's part, or a narrower doc inside it. The sub-plan fetches its own chain. It also follows the parent plan's confirmed decisions.
-
-A decision that later work in one part must follow is written into that part's living doc. A decision that more than one top-level part must follow is written into `docs/00-project.md`. Step 7 is where that write happens.
+A fact that later work must follow is written on the page that homes it, in the section named in `.ledger/process/system-record.md`. Step 7 is where that write happens. The reason for the fact is not written on the page.
 
 ## Coordinating a plan that has sub-outcomes
 
@@ -84,7 +80,7 @@ That pass commit creates the files. Each new file starts at Status `requirements
 
 A piece that itself has pieces does the same thing one level down. The sub-plan file stays at `docs/_plans/NN-name/MM-piece.md`, and its pieces go in `docs/_plans/NN-name/MM-piece/`.
 
-A sub-plan with a dependency does not start until every plan it depends on is `accepted` and that piece's outcome is in a living doc. Pieces with no dependency can proceed together. Two sub-plans do not own the same files. If they would, the parent decision gives that surface to one of them before either continues.
+A sub-plan with a dependency does not start until every plan it depends on is `accepted` and that piece's outcome is in the system record. Pieces with no dependency can proceed together. Two sub-plans do not own the same files. If they would, the parent decision gives that surface to one of them before either continues.
 
 A sub-plan that needs a decision the parent has not made stops. The decision is added on the parent, confirmed by the person, and reviewed, before the sub-plan continues.
 
@@ -152,15 +148,15 @@ Do not change the tests or the design. If the design cannot satisfy a test, stop
 
 **Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. They set `**Accepted:** YYYY-MM-DD`. That commit is theirs. The agent does not make it. It sets Status to `accepted`.
 
-Merge the branch to `main` after that commit. The merge does not change a living doc and does not delete the plan.
+Merge the branch to `main` after that commit. The merge does not change a system-record page and does not delete the plan.
 
 ## 7. Record
 
 On `main`. A single-piece plan enters here after acceptance. A coordinating plan enters here when every plan file in the folder beside it is `accepted`.
 
-Update the living doc named in **Part**. Write what is now true there. A coordinating plan adds only what its pieces have not already recorded. Present tense. No lifecycle status. Stamp **Last verified** with `git rev-parse HEAD` immediately before the commit that changes the doc. The doc never names the commit it lives in.
+Update the page named in **Part**. Write each fact that is now true in the section that homes it, as `.ledger/process/system-record.md` specifies. A coordinating plan adds only facts its pieces have not already recorded. Present tense. Editing a fact sets that page's Checked to `None`. The page does not name the commit that edits it.
 
-Add a new living doc only when that part does not have one yet. The new doc goes in the folder for the part of the project it describes. If nothing that later work needs to read has changed, leave the living docs alone.
+Add a new page only when that part does not have one yet. A new part is that page and a Parts entry on the containing page, both in this change. The page is placed as `.ledger/process/system-record.md` specifies. If nothing that later work needs to read has changed, leave the pages alone.
 
 A plan that has a parent stays at `accepted`. The parent removes it later. A plan that has no parent is deleted in this same commit, together with every plan under its folder.
 

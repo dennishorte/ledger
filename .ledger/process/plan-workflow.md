@@ -5,7 +5,7 @@
 
 The standardised procedure for taking a plan from PLANNED through COMPLETE. The operator drives it manually with LLM sub-agents.
 
-A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into a living doc at the top of `docs/`, and then the node is removed.
+A node is one piece of work. It lives under `docs/_plans/` until its lasting outcome is written into the system record, and then the node is removed. The record's pages are specified in `.ledger/process/system-record.md`.
 
 Reopening a node that has **already reached COMPLETE** — to finish deferred scope or to extend it — is a back-edge the forward stages don't draw. It is covered in **Reopen mode** below. Do not improvise it as an ad-hoc pass; classify it first.
 
@@ -217,16 +217,18 @@ Once verification passes, bump:
 - Spec's Status header: VERIFY → COMPLETE (v1, YYYY-MM-DD).
 - Parent manifest row: VERIFY → COMPLETE (v1).
 - Spec's own sample-tree picture (if it has one): row → `[COMPLETE]`.
-- **Living-doc check** — if the node touched anything a living doc
+- **Record check** — if the node touched anything a system-record page
   describes, fold the delta into this same commit. The check is
   diff-shaped and cheap: list the files this node touched
-  (`git diff --name-only <base>...HEAD`), then grep the markdown files
-  at the top of `docs/` for those paths or this node's id. No covering
-  doc → nothing to do. Otherwise update the stale rows and set the
-  doc's **last-verified** stamp to `git rev-parse HEAD` — run it
-  *before* committing, since a doc never names the commit it lives in.
-  Skipping it silently is how the living docs rot.
-- **Removal** — once the lasting outcome is in a living doc, delete the node and drop its row from the parent's children manifest. That removal is its own commit, after this COMPLETE commit.
+  (`git diff --name-only <base>...HEAD`), then grep the pages under
+  `docs/` (not `docs/_plans/` or `docs/_investigations/`) for those
+  paths or this node's id. No covering page → nothing to do. Otherwise
+  update the facts this change adds, removes, or falsifies, on the
+  pages in the reading set from `.ledger/process/system-record.md`.
+  Editing a fact sets that page's Checked to `None`. The page does not
+  name the commit that edits it. Skipping the check is how the record
+  rots.
+- **Removal** — once the lasting outcome is on the record page, delete the node and drop its row from the parent's children manifest. That removal is its own commit, after this COMPLETE commit.
 
 Single commit in the worktree for the COMPLETE transition. The removal, when it happens, is a later commit.
 
@@ -243,7 +245,7 @@ The `--no-commit` lets you inspect the merge tree and **apply cross-doc summary 
 While the merge is uncommitted, edit:
 
 - `CLAUDE.md` round-2 panels line (or equivalent project-state summary).
-- The Plans list in `docs/00-project.md`, when this plan is listed there.
+- A system-record page, when a fact on it was added, removed, or falsified and the stage-9 record check did not already include it.
 - Sibling sample-tree pictures that show this node's status.
 
 These files weren't touched by the worktree (they're outside its concern) and the merge doesn't flag them as conflicts. Bundling them into the merge commit gives one atomic transition: main never sits in a half-updated state with a COMPLETE node and stale top-level summaries.
