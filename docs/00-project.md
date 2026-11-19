@@ -8,9 +8,9 @@ Does not carry out a child project's work.
 
 ## Parts
 
-[Processes](00-project/01-processes.md)
+[Processes](01-processes/00-processes.md)
 
-[Scripts](00-project/02-scripts.md)
+[Scripts](02-scripts/00-scripts.md)
 
 ## Offers
 

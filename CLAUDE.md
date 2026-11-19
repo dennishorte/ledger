@@ -29,7 +29,7 @@ The software that once automated this process — the React UI, the API server, 
 
 ## Scripts
 
-`scripts/new-project` and `scripts/sync-process` are described in `docs/00-project/02-scripts.md`.
+`scripts/new-project` and `scripts/sync-process` are described in `docs/02-scripts/00-scripts.md`.
 
 ## Other projects
 
