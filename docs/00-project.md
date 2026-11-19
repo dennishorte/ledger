@@ -10,6 +10,8 @@ Does not carry out a child project's work.
 
 [Processes](00-project/01-processes.md)
 
+[Scripts](00-project/02-scripts.md)
+
 ## Offers
 
 None

@@ -6,7 +6,7 @@
 # With path arguments, syncs only those projects.
 set -euo pipefail
 
-LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+LEDGER_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REGISTRY="$LEDGER_DIR/.ledger/child-projects"
 SRC="$LEDGER_DIR/.ledger/process"
 

@@ -29,12 +29,7 @@ The software that once automated this process — the React UI, the API server, 
 
 ## Scripts
 
-Small wrappers in `.claude/scripts/` (allowlisted in `.claude/settings.json`):
-
-- `.claude/scripts/doc-status [prefix]` — table of node → lifecycle status across `docs/`
-- `.claude/scripts/lines <file> <start> [end]` — numbered line range
-- `.claude/scripts/new-project <path> [--name NAME]` — scaffold a child project: `docs/`, a `CLAUDE.md`, and a copy of these playbooks
-- `.claude/scripts/sync-process [<path> ...]` — copy `.ledger/process/*.md` from here to every registered child. Run it only when the operator asks.
+`scripts/new-project` and `scripts/sync-process` are described in `docs/00-project/02-scripts.md`.
 
 ## Other projects
 

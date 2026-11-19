@@ -5,7 +5,7 @@
 # Idempotent: existing files/dirs are left untouched (skipped with a notice).
 set -euo pipefail
 
-LEDGER_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+LEDGER_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 usage() {
   echo "usage: new-project <project-path> [--name NAME]" >&2
@@ -18,8 +18,12 @@ PROJECT_NAME=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --name)     PROJECT_NAME="$2"; shift 2 ;;
-    --app-port|--api-port) echo "new-project: $1 is ignored; ledger does not run a server" >&2; shift 2 ;;
+    --name)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "new-project: --name requires a value" >&2
+        usage
+      fi
+      PROJECT_NAME="$2"; shift 2 ;;
     -h|--help)  usage ;;
     -*)         echo "new-project: unknown option: $1" >&2; usage ;;
     *)
@@ -41,8 +45,6 @@ if [[ "$PROJECT_PATH" != /* ]]; then
 fi
 
 [[ -z "$PROJECT_NAME" ]] && PROJECT_NAME="$(basename "$PROJECT_PATH")"
-
-TODAY="$(date +%Y-%m-%d)"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 write_file() {
@@ -69,39 +71,43 @@ copy_file() {
 
 # ── directories (mkdir -p is idempotent) ──────────────────────────────────────
 echo "Setting up: $PROJECT_PATH"
-mkdir -p "$PROJECT_PATH/.ledger/process"
+mkdir -p "$PROJECT_PATH/docs" "$PROJECT_PATH/.ledger/process"
 
 # ── docs/00-project.md ───────────────────────────────────────────────────────
 write_file "$PROJECT_PATH/docs/00-project.md" \
 "# $PROJECT_NAME
 
-**Last updated:** $TODAY
+## Responsibility
 
-## What this is for
+None
 
-*(the problem this project exists to solve)*
+## Parts
 
-## What this project contains
+None
 
-*(what the project is, and what is in scope)*
+## Offers
 
-## Decisions
+None
 
-| Decision | Why |
-|---|---|
+## Dependencies
 
-## Open issues
+None
 
-An issue that belongs to one plan stays on that plan. This section is for a problem that crosses plans.
+## Behavior
 
-*(none yet)*
+None
 
-## Plans
+## Rules
 
-Work documents live in \`docs/_plans/\`. This list is the ones that exist.
+None
 
-| ID | Title | Depends on | Status |
-|----|-------|------------|--------|"
+## Words
+
+None
+
+## Checked
+
+None"
 
 # ── .ledger/process/ (framework playbooks) ───────────────────────────────────
 for src in "$LEDGER_DIR/.ledger/process/"*.md; do
@@ -117,41 +123,37 @@ else
   cat > "$PROJECT_PATH/CLAUDE.md" << 'CLAUDE_MD_EOF'
 # Claude/agent briefing — {{PROJECT_NAME}}
 
-This project uses the **ledger framework** — a document-driven, spec-verified workflow for LLM-assisted engineering. Every implementation node is governed by a doc in `docs/` that tracks status, decisions, and verification through its lifecycle.
+Work is specified in `docs/`, reviewed by someone who did not write it, and promoted only when the operator says so.
 
 ## Start here
 
-- **`docs/00-project.md`** — project root. Read first for purpose, standing decisions, and the list of plans.
+- **`docs/00-project.md`** — the root page of the system record. Read it for what this system does and the obligations it keeps.
+- **`.ledger/process/system-record.md`** — how a page is written, read, and edited. Read it before changing a page.
 - **`.ledger/process/plan-workflow.md`** — how a plan goes from a confirmed outcome through acceptance. Read it before driving a plan.
-
-**To find current focus:** start at the Plans list in `docs/00-project.md` and descend through Status fields. The most-recently-advanced plan tells you where work currently lives.
-
-## How work proceeds
-
-Follow `.ledger/process/plan-workflow.md`. There is no ledger server and no ledger UI.
+- **`.ledger/process/verification-signoff.md`** — the review matrix, and the only definition of `pass`.
 
 ## Documentation discipline
 
-A node is one piece of work under `docs/_plans/`. The lasting description follows the shape of the project: each part has a living doc in that part's folder. A point-in-time writeup stays in `docs/_investigations/`.
+A node is one piece of work under `docs/_plans/`. The lasting description is the system record: one page per part under `docs/`, outside `_plans/` and `_investigations/`. How a page is written, read, and edited is `.ledger/process/system-record.md`. A point-in-time writeup stays in `docs/_investigations/`.
 
-Every plan follows `.ledger/process/plan-workflow.md`. The sections, the status values, and the steps are in that file.
+Every plan follows `plan-workflow.md`.
 
-## File naming and placement
+- **Status:** `outcome`, `coordinating`, `requirements`, `test-design`, `tests`, `design`, `implementation`, `accepted`.
+- **Sections:** Part, Outcome, Decisions, Requirements, Test design, Tests, Design, Implementation notes, Reviews.
+- No implementation until the implementation design has passed review.
 
-A plan is `docs/_plans/NN-name.md`. A plan that has sub-plans stays at that path. Its pieces go in `docs/_plans/NN-name/`, as `MM-piece.md`. `NN` and `MM` are zero-padded two-digit numbers. Leave a gap when inserting; do not renumber.
+**To find current focus:** read the plans in `docs/_plans/`. The most-recently-advanced plan tells you where work currently lives.
+
+## How work proceeds
+
+Follow `plan-workflow.md`. Each gate is its own commit on the plan. An independent reviewer writes the sign-off matrix. The person running the project accepts the finished work.
 
 ## Hard constraints
 
 - **No implementation until the implementation design has passed review.**
-- **Harness `isolation: 'worktree'` is read-only-only.** The Agent-tool worktree forks from the pushed remote (`origin/<baseBranch>`), NOT your local HEAD — so during a session with unpushed commits it works against a stale tree, and its branch must never be merged back. Reserve it for read-only fan-out. Route all file-mutating work through the `plan-workflow` playbook (it branches from local `<baseBranch>` and merges cleanly) or run it in-place. The integration branch is `main`.
+- **Harness `isolation: 'worktree'` is read-only-only.** That worktree forks from the pushed remote, so during a session with unpushed commits it is stale, and its branch must never be merged back. Use it for read-only work. File-changing work follows `plan-workflow.md`, which branches from the local integration branch (`main`).
 - Each gate is its own commit on the plan. A parent plan does not keep a copy of a sub-plan's status.
-- The doc tree is the source of truth. If code and a doc disagree, either the doc wins or it must be updated to reflect a deliberate change — never silently.
-- Decisions made in conversation that aren't in the docs are not durable — persist them.
-
-## Process notes
-
-- **Framework playbooks** live in `.ledger/process/`.
-- Status is tracked in the plan's own doc.
+- The doc tree is the source of truth. If a doc and the work disagree, update one of them on purpose. A fact that stays only in conversation is not durable; write it on the page that homes it.
 CLAUDE_MD_EOF
   sed -i '' \
     -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
