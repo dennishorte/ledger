@@ -25,6 +25,7 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 - **A failed review stays here.** Keep the recorded matrix. The repair is written in a session that did not write the matrix. A new session reviews the repaired artifact. `verification-signoff.md` says which rows that review covers.
 - **An earlier step is not rewritten from a later one.** If the outcome, the requirements, the test design, the tests, or the design is wrong, return to that step. The person amends the outcome and the requirements. An agent does not.
 - **Each gate is its own commit** on the plan. The message names the step.
+- **The person's word finishes in a commit.** When the person says a step is confirmed, that the step is done, or that an amendment is done, the agent writes that into the plan and commits it. The confirmation line, the status change, and the commit are one update.
 
 ## The plan file
 
@@ -52,7 +53,7 @@ Write the outcome in the person's words: what is true when the work is done. If 
 
 Name the part of the project this work changes. **Part** is the path of the system-record page that describes that part. Work on the whole project names `docs/00-project.md`.
 
-The person edits the text and sets `**Outcome confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it. When the outcome names sub-outcomes, the commit sets Status to `coordinating`. When it does not, the commit sets Status to `requirements`.
+The person may edit the text. When the person says the outcome is confirmed, the agent sets `**Outcome confirmed:** YYYY-MM-DD` and commits. When the outcome names sub-outcomes, that commit sets Status to `coordinating`. When it does not, that commit sets Status to `requirements`.
 
 ## Facts the plan follows
 
@@ -70,7 +71,7 @@ This plan does not continue to requirements, tests, design, or implementation. T
 
 Write the decisions that more than one piece has to follow, and the order between the pieces. A decision names the pieces it binds and the reason. A decision that chooses a file, a function, or a mechanism inside one piece belongs in that piece's design.
 
-The person edits the decisions and sets `**Decisions confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it.
+The person may edit the decisions. When the person says the decisions are confirmed, the agent sets `**Decisions confirmed:** YYYY-MM-DD` and commits.
 
 **Review.** One row per sub-outcome: it is a piece of the parent outcome, and it is a piece a person could finish on its own. One row per decision: it binds more than one piece, and it does not choose a detail inside a single piece. One row for the order: each dependency says which piece has to be finished first, and why. On `pass`, one commit records the matrix and creates the sub-plans.
 
@@ -98,9 +99,9 @@ Write three parts, and nothing that chooses a mechanism:
 
 A requirement that names a file, a component, a library, or a mechanism is a design decision and belongs in step 5, not here.
 
-The person edits the text, replaces anything still marked `_(operator)_`, and sets `**Requirements confirmed:** YYYY-MM-DD`. That confirmation is their commit. The agent does not make it. The commit sets Status to `test-design`.
+The person edits the text and replaces anything still marked `_(operator)_`. When the person says the requirements are confirmed, the agent sets `**Requirements confirmed:** YYYY-MM-DD` and commits. That commit sets Status to `test-design`.
 
-A later change adds `**Requirements amended:** YYYY-MM-DD — <what changed>` and returns to the earliest step the change affects. An amendment that adds an outcome returns to step 1.
+A later change adds `**Requirements amended:** YYYY-MM-DD — <what changed>` and returns to the earliest step the change affects. When the person says the amendment is done, the agent writes that line and commits. An amendment that adds an outcome returns to step 1.
 
 ## 3. Test design
 
@@ -146,7 +147,7 @@ Do not change the tests or the design. If the design cannot satisfy a test, stop
 
 **Review.** One row per accepted test, with evidence it passes. One row that the tests are unchanged since their review. One row that the design is unchanged since its review. One row per decision fetched for this plan, including each confirmed decision on the parent plan. On `pass`, one commit records the matrix. Status stays `implementation` until the person accepts.
 
-**Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. They set `**Accepted:** YYYY-MM-DD`. That commit is theirs. The agent does not make it. It sets Status to `accepted`.
+**Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. When the person says the work is accepted, the agent sets `**Accepted:** YYYY-MM-DD`, sets Status to `accepted`, and commits.
 
 Merge the branch to `main` after that commit. The merge does not change a system-record page and does not delete the plan.
 
