@@ -10,15 +10,15 @@
 
 **Outcome confirmed:** 2026-11-21
 
-**Outcome amended:** 2026-11-21 — "Course" is replaced by "spirit." Spirit and letter are defined.
+**Outcome amended:** 2026-11-22 — Spirit states the intent the letter does not state. The pieces say intent.
 
 The spirit of the system is a review path alongside the letter of the system.
 
-**Spirit.** The text a review reads alongside the letter. It says what the part is keeping where the letter does not already say it.
+**Spirit.** A text kept off the record. It states the intent of the project, or of one part, where the letter does not state that intent.
 
 **Letter.** The facts on the record pages.
 
-- The spirit is what that review reads. A sub-part has a spirit of its own when what that part is keeping is not already said by the spirit of the parts above it.
+- The spirit is what that review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
 - A spirit review reads the spirit of the part a change changes and the spirits of the parts above it. The letter decides the pass, and the person answers a spirit finding.
 
 ## Decisions
