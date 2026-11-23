@@ -64,3 +64,5 @@ A difference between a page and the system that this change does not add, remove
 ## Outside the record
 
 The reason an obligation exists, the history of a choice, the alternatives, and instructions for a task are not facts on these pages.
+
+A spirit is kept in `spirit.md` beside the page of the part it belongs to.
