@@ -1,6 +1,6 @@
 # Spirit review
 
-**Status:** design
+**Status:** implementation
 
 ## Part
 
@@ -22,7 +22,17 @@ A spirit review reads the change, the spirit of the part that change changes, an
 
 ## Decisions
 
-*(not started)*
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | How a spirit review runs is a section added at the end of `.ledger/process/review.md`, headed "Spirit review." Every line already in that file stays as it is. No other file is changed. | This serves each acceptance check. The checks are a reading of the writing this piece produces, and this section is that writing: "A person can point at a spirit review and see the change it read," "A person can point at a spirit review and see the spirit of the part that change changes," "A person can point at a spirit review and see the spirits of the parts above that part," "A person can point at a spirit review and see that it did not read the record pages," "A person can point at the pass and see that the letter decided it," "A person can point at a spirit finding and see that the change does not fit the intent the review read," "A person can point at a spirit review with no finding and see that it does not ask the person for an answer," and "A person can point at a spirit finding and see the person's answer." The parent's D4 is met because this piece adds only how the spirit review runs, as this section, and the rest of the file stays as it is. The parent's D1 is met because the section is not on a record page, and "What a reader reads" is not edited, so the letter reading set does not gain the spirit. |
+| D2 | The section says a spirit review is a written account, and the account shows the change it read. | This serves "A person can point at a spirit review and see the change it read." The change is on the review, and it is the change the review read. |
+| D3 | The section says the review walks from the part the change changes up through the parts above it, reads `spirit.md` beside the page of the part the change changes when that file is beside the page, and shows that spirit. | This serves "A person can point at a spirit review and see the spirit of the part that change changes." The parent's D2 is met because the review meets that spirit by this walk. The file `spirit.md` beside the page is the place the spirit piece settled. This piece does not choose that place again. |
+| D4 | The section says that walk reads `spirit.md` beside the page of each part above the part the change changes, when that file is beside the page, and the review shows those spirits. | This serves "A person can point at a spirit review and see the spirits of the parts above that part." The parent's D2 is met because those spirits are met by the same walk, and the review adds no other way to find them. |
+| D5 | The section says the review shows what it read. What it shows is the change and the spirits it read. It does not read the record pages. The record pages are not among what it shows it read. | This serves "A person can point at a spirit review and see that it did not read the record pages." The review shows what it read, and the record pages are not in that set. The parent's D1 is met because this reading is not added to the letter reading set. |
+| D6 | The section says the letter decides the pass, and the pass shows that the letter decided it. The letter is the facts on the record pages. Finished work is still checked against the record. The spirit review does not decide the pass. The review does not accept finished work. | This serves "A person can point at the pass and see that the letter decided it." What decided the pass is the letter, and the pass shows that. The spirit review does not take the pass, and it does not accept the work. |
+| D7 | The section says a spirit finding is a miss. The intent the review read is the spirits it read. The finding shows that the change does not fit that intent. | This serves "A person can point at a spirit finding and see that the change does not fit the intent the review read." |
+| D8 | The section says a spirit review with no finding does not ask the person for an answer. | This serves "A person can point at a spirit review with no finding and see that it does not ask the person for an answer." |
+| D9 | The section says a spirit finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows, and it does not become part of the spirit. | This serves "A person can point at a spirit finding and see the person's answer." The parent's D3 is met because the answer stays with the person and does not become a fact the next change follows. The next change follows the facts on the record pages. |
 
 ## Requirements
 
@@ -130,7 +140,93 @@ This piece writes no executable tests. The checks in the test design are a readi
 
 ## Design
 
-*(not started)*
+The writing this piece adds is one section at the end of `.ledger/process/review.md` (D1). The section is headed "Spirit review." Every line already in that file stays as it is. No other file is changed. No record page is edited. "What a reader reads" stays as it is, so the letter reading set does not gain the spirit. That is the parent's D1.
+
+The section states how a spirit review runs. It does not choose where a spirit is kept, it does not write a spirit, and it does not write the rule for when a sub-part has a spirit of its own. It writes no sample change, no sample part, and no sample finding. The section is not a spirit review of a change, it is not a pass, and it is not a finding.
+
+The checks are a reading of this writing. Where the writing has produced no spirit review, no pass, or no finding, the example is missing. A missing example is not a failed check.
+
+The section that is added:
+
+```markdown
+## Spirit review
+
+A spirit review is a written account. It reads the change, the spirit of the part that change changes, and the spirits of the parts above it. It does not read the record pages.
+
+The review walks from the part the change changes up through the parts above it. It reads `spirit.md` beside the page of each part on that walk, when that file is beside the page. It does not read the record page.
+
+The review shows the change it read. It shows the spirit of the part that change changes, when it read that spirit. It shows the spirits of the parts above that part, when it read those spirits. What it shows it read is the change and the spirits it read. The record pages are not among what it shows it read.
+
+The letter decides the pass. The letter is the facts on the record pages. The pass shows that the letter decided it. Finished work is still checked against the record. The spirit review does not decide the pass. The review does not accept finished work.
+
+A spirit finding is a miss. The intent the review read is the spirits it read. The finding shows that the change does not fit that intent. The finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows, and it does not become part of the spirit.
+
+A spirit review with no finding does not ask the person for an answer.
+```
+
+### A person can point at a spirit review and see the change it read.
+
+D1 puts the section at the end of `.ledger/process/review.md`. D2 says the review is a written account and the account shows the change it read.
+
+A person points at that account and sees the change. The change on the review is the change the review read.
+
+The section states that rule. It is not itself a spirit review of a change. Where this writing has produced no spirit review, the example is missing. A missing example is not a failed check. No change is invented so that an example exists.
+
+### A person can point at a spirit review and see the spirit of the part that change changes.
+
+D3 says the review walks from the part the change changes up through the parts above it. On that walk it reads `spirit.md` beside the page of the part the change changes, when that file is beside the page, and it shows that spirit. D2 makes the review a written account, so the spirit is on the account.
+
+The file beside the page is the place the spirit piece settled. This piece does not choose that place again. When the file is beside the page, the review reads it and shows it. A person points at the review and sees that spirit. It is the spirit of the part that change changes.
+
+When that file is not beside the page, the review does not read a spirit there and does not invent one. The test design says that where the part that change changes has no spirit, the example is missing. A missing example is not a failed check.
+
+### A person can point at a spirit review and see the spirits of the parts above that part.
+
+D4 says the same walk reads `spirit.md` beside the page of each part above the part the change changes, when that file is beside the page, and the review shows those spirits. D3 starts the walk at the part the change changes and takes it up through the parts above. The parent's D2 is that walk, and it is the only way the review finds those spirits. The review adds no list and no link from a record page.
+
+The parts above are the containing parts, up through the project. The spirit beside a part's page is the one the review shows when the file is there. The project's spirit is already `docs/spirit.md`, beside `docs/00-project.md`. The walk meets it when the project is above the part the change changes. This piece does not write that spirit again.
+
+A person points at the review and sees those spirits. They are the spirits of the parts above that part. Where a part above has no spirit, the review does not read one and does not invent one. The example for that part is missing. A missing example is not a failed check.
+
+### A person can point at a spirit review and see that it did not read the record pages.
+
+D5 says the review shows what it read. What it shows is the change and the spirits it read. It does not read the record pages. The record pages are not among what it shows it read. The walk in D3 reads `spirit.md` and does not read the record page.
+
+The record pages are the pages that state what is true of the project now. A person points at the review and reads what it shows it read. That is the change and the spirits it read. The record pages are not among it. The change is shown, so the review does not show nothing it read.
+
+The letter reading set stays the one in "What a reader reads." This piece does not add the spirit to that set. That is the parent's D1.
+
+The section states this. Where this writing has produced no spirit review, the example is missing. A missing example is not a failed check.
+
+### A person can point at the pass and see that the letter decided it.
+
+D6 says the letter decides the pass, and the pass shows that the letter decided it. The letter is the facts on the record pages. Finished work is still checked against the record. The spirit review does not decide the pass. The review does not accept finished work.
+
+A person points at the pass and reads what decided it. The letter decided it, and the pass shows that. The check of finished work against the record stays. The spirit review is not that check and does not accept the work. The record page of Review is not edited. Its facts stay: finished work is checked against the record, and the review does not accept finished work.
+
+This piece produces no pass. Where this writing has produced no pass, the example is missing. A missing example is not a failed check.
+
+### A person can point at a spirit finding and see that the change does not fit the intent the review read.
+
+D7 says a spirit finding is a miss. The intent the review read is the spirits it read. The finding shows that the change does not fit that intent.
+
+A person points at the finding and sees the change against that intent. The change does not fit the intent the review read.
+
+This check applies when there is a finding. The section states what a finding shows. It does not contain a finding. A missing finding is not a failed check. No finding is invented so that an example exists.
+
+### A person can point at a spirit review with no finding and see that it does not ask the person for an answer.
+
+D8 says a spirit review with no finding does not ask the person for an answer.
+
+A person points at that review and sees that it does not ask for an answer. This is the only check that uses a review with no finding. The section states the rule. It is not itself a review with no finding. Where this writing has produced no such review, the example is missing. A missing example is not a failed check.
+
+### A person can point at a spirit finding and see the person's answer.
+
+D9 says the finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows, and it does not become part of the spirit. The next change follows the facts on the record pages. That is the parent's D3.
+
+A person points at the finding and sees the person's answer. The answer is on the finding. It is not written on a record page, and it is not added to a spirit. The section does not say what the person does with the work beyond that.
+
+This check applies when there is a finding. A missing finding is not a failed check. No finding is invented so that an example exists.
 
 ## Implementation notes
 
@@ -152,5 +248,36 @@ This piece writes no executable tests. The checks in the test design are a readi
 | A6 | A person can point at a spirit finding and see that the change does not fit the intent the review read. | PASS | "The spirit finding is one this writing has produced." "The agent points at the spirit finding and reads that the change does not fit the intent the review read." "The change against that intent. The change does not fit the intent the review read." If the check failed, that misfit would not be shown: "A failed check has a spirit finding that does not show the change failing to fit the intent the review read." |
 | A7 | A person can point at a spirit review with no finding and see that it does not ask the person for an answer. | PASS | "The review is a spirit review with no finding that this writing has produced." "The agent points at that review and reads whether it asks the person for an answer." "Whether that review asks the person for an answer. It does not." If the check failed, that review would ask: "A failed check has a spirit review with no finding that asks the person for an answer." |
 | A8 | A person can point at a spirit finding and see the person's answer. | PASS | "This check applies when there is a finding." "The agent points at the spirit finding and reads the person's answer." "The person's answer on that finding." If the check failed, that answer would be absent: "A failed check has a spirit finding that does not show the person's answer." |
+
+Findings: none.
+
+### Design review, 2026-11-23
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| A1 | A person can point at a spirit review and see the change it read. | PASS | "The review shows the change it read." "A person points at that account and sees the change. The change on the review is the change the review read." |
+| A2 | A person can point at a spirit review and see the spirit of the part that change changes. | PASS | "On that walk it reads `spirit.md` beside the page of the part the change changes, when that file is beside the page, and it shows that spirit." "It shows the spirit of the part that change changes, when it read that spirit." "A person points at the review and sees that spirit. It is the spirit of the part that change changes." |
+| A3 | A person can point at a spirit review and see the spirits of the parts above that part. | PASS | "the same walk reads `spirit.md` beside the page of each part above the part the change changes, when that file is beside the page, and the review shows those spirits." "It shows the spirits of the parts above that part, when it read those spirits." "A person points at the review and sees those spirits. They are the spirits of the parts above that part." |
+| A4 | A person can point at a spirit review and see that it did not read the record pages. | PASS | "It does not read the record pages." "What it shows it read is the change and the spirits it read. The record pages are not among what it shows it read." "The change is shown, so the review does not show nothing it read." |
+| A5 | A person can point at the pass and see that the letter decided it. | PASS | "The letter decides the pass." "The pass shows that the letter decided it." "A person points at the pass and reads what decided it. The letter decided it, and the pass shows that." |
+| A6 | A person can point at a spirit finding and see that the change does not fit the intent the review read. | PASS | "The intent the review read is the spirits it read. The finding shows that the change does not fit that intent." "A person points at the finding and sees the change against that intent. The change does not fit the intent the review read." |
+| A7 | A person can point at a spirit review with no finding and see that it does not ask the person for an answer. | PASS | "A spirit review with no finding does not ask the person for an answer." "A person points at that review and sees that it does not ask for an answer." |
+| A8 | A person can point at a spirit finding and see the person's answer. | PASS | "The finding shows the person's answer." "A person points at the finding and sees the person's answer. The answer is on the finding." |
+| C1 | How a spirit review runs is a section added at the end of `.ledger/process/review.md`, headed "Spirit review." Every line already in that file stays as it is. No other file is changed. | PASS | "This serves each acceptance check. The checks are a reading of the writing this piece produces, and this section is that writing:" and the reason names each of the eight checks. |
+| C2 | The section says a spirit review is a written account, and the account shows the change it read. | PASS | "This serves \"A person can point at a spirit review and see the change it read.\"" |
+| C3 | The section says the review walks from the part the change changes up through the parts above it, reads `spirit.md` beside the page of the part the change changes when that file is beside the page, and shows that spirit. | PASS | "This serves \"A person can point at a spirit review and see the spirit of the part that change changes.\"" |
+| C4 | The section says that walk reads `spirit.md` beside the page of each part above the part the change changes, when that file is beside the page, and the review shows those spirits. | PASS | "This serves \"A person can point at a spirit review and see the spirits of the parts above that part.\"" |
+| C5 | The section says the review shows what it read. What it shows is the change and the spirits it read. It does not read the record pages. The record pages are not among what it shows it read. | PASS | "This serves \"A person can point at a spirit review and see that it did not read the record pages.\"" |
+| C6 | The section says the letter decides the pass, and the pass shows that the letter decided it. | PASS | "This serves \"A person can point at the pass and see that the letter decided it.\"" |
+| C7 | The section says a spirit finding is a miss. The intent the review read is the spirits it read. The finding shows that the change does not fit that intent. | PASS | "This serves \"A person can point at a spirit finding and see that the change does not fit the intent the review read.\"" |
+| C8 | The section says a spirit review with no finding does not ask the person for an answer. | PASS | "This serves \"A person can point at a spirit review with no finding and see that it does not ask the person for an answer.\"" |
+| C9 | The section says a spirit finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows, and it does not become part of the spirit. | PASS | "This serves \"A person can point at a spirit finding and see the person's answer.\"" |
+| P1 | The spirit is not a fact on a record page, so the letter reading set does not include it. | PASS | "No record page is edited. \"What a reader reads\" stays as it is, so the letter reading set does not gain the spirit." "The parent's D1 is met because the section is not on a record page, and \"What a reader reads\" is not edited, so the letter reading set does not gain the spirit." |
+| P2 | A sub-part spirit is found only by the walk the spirit review takes, from the part a change changes up through the parts above it. | PASS | "The review walks from the part the change changes up through the parts above it." "The parent's D2 is that walk, and it is the only way the review finds those spirits. The review adds no list and no link from a record page." |
+| P3 | A spirit finding is answered by the person, and the answer does not become a fact the next change follows. | PASS | "The finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows" "The next change follows the facts on the record pages. That is the parent's D3." |
+| P4 | The spirit piece adds where a spirit is kept. The spirit review adds how that review runs. A sentence can land in an existing file. The rest of that file stays as it is. The spirit's own filename is chosen in the spirit piece. | PASS | "The writing this piece adds is one section at the end of `.ledger/process/review.md`" "Every line already in that file stays as it is. No other file is changed." "It does not choose where a spirit is kept" "The file `spirit.md` beside the page is the place the spirit piece settled. This piece does not choose that place again." |
+| T1 | The tests on the branch are unchanged since their review. | PASS | "This piece writes no executable tests." "The person recorded this on 2026-11-23 and moved the plan to design." There is no tests-review matrix and no test branch. `git diff` on this plan leaves that Tests section in place. `git status` shows no test files. `docs/_plans/15-review-decisions.md` and `docs/_plans/17-failed-row.md` are not this artifact. |
 
 Findings: none.
