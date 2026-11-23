@@ -8,11 +8,7 @@
 
 ## Outcome
 
-**Outcome confirmed:** 2026-11-21
-
-**Outcome amended:** 2026-11-22 — Spirit states the intent the letter does not state. The pieces say intent.
-
-**Outcome amended:** 2026-11-22 — A spirit review reads the change and the spirit. It does not read the record pages.
+**Outcome confirmed:** 2026-11-22
 
 The spirit of the system is a review path alongside the letter of the system.
 
@@ -20,7 +16,7 @@ The spirit of the system is a review path alongside the letter of the system.
 
 **Letter.** The facts on the record pages.
 
-- The spirit states the intent that review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
+- The spirit states the intent that the spirit review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
 - A spirit review reads the change, the spirit of the part that change changes, and the spirits of the parts above it. It does not read the record pages. The letter decides the pass, and the person answers a spirit finding.
 
 ## Decisions
@@ -39,9 +35,9 @@ D3. A spirit finding is answered by the person, and the answer does not become a
 Binds: the spirit piece, the spirit review
 Reason: The letter decides the pass. The person answers a spirit finding. The next change follows the facts on the record pages. Both pieces leave the answer with the person and off those pages.
 
-D4. The spirit piece owns where a spirit is kept, and it owns `.ledger/process/system-record.md`. The spirit review owns `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`.
+D4. The spirit piece adds where a spirit is kept. The spirit review adds how that review runs. A sentence can land in an existing file. The rest of that file stays as it is.
 Binds: the spirit piece, the spirit review
-Reason: Each file belongs to one piece. Where a spirit is kept is the spirit piece's work. `.ledger/process/system-record.md` belongs to the spirit piece as well: it is the file that says what is outside the record, and it is the file that says the spirit is outside the record if that must be said. How the review runs is the spirit review's work, in `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`. The spirit's own filename is chosen in the spirit piece.
+Reason: Where a spirit is kept is the spirit piece's work. How the review runs is the spirit review's work. Each piece adds only that. The spirit's own filename is chosen in the spirit piece.
 
 The spirit piece finishes first. The spirit review starts after the spirit piece is accepted. The spirit review reads the spirit the spirit piece keeps, and the spirit piece is the one that settles where a spirit is kept, including its filename. The spirit piece has nothing to wait for. The walk that finds a sub-part spirit is already D2.
 
