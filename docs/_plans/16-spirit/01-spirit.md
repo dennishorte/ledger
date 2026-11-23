@@ -1,6 +1,6 @@
 # Spirit
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -22,7 +22,7 @@ The spirit states the intent that the spirit review reads. A sub-part has a spir
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-23
 
 **Acceptance.**
 
