@@ -1,6 +1,6 @@
 # Failed rows and smaller suggestions
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -24,7 +24,41 @@ When no row failed, no suggestion is applied. The step advances, and the suggest
 
 ## Requirements
 
-*(not started)*
+**Requirements confirmed:** 2026-11-23
+
+**Acceptance.**
+
+- A person can point at the written rule and see that a failed row is repaired without asking the person.
+- A person can point at the written rule and see that an agent who did not write the review makes the edit the row determines.
+- A person can point at the written rule and see that the next review covers the rows that repair can change.
+- A person can point at the written rule and see the two cases where the person is asked: the failed row does not determine one edit, or the repair would change the outcome or the requirements.
+- A person can point at the written rule and see that a smaller suggestion is a note the confirmed text does not require.
+- A person can point at the written rule and see that the review records the suggestion, and that the suggestion has no verdict.
+- A person can point at the written rule and see that the suggestion does not hold the step, and does not by itself call for another review.
+- A person can point at the written rule and see that, when a failed row is being repaired, the repair also makes each suggestion that names one edit.
+- A person can point at the written rule and see that the review of that repair includes any row whose evidence that edit changed.
+- A person can point at the written rule and see that a suggestion that names no single edit is left on the review.
+- A person can point at the written rule and see that, when no row failed, no suggestion is applied.
+- A person can point at the written rule and see that the step advances, and that the suggestions stay on the review for a later change to find.
+- A person can point at the written rule and see that the person does not have to read the suggestions for the step to pass.
+
+**Constraints.**
+
+- The person amends the outcome and the requirements. An agent does not.
+- A failed review stays recorded.
+- A failed row holds the step.
+- The repair of a failed row is made by an agent who did not write the review.
+- The reviewer of a repair did not write that repair.
+- A child project is edited only when asked.
+- This project does not carry out a child project's work.
+
+**Out of scope.**
+
+- A later change that finds a suggestion left on the review.
+- The person's amendment of the outcome or the requirements.
+- Choosing an edit when the failed row does not determine one edit.
+- Choosing an edit for a suggestion that names no single edit.
+- A child project's work.
 
 ## Test design
 
