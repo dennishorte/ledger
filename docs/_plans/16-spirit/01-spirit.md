@@ -1,6 +1,6 @@
 # Spirit
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,10 @@
 **Outcome confirmed:** 2026-11-22
 
 The spirit states the intent that the spirit review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
+
+**Accepted:** 2026-11-23
+
+The person accepts the finished work. The implementation review's failed row stands.
 
 ## Decisions
 
