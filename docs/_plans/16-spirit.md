@@ -12,14 +12,16 @@
 
 **Outcome amended:** 2026-11-22 — Spirit states the intent the letter does not state. The pieces say intent.
 
+**Outcome amended:** 2026-11-22 — A spirit review reads the change and the spirit. It does not read the record pages.
+
 The spirit of the system is a review path alongside the letter of the system.
 
 **Spirit.** A text kept off the record. It states the intent of the project, or of one part, where the letter does not state that intent.
 
 **Letter.** The facts on the record pages.
 
-- The spirit is what that review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
-- A spirit review reads the spirit of the part a change changes and the spirits of the parts above it. The letter decides the pass, and the person answers a spirit finding.
+- The spirit states the intent that review reads. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
+- A spirit review reads the change, the spirit of the part that change changes, and the spirits of the parts above it. It does not read the record pages. The letter decides the pass, and the person answers a spirit finding.
 
 ## Decisions
 
@@ -27,7 +29,7 @@ The spirit of the system is a review path alongside the letter of the system.
 
 D1. The spirit is not a fact on a record page, so the letter reading set does not include it.
 Binds: the spirit piece, the spirit review
-Reason: The record is the pages that state what is true of the project now. The letter is the facts on those pages. The letter reads the page of the part a change changes and every page above it. That is the letter reading set. The spirit is the text the spirit review reads alongside the letter. Kept off the record pages, the spirit stays out of that set.
+Reason: The record is the pages that state what is true of the project now. The letter is the facts on those pages. The spirit states the intent the spirit review reads. Kept off the record pages, the spirit stays out of the letter reading set.
 
 D2. A sub-part spirit is found only by the walk the spirit review takes, from the part a change changes up through the parts above it.
 Binds: the spirit piece, the spirit review
@@ -41,7 +43,7 @@ D4. The spirit piece owns where a spirit is kept, and it owns `.ledger/process/s
 Binds: the spirit piece, the spirit review
 Reason: Each file belongs to one piece. Where a spirit is kept is the spirit piece's work. `.ledger/process/system-record.md` belongs to the spirit piece as well: it is the file that says what is outside the record, and it is the file that says the spirit is outside the record if that must be said. How the review runs is the spirit review's work, in `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`. The spirit's own filename is chosen in the spirit piece.
 
-The spirit piece finishes first. The spirit review starts after the spirit piece is accepted. The spirit review reads the spirit, and the spirit piece is the one that settles where a spirit is kept, including its filename. The spirit piece has nothing to wait for. The walk that finds a sub-part spirit is already D2.
+The spirit piece finishes first. The spirit review starts after the spirit piece is accepted. The spirit review reads the spirit the spirit piece keeps, and the spirit piece is the one that settles where a spirit is kept, including its filename. The spirit piece has nothing to wait for. The walk that finds a sub-part spirit is already D2.
 
 ## Requirements
 
@@ -65,4 +67,20 @@ The spirit piece finishes first. The spirit review starts after the spirit piece
 
 ## Reviews
 
-*(not started)*
+### Coordinating review, 2026-11-22
+
+**Disposition:** changes-required
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| S1 | The spirit piece is the first bullet. The spirit is what the review reads, and a sub-part has its own spirit when that part's intent is not already said by the spirits above it. A person can finish that piece alone. | PASS | The piece is that bullet. The artifact bounds it so the other piece does not share the work, and so it waits for nothing: "The spirit piece owns where a spirit is kept, and it owns `.ledger/process/system-record.md`." "Each file belongs to one piece." "The spirit piece has nothing to wait for." |
+| S2 | The spirit review is the second bullet. It reads the spirit of the part a change changes and the spirits above it, the letter decides the pass, and the person answers a spirit finding. A person can finish that piece alone. | PASS | Its work is its own files, and it starts only after the spirit piece is accepted: "The spirit review owns `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`." "How the review runs is the spirit review's work, in `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`." "Each file belongs to one piece." "The spirit review starts after the spirit piece is accepted." |
+| D1 | The spirit is not a fact on a record page, so the letter reading set does not include it. The decision binds both pieces, and it does not choose a detail inside one piece. | FAIL | "Binds: the spirit piece, the spirit review." The exclusion binds both: "Kept off the record pages, the spirit stays out of that set." The same reason also chooses which pages the letter reads: "The letter reads the page of the part a change changes and every page above it. That is the letter reading set." That reading is how the review runs, and "How the review runs is the spirit review's work." The spirit piece does not read those pages. |
+| D2 | A sub-part spirit is found only by the walk from the changed part up through the parts above. The decision binds both pieces, and it does not choose a detail inside one piece. | PASS | "Binds: the spirit piece, the spirit review." "The spirit piece keeps a sub-part's spirit with that sub-part. The spirit review meets it by starting at the part a change changes and walking up through the parts above it." The filename stays inside the spirit piece: "The spirit's own filename is chosen in the spirit piece." |
+| D3 | The person answers a spirit finding, and the answer does not become a fact the next change follows. The decision binds both pieces, and it does not choose a detail inside one piece. | PASS | "Binds: the spirit piece, the spirit review." "Both pieces leave the answer with the person and off those pages." "The next change follows the facts on the record pages." The spirit piece leaves the answer off the pages. The spirit review leaves it with the person. |
+| D4 | The spirit piece owns where a spirit is kept and `system-record.md`. The spirit review owns `review.md` and `plan-workflow.md`. The decision binds both pieces, and it does not choose a detail inside one piece. | PASS | "Binds: the spirit piece, the spirit review." "Each file belongs to one piece. Where a spirit is kept is the spirit piece's work." "How the review runs is the spirit review's work, in `.ledger/process/review.md` and `.ledger/process/plan-workflow.md`." "The spirit's own filename is chosen in the spirit piece." |
+| O1 | The spirit review depends on the spirit piece. The order says the spirit piece finishes first, and why. | PASS | "The spirit piece finishes first. The spirit review starts after the spirit piece is accepted. The spirit review reads the spirit, and the spirit piece is the one that settles where a spirit is kept, including its filename. The spirit piece has nothing to wait for. The walk that finds a sub-part spirit is already D2." |
+
+Findings:
+
+D1. The decision chooses which pages the letter reads. That reading is a detail of the spirit review. The spirit piece is bound by keeping the spirit off the record pages, and that clause does not use the page list. Evidence: "The letter reads the page of the part a change changes and every page above it. That is the letter reading set." The spirit piece's clause is "Kept off the record pages, the spirit stays out of that set."
