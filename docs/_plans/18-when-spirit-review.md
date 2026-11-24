@@ -165,3 +165,17 @@ Smaller suggestions: none.
 Findings:
 
 Row 6 fails. The observation at `docs/_plans/18-when-spirit-review.md:104` is that the answer stays on the review and that the letter decides the pass. A workflow that says those two things, and does not say they happen when the person says the change fits, produces that same observation. The action at `:102` reads the full sentence. The observation does not treat the missing condition as a difference.
+
+### Test design review, 2026-11-24
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| 6 | A person can point at the workflow and see that, when the person says the change fits, the answer stays on the review and the letter decides the pass. | PASS | Setup `docs/_plans/18-when-spirit-review.md:100`: the writing is the workflow. Action `:102`: the agent reads that, when the person says the change fits, the answer stays on the review and the letter decides the pass. Observation `:104`: the workflow says that full sentence. If the check failed, there would be no such words, or the workflow would say that the answer stays on the review and that the letter decides the pass without saying that this is when the person says the change fits. A workflow that says those two things without that condition does not meet the observation. Those lines name no file, function, library, or mechanism. | |
+
+This review covers the repaired row.
+
+**Decisions.** None included. This plan has no parent. The Offers of Review and of System record are none. The repaired observation would not be wrong if a decision the earlier review left out were ignored.
+
+Smaller suggestions: none.
