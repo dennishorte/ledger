@@ -1,6 +1,6 @@
 # When a spirit review is performed
 
-**Status:** test-design
+**Status:** tests
 
 ## Part
 
