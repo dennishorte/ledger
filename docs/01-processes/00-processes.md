@@ -92,6 +92,31 @@ Setup: the suggestions stay on the review.
 Action: the step passes. The person does not read the suggestions.
 Result: when no row failed, the person does not have to read the suggestions for the step to pass.
 
+Case: a design of a change.
+Setup: a decision previously made directly affects this part.
+Action: the design is written.
+Result: a design follows each decision previously made that directly affects this part.
+
+Case: a review that decides a pass.
+Setup: a decision previously made directly affects this part.
+Action: the review is written.
+Result: a review that decides a pass includes each decision previously made that directly affects this part.
+
+Case: a design and a review that decides a pass.
+Setup: a decision previously made does not directly affect this part.
+Action: the design and the review are written.
+Result: a decision that does not directly affect this part is left out.
+
+Case: a review that leaves out a decision previously made that directly affects this part.
+Setup: the decision directly affects this part. The review leaves it out.
+Action: the review is read.
+Result: a review that leaves out a decision previously made that directly affects this part does not pass.
+
+Case: a review that passes.
+Setup: the review includes each decision previously made that directly affects this part.
+Action: the pass is read.
+Result: a review that passes shows that the work follows each included decision.
+
 ## Rules
 
 A failed row is repaired without asking the person.
@@ -119,6 +144,16 @@ When no row failed, no suggestion is applied.
 When no row failed, the step advances, and the suggestions stay on the review for a later change to find.
 
 When no row failed, the person does not have to read the suggestions for the step to pass.
+
+A design follows each decision previously made that directly affects this part.
+
+A review that decides a pass includes each decision previously made that directly affects this part.
+
+A decision that does not directly affect this part is left out.
+
+A review that leaves out a decision previously made that directly affects this part does not pass.
+
+A review that passes shows that the work follows each included decision.
 
 ## Words
 
