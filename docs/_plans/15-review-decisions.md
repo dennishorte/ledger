@@ -1,80 +1,43 @@
-# Decisions found and considered
+# Decisions previously made
 
-**Node ID:** `15-review-decisions`
-**Parent:** project root (`docs/00-project.md`)
-**Status:** PLANNED
-**Created:** 2026-11-17
-**Last Updated:** 2026-11-17
-**Dependencies:** `.ledger/process/verification-signoff.md`
+**Status:** requirements
 
----
+## Part
 
-## Requirements
+`docs/01-processes/00-processes.md`
 
-**Requirements confirmed:** unconfirmed
+## Outcome
 
-**Outcome.** Important decisions are recorded where later work can find them, and the design and review of that work consider those decisions.
+**Outcome confirmed:** 2026-11-24
 
-**Acceptance.**
+**Spirit.** Designs and reviews respect the decisions previously made that directly affect this part.
 
-**Recording.** Decisions are recorded so they can be found when needed.
-
-- An important decision is recorded where a later change to the work it governs will find it.
-- A decision recorded where that later change will not find it stays unfound.
-
-**Design and review.** Design and review steps consider the decisions that work can find.
-
-- Design of a change considers each important decision the change can find.
-- A review of a change includes each important decision the change can find.
-- The operator does not state a found decision again for the design or the review.
-- Design and review of a change leave out an important decision that does not govern that change.
-- A decision the project does not treat as important is not required in design or review.
-- A review that leaves out an important decision the change can find does not pass.
-- A review that passes shows, for each included decision, that the work still follows it, or that the decision was changed in that review.
-- A review of a spec and a review of an implementation both consider the decisions the change can find.
-
-**Constraints.**
-
-_(operator)_
-
-**Out of scope.**
-
-_(operator)_
-
----
-
-## Design
-
-*(not started)*
-
----
+A design follows each decision previously made that directly affects this part. Each review that decides a pass includes each of those decisions. A decision that does not directly affect this part is left out. A review that leaves out a decision that does directly affect this part does not pass. A review that passes shows that the work follows each included decision.
 
 ## Decisions
 
 *(not started)*
 
----
-
-## Open Issues
+## Requirements
 
 *(not started)*
 
----
-
-## Implementation Notes
+## Test design
 
 *(not started)*
 
----
+## Tests
 
-## Verification
+*(not started)*
 
-**Recording.** Record an important decision where a later change to the work it governs will find it. Record another decision where a later change to that same work will not find it. Look up what that change can find. The first is found. The second stays unfound.
+## Design
 
-**Design and review.** Keep the findable decision. Also record an important decision that governs other work, and a decision that is not treated as important. Design a change to the work the first decision governs, then review it once as a spec and once as an implementation. Do not restate the first decision for the design or either review. The design and both reviews consider that decision. They leave out the decision that governs other work, and the decision that is not important. A review that leaves the first decision out does not pass. A review that passes shows that the change still follows it, or that the decision was changed in that review.
+*(not started)*
 
----
+## Implementation notes
 
-## Children
+*(not started)*
 
-None
+## Reviews
+
+*(not started)*
