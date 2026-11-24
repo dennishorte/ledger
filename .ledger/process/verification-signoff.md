@@ -76,9 +76,9 @@ Disposition is a function of the latest matrix and the resolutions on it:
 
 Severity does not change the disposition. A finding does not outvote the table.
 
-The reviewer returns `disposition` (one of those three words), the matrix, findings, and a short summary. Every finding names a row (`rowId`) and has `severity` (`Blocking`, `Should-fix`, `Nit`), `description`, `fix`, and `isMechanical`. A finding on a `PASS` or `N/A` row does not change that verdict and is not applied. If the summary names a different disposition than the table, the table wins.
+The reviewer returns `disposition` (one of those three words), the matrix, findings, and a short summary. A finding names the row, the severity, the description, and whether it is mechanical. A finding on a `PASS` or `N/A` row does not change that verdict and is not applied. If the summary names a different disposition than the table, the table wins.
 
-`applied` is valid only on a `FAIL`. It records that the edit landed and does not remove the `FAIL`. The next entry dispatches that review. `waived` is valid only on a `PARTIAL`. A `PARTIAL` is closed only by `waived`.
+`applied` is valid only on a `FAIL`. It records that the edit landed and does not remove the `FAIL`. A new session reviews the repaired artifact. `waived` is valid only on a `PARTIAL`. A `PARTIAL` is closed only by `waived`.
 
 ## The three steps
 
@@ -86,7 +86,7 @@ Spec review and implementation review do the same three steps.
 
 1. **Record, before any status change.** Write the matrix into the plan's Reviews section in its own commit. Status stays on the current step. Resolution cells start empty. Newest matrix last.
 
-2. **Apply a fully specified fix, then review again.** `applied` is valid only on a `FAIL`. Set that resolution when the finding's fix text is the whole edit. The next entry dispatches that review. A spec-review rerun is a full spec review. An implementation rerun covers the rows this table calls failed, any row the fix touched, and the requirements-text row when the fix touched Requirements. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
+2. **Repair, then review again.** A failed row is repaired without asking the person. An agent who did not write the review makes the edit the row determines. The person is asked in two cases. One case is that the failed row does not determine one edit. The other case is that the repair would change the outcome or the requirements. When a failed row is being repaired, the repair also makes each suggestion that names one edit. The next review covers the rows that repair can change. The review of that repair includes any row whose evidence that edit changed. A new session reviews the repaired artifact. `applied` records that the edit landed and does not remove the `FAIL`. The earlier review stays. A FAIL leaves the step where it is. When no row failed, no suggestion is applied. When no row failed, the step advances, and the suggestions stay on the review for a later change to find. When no row failed, the person does not have to read the suggestions for the step to pass. The new review is a new dated section. The latest section is the one that counts. The earlier section stays.
 
 3. **Advance on `pass`.** When the disposition is `pass`, the plan advances as `plan-workflow.md` says. The review does not accept the finished work. The person running the project does that.
 
@@ -94,11 +94,11 @@ Spec review and implementation review do the same three steps.
 
 On `followups`, the operator may write `waived` on a partial and file an Open Issue. Disposition is computed again from the table above. The node advances only when that disposition is `pass`.
 
-On `changes-required`, the work changes, including when the review fully specified the fix, and that review runs again.
+On `changes-required`, a failed row is repaired without asking the person. An agent who did not write the review makes the edit the row determines. The person is asked in two cases. One case is that the failed row does not determine one edit. The other case is that the repair would change the outcome or the requirements. The next review covers the rows that repair can change.
 
-A heading is not a pass. On a later entry, `pass` advances without a new dispatch. `changes-required` dispatches that review again. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
+A heading is not a pass. On a later entry, `pass` advances without a new dispatch. `changes-required` is repaired without asking the person, and a new session reviews the rows that repair can change. `followups` stops for the operator and does not dispatch. A skipped spec review writes no review section and no synthetic matrix. The approve commit says that no formal review was run.
 
-The reviewer writes the matrix into the doc, applies a fully specified fix, and recomputes. The reviewer does not change lifecycle status. After a fix, the reviewer recomputes from this table and follows the disposition.
+The reviewer writes the matrix into the doc and recomputes. The reviewer does not change the artifact. The reviewer does not change lifecycle status. An agent who did not write the review makes the edit the row determines. After a repair, a new session reviews the repaired artifact and follows the disposition.
 
 ---
 

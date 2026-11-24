@@ -22,7 +22,7 @@ A check the reviewer could not run is N/A. The reason names the check that was n
 
 The reviewer looks for a further defect. It is one the confirmed text already requires, and one that none of this step's rows asks about. That defect is a new row. The row states the question, the verdict, and the evidence. The reviewer adds no obligation. The person amends the outcome or the requirements, as `plan-workflow.md` says.
 
-A note on wording, style, or another approach is part of the review when it is why a row fails. Every other such note is left out.
+A note on wording, style, or another approach is part of the review when it is why a row fails. A smaller suggestion is a note the confirmed text does not require. The review records the suggestion in that review, outside the matrix, and the suggestion has no verdict. The suggestion does not hold the step, and does not by itself call for another review. When a failed row is being repaired, the repair also makes each suggestion that names one edit. A suggestion that names no single edit is left on the review. When no row failed, no suggestion is applied. When no row failed, the step advances, and the suggestions stay on the review for a later change to find. When no row failed, the person does not have to read the suggestions for the step to pass.
 
 ## The defect
 
