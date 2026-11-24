@@ -1,6 +1,6 @@
 # Spirit review
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -19,6 +19,10 @@
 A spirit review reads the change, the spirit of the part that change changes, and the spirits of the parts above it. It does not read the record pages. The letter decides the pass, and the person answers a spirit finding.
 
 **Spirit finding.** A miss. The change does not fit the intent the review read. A review with no finding does not ask the person for an answer.
+
+**Accepted:** 2026-11-23
+
+The person accepts the finished work.
 
 ## Decisions
 
