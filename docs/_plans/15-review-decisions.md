@@ -1,6 +1,6 @@
 # Decisions previously made
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -13,6 +13,8 @@
 **Spirit.** Designs and reviews respect the decisions previously made that directly affect this part.
 
 A design follows each decision previously made that directly affects this part. Each review that decides a pass includes each of those decisions. A decision that does not directly affect this part is left out. A review that leaves out a decision that does directly affect this part does not pass. A review that passes shows that the work follows each included decision.
+
+**Accepted:** 2026-11-24
 
 ## Decisions
 
