@@ -43,3 +43,17 @@ A failure names the row, what is wrong, and the evidence. The finding stops ther
 **Design.** An acceptance-check row points at the part of the design that serves it. A choice points at the check it serves. A decision row points at the part of the design that follows the decision. The row for unchanged tests points at the diff against the reviewed tests.
 
 **Implementation.** The evidence for a test row is a passing run of that test. The unchanged-tests row and the unchanged-design row point at the diff against the reviewed versions. A decision row points at the part of the implementation that follows the decision.
+
+## Spirit review
+
+A spirit review is a written account. It reads the change, the spirit of the part that change changes, and the spirits of the parts above it. It does not read the record pages.
+
+The review walks from the part the change changes up through the parts above it. It reads `spirit.md` beside the page of each part on that walk, when that file is beside the page. It does not read the record page.
+
+The review shows the change it read. It shows the spirit of the part that change changes, when it read that spirit. It shows the spirits of the parts above that part, when it read those spirits. What it shows it read is the change and the spirits it read. The record pages are not among what it shows it read.
+
+The letter decides the pass. The letter is the facts on the record pages. The pass shows that the letter decided it. Finished work is still checked against the record. The spirit review does not decide the pass. The review does not accept finished work.
+
+A spirit finding is a miss. The intent the review read is the spirits it read. The finding shows that the change does not fit that intent. The finding shows the person's answer. The answer stays with the person. It does not become a fact the next change follows, and it does not become part of the spirit.
+
+A spirit review with no finding does not ask the person for an answer.
