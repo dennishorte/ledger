@@ -59,7 +59,9 @@ The person may edit the text. When the person says the outcome is confirmed, the
 
 A plan reads the reading set in `.ledger/process/system-record.md` for the part named in **Part**. It follows the facts on those pages. It does not read a page outside that set.
 
-A sub-plan names its own part. That part is the parent's part, or a narrower page inside it. The sub-plan reads its own reading set. It also follows the parent plan's confirmed decisions.
+A decision previously made is a fact in the reading set of the part being changed, or a confirmed decision on the parent plan. It directly affects this part when this change would be wrong if that decision were ignored.
+
+A sub-plan names its own part. That part is the parent's part, or a narrower page inside it. The sub-plan reads its own reading set. It follows each decision previously made that directly affects this part. A decision that does not directly affect this part is left out and is not restated.
 
 A fact that later work must follow is written on the page that homes it, in the section named in `.ledger/process/system-record.md`. Step 7 is where that write happens. The reason for the fact is not written on the page.
 
@@ -73,11 +75,11 @@ Write the decisions that more than one piece has to follow, and the order betwee
 
 The person may edit the decisions. When the person says the decisions are confirmed, the agent sets `**Decisions confirmed:** YYYY-MM-DD` and commits.
 
-**Review.** One row per sub-outcome: it is a piece of the parent outcome, and it is a piece a person could finish on its own. One row per decision: it binds more than one piece, and it does not choose a detail inside a single piece. One row for the order: each dependency says which piece has to be finished first, and why. On `pass`, one commit records the matrix and creates the sub-plans.
+**Review.** One row per sub-outcome: it is a piece of the parent outcome, and it is a piece a person could finish on its own. One row per decision: it binds more than one piece, and it does not choose a detail inside a single piece. One row for the order: each dependency says which piece has to be finished first, and why. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix and creates the sub-plans.
 
 The parent file stays where it is. Each sub-plan is a new file in a folder beside it. A parent at `docs/_plans/NN-name.md` keeps that path. Its pieces go in `docs/_plans/NN-name/`, as `MM-piece.md`. The folder name is the parent's name without `.md`, so the file and the folder sit next to each other. `MM` is a zero-padded sequence number within that parent. Leave a gap when inserting one. Do not renumber the files that are already there.
 
-That pass commit creates the files. Each new file starts at Status `requirements`. Its Outcome is the parent's sentence for that piece, copied verbatim, with the parent's confirmation date. Its Part is the parent's part, or a narrower doc inside it when the piece is already known to be narrower. Its Parent line is the path of the parent plan. The sub-plan then follows this procedure from step 2, and it follows the parent's confirmed decisions. The piece is named once, in the parent's outcome, and that sentence is copied into the sub-plan at creation. After that, the parent does not keep a record of the sub-plan's status or of how the work is going. The order between pieces stays in the parent's decisions.
+That pass commit creates the files. Each new file starts at Status `requirements`. Its Outcome is the parent's sentence for that piece, copied verbatim, with the parent's confirmation date. Its Part is the parent's part, or a narrower doc inside it when the piece is already known to be narrower. Its Parent line is the path of the parent plan. The sub-plan then follows this procedure from step 2, and it follows each decision previously made that directly affects this part. A decision that does not directly affect this part is left out and is not restated. The piece is named once, in the parent's outcome, and that sentence is copied into the sub-plan at creation. After that, the parent does not keep a record of the sub-plan's status or of how the work is going. The order between pieces stays in the parent's decisions.
 
 A piece that itself has pieces does the same thing one level down. The sub-plan file stays at `docs/_plans/NN-name/MM-piece.md`, and its pieces go in `docs/_plans/NN-name/MM-piece/`.
 
@@ -111,7 +113,7 @@ For each acceptance check, write the setup, the action, and what shows that it p
 
 The test design does not name a file, a function, a library, or a mechanism. It does not add an outcome or an acceptance check.
 
-**Review.** One row per acceptance check. A row passes when the test design has a setup, an action, and what is looked at, and when it names none of those forbidden things. A check with no test design fails. On `pass`, one commit records the matrix and sets Status to `tests`.
+**Review.** One row per acceptance check. A row passes when the test design has a setup, an action, and what is looked at, and when it names none of those forbidden things. A check with no test design fails. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix and sets Status to `tests`.
 
 ## 4. Test implementation
 
@@ -123,7 +125,7 @@ Write the executable tests that are the accepted test design, and no other tests
 
 The agent runs the tests and records the result. The person can run the same tests and confirm them. A check that takes longer than a single agent turn is recorded with its expected runtime, and the result is recorded where the review can see it. Do not shorten the check so it fits the turn.
 
-**Review.** One row per test-design item. A row passes when the test matches that item, fails because the behavior is not implemented yet (or the note explains behavior that already existed), and does not depend on a structure the test design did not name. On `pass`, one commit records the matrix and sets Status to `design`. The branch stays unmerged.
+**Review.** One row per test-design item. A row passes when the test matches that item, fails because the behavior is not implemented yet (or the note explains behavior that already existed), and does not depend on a structure the test design did not name. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix and sets Status to `design`. The branch stays unmerged.
 
 ## 5. Implementation design
 
@@ -131,11 +133,13 @@ Status is `design`.
 
 Write how the accepted tests will be made to pass. Every choice names the acceptance check it serves. A choice that serves no check is left out.
 
+A design follows each decision previously made that directly affects this part. A decision that does not directly affect this part is left out of the design and is not restated.
+
 **Decisions** are a numbered table, D1 onward, one row per choice, with the reason.
 
 The design does not change the tests, the test design, the requirements, or the outcome.
 
-**Review.** One row per acceptance check, naming the part of the design that serves it. A check that nothing serves fails. A choice that serves no check fails. One further row: the tests on the branch are unchanged since their review. Also one row per decision fetched for this plan, including each confirmed decision on the parent plan. On `pass`, one commit records the matrix and sets Status to `implementation`.
+**Review.** One row per acceptance check, naming the part of the design that serves it. A check that nothing serves fails. A choice that serves no check fails. One further row: the tests on the branch are unchanged since their review. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix and sets Status to `implementation`.
 
 ## 6. Implementation
 
@@ -145,7 +149,7 @@ On the same branch, make the accepted tests pass. Rebase the branch onto local `
 
 Do not change the tests or the design. If the design cannot satisfy a test, stop and return to step 5. If a test does not match the accepted test design, return to step 4.
 
-**Review.** One row per accepted test, with evidence it passes. One row that the tests are unchanged since their review. One row that the design is unchanged since its review. One row per decision fetched for this plan, including each confirmed decision on the parent plan. On `pass`, one commit records the matrix. Status stays `implementation` until the person accepts.
+**Review.** One row per accepted test, with evidence it passes. One row that the tests are unchanged since their review. One row that the design is unchanged since its review. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix. Status stays `implementation` until the person accepts.
 
 **Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. When the person says the work is accepted, the agent sets `**Accepted:** YYYY-MM-DD`, sets Status to `accepted`, and commits.
 

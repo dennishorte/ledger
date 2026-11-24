@@ -134,7 +134,7 @@ The checks are a reading of this writing. This piece writes no executable test. 
 
 ## Implementation notes
 
-*(not started)*
+This piece writes no executable tests. The checks are a reading of `.ledger/process/plan-workflow.md`, `.ledger/process/review.md`, and the sentence removed from `.ledger/process/verification-signoff.md`. The Tests section and the Design section are unchanged.
 
 ## Reviews
 
