@@ -27,6 +27,12 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 - **Each gate is its own commit** on the plan. The message names the step.
 - **The person's word finishes in a commit.** When the person says a step is confirmed, that the step is done, or that an amendment is done, the agent writes that into the plan and commits it. The confirmation line, the status change, and the commit are one update.
 
+## Spirit review
+
+A spirit review is performed at the outcome, at the requirements, and at the design. It is performed on the shared decisions of a plan that is split into pieces. It is performed before that step advances. At the outcome and at the requirements, that is before the person confirms.
+
+A finding waits for the person's answer before the step advances. The step does not advance while the finding has no answer from the person. When the person says the change fits, the answer stays on the review and the letter decides the pass. When the person amends the outcome or the requirements, the work returns to that step. The person amends. An agent does not. A spirit review with no finding does not ask the person.
+
 ## The plan file
 
 A plan is `docs/_plans/NN-name.md`. `NN` is a zero-padded two-digit sequence number. It sets display order only. Leave a gap when inserting a file. Do not renumber the files that are already there.
@@ -53,6 +59,8 @@ Write the outcome in the person's words: what is true when the work is done. If 
 
 Name the part of the project this work changes. **Part** is the path of the system-record page that describes that part. Work on the whole project names `docs/00-project.md`.
 
+A spirit review is performed at the outcome before the person confirms, and before that step advances.
+
 The person may edit the text. When the person says the outcome is confirmed, the agent sets `**Outcome confirmed:** YYYY-MM-DD` and commits. When the outcome names sub-outcomes, that commit sets Status to `coordinating`. When it does not, that commit sets Status to `requirements`.
 
 ## Facts the plan follows
@@ -72,6 +80,8 @@ Status is `coordinating`.
 This plan does not continue to requirements, tests, design, or implementation. Those steps happen in the sub-plans, after the decisions they share are confirmed.
 
 Write the decisions that more than one piece has to follow, and the order between the pieces. A decision names the pieces it binds and the reason. A decision that chooses a file, a function, or a mechanism inside one piece belongs in that piece's design.
+
+A spirit review is performed on the shared decisions of a plan that is split into pieces, before that step advances.
 
 The person may edit the decisions. When the person says the decisions are confirmed, the agent sets `**Decisions confirmed:** YYYY-MM-DD` and commits.
 
@@ -100,6 +110,8 @@ Write three parts, and nothing that chooses a mechanism:
 - **Out of scope.** What this plan will not do.
 
 A requirement that names a file, a component, a library, or a mechanism is a design decision and belongs in step 5, not here.
+
+A spirit review is performed at the requirements before the person confirms, and before that step advances.
 
 The person edits the text and replaces anything still marked `_(operator)_`. When the person says the requirements are confirmed, the agent sets `**Requirements confirmed:** YYYY-MM-DD` and commits. That commit sets Status to `test-design`.
 
@@ -138,6 +150,8 @@ A design follows each decision previously made that directly affects this part. 
 **Decisions** are a numbered table, D1 onward, one row per choice, with the reason.
 
 The design does not change the tests, the test design, the requirements, or the outcome.
+
+A spirit review is performed at the design before that step advances.
 
 **Review.** One row per acceptance check, naming the part of the design that serves it. A check that nothing serves fails. A choice that serves no check fails. One further row: the tests on the branch are unchanged since their review. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix and sets Status to `implementation`.
 

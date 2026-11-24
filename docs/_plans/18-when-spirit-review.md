@@ -193,7 +193,7 @@ The checks are a reading of this writing. This piece writes no executable test. 
 
 ## Implementation notes
 
-*(not started)*
+The writing is in `.ledger/process/plan-workflow.md`. The checks are a reading of that writing. There is no test branch. `.ledger/process/review.md` is unchanged. The paragraphs that decide a pass are unchanged. The sentences for a failed row, and the sentences for the two cases where the person is asked, are unchanged. The confirmation sentences and the acceptance sentence are unchanged.
 
 ## Reviews
 
