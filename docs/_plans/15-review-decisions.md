@@ -16,7 +16,14 @@ A design follows each decision previously made that directly affects this part. 
 
 ## Decisions
 
-*(not started)*
+| | Decision | Reason |
+|---|----------|--------|
+| D1 | The writing this piece produces is `.ledger/process/plan-workflow.md` and `.ledger/process/review.md`. No example decision, design, or review is added. | It serves every acceptance check. The checks read that writing. The test design says a missing example is not a failed check, and that no decision, design, or review is invented so that an example exists. |
+| D2 | A decision previously made is a fact in the reading set of the part being changed, or a confirmed decision on the parent plan. It directly affects this part when this change would be wrong if that decision were ignored. A design follows each such decision. A decision that does not directly affect this part is left out of the design and is not restated. The sentence that a sub-plan follows the parent plan's confirmed decisions is replaced by this limit. | It serves the check that a design follows each decision previously made that directly affects this part. It serves the check that a decision that does not directly affect this part is left out of the design. |
+| D3 | The reviews that decide a pass are the coordinating review, the test-design review, the test review, the design review, and the implementation review. Each includes each decision previously made that directly affects this part, and leaves out a decision that does not. A spirit review is unchanged. | It serves the check that a review that decides a pass shows each decision previously made that directly affects this part. It serves the check that such a review leaves out a decision that does not directly affect this part. |
+| D4 | A review that leaves out a decision previously made that directly affects this part does not pass. The sentence "one row per decision fetched" is removed from the design review and the implementation review. The rows D3 and D4 name are the rows those reviews use. | It serves the check that a review that leaves out a decision that does directly affect this part does not pass. It serves the check that a review that decides a pass shows each such decision, because there is one account of those rows. |
+| D5 | A review that passes shows, for each included decision, that the work follows it. In `.ledger/process/review.md`, for each review that decides a pass, the evidence for an included decision points at the part of the artifact that follows it. The row fails when that part is absent. | It serves the check that a review that passes shows that the work follows each included decision. It serves the check that a review that decides a pass shows each decision previously made that directly affects this part. |
+| D6 | In `.ledger/process/verification-signoff.md`, the spec-review sentence that gives one row per fact in the reading set is removed. The rows a review uses are the ones `.ledger/process/plan-workflow.md` names. The verdict rules in that file stay as they are. | It serves the check that a decision that does not directly affect this part is left out. It serves the check that a review that decides a pass includes each decision that does directly affect this part. A second account would include a fact the first account leaves out. |
 
 ## Requirements
 
@@ -89,7 +96,41 @@ This piece writes no executable tests. The checks cannot be run until this piece
 
 ## Design
 
-*(not started)*
+The writing is `.ledger/process/plan-workflow.md` and `.ledger/process/review.md`, plus the one sentence D6 removes from `.ledger/process/verification-signoff.md`. The checks are a reading of that writing. No example decision, design, or review is added. Where the writing has produced no instance of a design or a review, the example is missing, and a missing example is not a failed check.
+
+### A person can point at a design and see that it follows each decision previously made that directly affects this part.
+
+D2 writes this into `.ledger/process/plan-workflow.md`, in "Facts the plan follows," and in the design step. A decision previously made is a fact in the reading set of the part being changed, or a confirmed decision on the parent plan. It directly affects this part when this change would be wrong if that decision were ignored. A design follows each such decision.
+
+A person points at that passage and reads that the design follows each of those decisions. The sentence that a sub-plan follows every confirmed decision on the parent plan is replaced by this limit.
+
+### A person can point at a review that decides a pass and see each decision previously made that directly affects this part.
+
+D3 names the reviews that decide a pass: the coordinating review, the test-design review, the test review, the design review, and the implementation review. In `.ledger/process/plan-workflow.md`, each of those reviews includes each decision previously made that directly affects this part.
+
+D5 writes the evidence for that inclusion into `.ledger/process/review.md`. For each of those reviews, the evidence points at the part of the artifact that follows the decision.
+
+A person points at those review passages and sees each such decision on the review. A spirit review does not decide a pass. Its section in `.ledger/process/review.md` stays as it is.
+
+### A person can point at a design, and at a review that decides a pass, and see that a decision that does not directly affect this part is left out.
+
+D2 says a design leaves out a decision that does not directly affect this part, and does not restate it. D3 says each review that decides a pass leaves that decision out. D6 removes the spec-review sentence in `.ledger/process/verification-signoff.md` that gives one row per fact in the reading set, so that sentence does not put a fact that does not directly affect this part onto the review. The verdict rules in that file stay as they are.
+
+A person points at the design passage and at the review passage and does not find that decision there.
+
+### A person can point at a review that leaves out a decision that does directly affect this part and see that the review does not pass.
+
+D4 writes this into each review in `.ledger/process/plan-workflow.md` that decides a pass. A review that leaves out a decision previously made that directly affects this part does not pass. The sentence "one row per decision fetched" is removed from the design review and the implementation review. The rows D3 and D4 name are the rows those reviews use.
+
+A person points at that sentence and reads that the review does not pass.
+
+### A person can point at a review that passes and see that the work follows each included decision.
+
+D5 writes this into `.ledger/process/plan-workflow.md` for each review that decides a pass, and into `.ledger/process/review.md` as the evidence for an included decision. The evidence points at the part of the artifact that follows the decision. The row fails when that part is absent. A review that passes shows, for each included decision, that the work follows it.
+
+A person points at that passage and reads that the work follows each included decision.
+
+The checks are a reading of this writing. This piece writes no executable test. The Tests section stays as it is.
 
 ## Implementation notes
 
