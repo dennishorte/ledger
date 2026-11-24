@@ -18,7 +18,11 @@ A finding waits for the person's answer before the step advances. When the perso
 
 ## Decisions
 
-*(not started)*
+| | Decision | Reason |
+|---|----------|--------|
+| D1 | In `.ledger/process/plan-workflow.md`, a Spirit review section says that a spirit review is performed at the outcome, at the requirements, and at the design. It says that a spirit review is performed on the shared decisions of a plan that is split into pieces. It says that the review is performed before that step advances, and that at the outcome and at the requirements this is before the person confirms. The outcome step, the requirements step, the shared-decisions step, and the design step each say the same for that step. | It serves the check that a spirit review is performed at the outcome, at the requirements, and at the design. It serves the check that a spirit review is performed on the shared decisions of a plan that is split into pieces. It serves the check that a spirit review is performed before that step advances. It serves the check that, at the outcome and at the requirements, the spirit review is before the person confirms. |
+| D2 | That same section says that a finding waits for the person's answer before the step advances. It says that, when the person says the change fits, the answer stays on the review and the letter decides the pass. It says that, when the person amends the outcome or the requirements, the work returns to that step. It says that a spirit review with no finding does not ask the person. | It serves the check that a finding waits for the person's answer before the step advances. It serves the check that, when the person says the change fits, the answer stays on the review and the letter decides the pass. It serves the check that, when the person amends the outcome or the requirements, the work returns to that step. It serves the check that a spirit review with no finding does not ask the person. |
+| D3 | `.ledger/process/review.md` stays as it is. In `.ledger/process/plan-workflow.md`, the paragraphs that decide a pass stay as they are. The sentences for a failed row, and the sentences for the two cases where the person is asked, stay as they are. The confirmation sentences and the acceptance sentence stay as they are. | It serves the check that the letter decides the pass, because those paragraphs still decide it. It serves the check that a finding waits for the person's answer, because a finding is not written into the failed-row sentences. It serves the check that the spirit review at the outcome and at the requirements is before the person confirms, because the person still confirms and an agent does not. |
 
 ## Requirements
 
@@ -125,7 +129,67 @@ This piece writes no executable tests. The checks look at the updates this piece
 
 ## Design
 
-*(not started)*
+The writing is `.ledger/process/plan-workflow.md`. The checks are a reading of that writing. `.ledger/process/review.md` stays as it is. The Tests section stays as it is. There is no test branch. This design does not change the tests, the test design, the requirements, or the outcome.
+
+### A person can point at the workflow and see that a spirit review is performed at the outcome, at the requirements, and at the design.
+
+D1 writes a Spirit review section into `.ledger/process/plan-workflow.md`. The section says that a spirit review is performed at the outcome, at the requirements, and at the design. The outcome step says that a spirit review is performed at the outcome. The requirements step says that a spirit review is performed at the requirements. The design step says that a spirit review is performed at the design. Those step sentences sit before the confirmation, or before the review that decides the pass.
+
+A person points at that section and at those steps and reads that a spirit review is performed at each of the three.
+
+### A person can point at the workflow and see that a spirit review is performed on the shared decisions of a plan that is split into pieces.
+
+D1 writes into the Spirit review section that a spirit review is performed on the shared decisions of a plan that is split into pieces. The shared-decisions step says the same. That step is the coordinating section. Its sentence sits before the person confirms the decisions, and before the review that decides the pass.
+
+A person points at that section and at that step and reads that a spirit review is performed on those shared decisions.
+
+### A person can point at the workflow and see that a spirit review is performed before that step advances.
+
+D1 writes into the Spirit review section that the review is performed before that step advances. Each of the four steps says that the spirit review is performed before that step advances. At the shared decisions and at the design, that is before the pass commit. The pass still advances the step.
+
+A person points at that section and at those steps and reads that the spirit review is performed before the step advances.
+
+### A person can point at the workflow and see that, at the outcome and at the requirements, the spirit review is before the person confirms.
+
+D1 writes into the Spirit review section that, at the outcome and at the requirements, the spirit review is before the person confirms. The outcome step and the requirements step each say that. Those sentences sit before the sentence in which the person confirms.
+
+This follows the fact that the person confirms the goal. The confirmation sentences stay. An agent does not confirm. D3 leaves those sentences as they are.
+
+A person points at that section and at those two steps and reads that the spirit review is before the person confirms.
+
+### A person can point at the workflow and see that a finding waits for the person's answer before the step advances.
+
+D2 writes into the Spirit review section that a finding waits for the person's answer before the step advances. The step does not advance while the finding has no answer from the person.
+
+This follows the fact that a failed row is repaired without asking the person, and the fact that the person is asked in two cases. D3 leaves those sentences as they are. A finding is not written into them.
+
+A person points at that section and reads that a finding waits for the person's answer before the step advances.
+
+### A person can point at the workflow and see that, when the person says the change fits, the answer stays on the review and the letter decides the pass.
+
+D2 writes into the Spirit review section that, when the person says the change fits, the answer stays on the review and the letter decides the pass.
+
+This follows the fact that the person accepts the result. The acceptance sentence stays after the implementation review. The spirit review does not accept the finished work. D3 leaves that sentence as it is.
+
+This follows the fact that a design is accepted before implementation starts. The design review's pass still sets the step to implementation. D3 leaves that paragraph as it is.
+
+This follows the fact that a review that decides a pass includes each decision previously made that directly affects this part, leaves out a decision that does not, does not pass when it leaves out one that does, and shows that the work follows each included decision. D3 leaves those review paragraphs as they are. The spirit review does not decide the pass.
+
+A person points at that section and reads that the answer stays on the review and that the letter decides the pass.
+
+### A person can point at the workflow and see that, when the person amends the outcome or the requirements, the work returns to that step.
+
+D2 writes into the Spirit review section that, when the person amends the outcome or the requirements, the work returns to that step. The person amends. An agent does not.
+
+A person points at that section and reads that the work returns to that step.
+
+### A person can point at the workflow and see that a spirit review with no finding does not ask the person.
+
+D2 writes into the Spirit review section that a spirit review with no finding does not ask the person.
+
+A person points at that section and reads that a spirit review with no finding does not ask the person.
+
+The checks are a reading of this writing. This piece writes no executable test. The Tests section stays as it is.
 
 ## Implementation notes
 
