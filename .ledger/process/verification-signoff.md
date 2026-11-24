@@ -21,7 +21,6 @@ The review's primary artifact is a table with exactly one row per checkable item
 
 **What gets a row:**
 - The rows a review uses are the ones `.ledger/process/plan-workflow.md` names.
-- **Implementation review / verify / reverify** — one row for the Requirements text itself (unchanged since confirmation, or an amendment is recorded), then one row per **Requirements** bullet *and* one per **Acceptance-check** item in the spec. Nothing is implicitly covered.
 
 ### Requirements fidelity (spec review)
 
