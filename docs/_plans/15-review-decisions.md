@@ -1,6 +1,6 @@
 # Decisions previously made
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -20,7 +20,24 @@ A design follows each decision previously made that directly affects this part. 
 
 ## Requirements
 
-*(not started)*
+**Requirements confirmed:** 2026-11-24
+
+**Acceptance.**
+
+- A person can point at a design and see that it follows each decision previously made that directly affects this part.
+- A person can point at a review that decides a pass and see each decision previously made that directly affects this part.
+- A person can point at a design, and at a review that decides a pass, and see that a decision that does not directly affect this part is left out.
+- A person can point at a review that leaves out a decision that does directly affect this part and see that the review does not pass.
+- A person can point at a review that passes and see that the work follows each included decision.
+
+**Constraints.**
+
+None
+
+**Out of scope.**
+
+- A review that does not decide a pass (spirit reviews).
+- Changing a decision previously made.
 
 ## Test design
 
