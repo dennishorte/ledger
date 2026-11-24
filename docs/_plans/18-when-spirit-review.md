@@ -1,6 +1,6 @@
 # When a spirit review is performed
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
@@ -121,7 +121,7 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+This piece writes no executable tests. The checks look at the updates this piece writes. They cannot be run until that writing exists. The person recorded this on 2026-11-24 and moved the plan to design.
 
 ## Design
 
