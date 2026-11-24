@@ -180,3 +180,17 @@ Smaller suggestions (no verdict):
 - D1 names `.ledger/process/plan-workflow.md` and `.ledger/process/review.md`. The design also removes one sentence from `.ledger/process/verification-signoff.md`. The acceptance text does not require D1 to name that file.
 - `.ledger/process/plan-workflow.md` also says, under coordinating, that the sub-plan "follows the parent's confirmed decisions." The design replaces "the sentence" and names "Facts the plan follows" and the design step. The acceptance text does not require the design to name every current copy of that sentence.
 - D4 says the rows D3 and D4 name are the rows the design review and the implementation review use. That can be read as dropping the other rows those reviews have now. The acceptance text does not require those other rows to remain.
+
+### Spirit review, 2026-11-24
+
+This review does not decide the pass.
+
+The change this review read is this plan. Designs and reviews respect the decisions previously made that directly affect this part. A design follows each of those decisions. A review that decides a pass includes each of them and leaves out a decision that does not directly affect this part. A review that leaves out a decision that does directly affect this part does not pass. A review that passes shows that the work follows each included decision. The writing is `.ledger/process/plan-workflow.md` and `.ledger/process/review.md`, and the one sentence this plan removes from `.ledger/process/verification-signoff.md`. No example decision, design, or review is added. A spirit review is unchanged.
+
+The part this change changes is the part named in the Part line. This review read a spirit where `spirit.md` is beside the page. That file is not beside the page of that part, so this account has no spirit of that part to show.
+
+Above that part, this review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit.
+
+The intent this review read is that spirit. The change fits it. The agent follows each decision that would make the work wrong if ignored, and a review that decides a pass shows that following. That raises the quality of the agent's work, which is how this system lightens the person's load. A decision that would not make the work wrong stays out of that work. Findings: none.
