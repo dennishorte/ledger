@@ -53,7 +53,71 @@ A finding waits for the person's answer before the step advances. When the perso
 
 ## Test design
 
-*(not started)*
+The checks are run on the writing this piece has produced. They are not run on the project from before that writing. The agent is the one who runs the check. A person can point at the same workflow and see the same words.
+
+### A person can point at the workflow and see that a spirit review is performed at the outcome, at the requirements, and at the design.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that a spirit review is performed at the outcome, at the requirements, and at the design. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that a spirit review is performed at the outcome, at the requirements, and at the design. A failed check has no such words to point at, or the workflow does not say that a spirit review is performed at each of those three steps.
+
+### A person can point at the workflow and see that a spirit review is performed on the shared decisions of a plan that is split into pieces.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that a spirit review is performed on the shared decisions of a plan that is split into pieces. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that a spirit review is performed on the shared decisions of a plan that is split into pieces. A failed check has no such words to point at, or the workflow does not say that.
+
+### A person can point at the workflow and see that a spirit review is performed before that step advances.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that a spirit review is performed before that step advances. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that a spirit review is performed before the step advances. A failed check has no such words to point at, or the step advances before the spirit review is performed.
+
+### A person can point at the workflow and see that, at the outcome and at the requirements, the spirit review is before the person confirms.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that, at the outcome and at the requirements, the spirit review is before the person confirms. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that, at the outcome and at the requirements, the spirit review is before the person confirms. A failed check has no such words to point at, or the person confirms before the spirit review.
+
+### A person can point at the workflow and see that a finding waits for the person's answer before the step advances.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that a finding waits for the person's answer before the step advances. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that a finding waits for the person's answer before the step advances. A failed check has no such words to point at, or the step advances while the finding has no answer from the person.
+
+### A person can point at the workflow and see that, when the person says the change fits, the answer stays on the review and the letter decides the pass.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that, when the person says the change fits, the answer stays on the review and the letter decides the pass. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that the answer stays on the review. It says that the letter decides the pass. A failed check has no such words to point at, or the answer does not stay on the review, or something other than the letter decides the pass.
+
+### A person can point at the workflow and see that, when the person amends the outcome or the requirements, the work returns to that step.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that, when the person amends the outcome or the requirements, the work returns to that step. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that, when the person amends the outcome or the requirements, the work returns to that step. A failed check has no such words to point at, or the work stays on the later step after that amendment.
+
+### A person can point at the workflow and see that a spirit review with no finding does not ask the person.
+
+**Setup.** This piece has written when a spirit review is performed. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that a spirit review with no finding does not ask the person. A person can point at the same workflow and see the same words.
+
+**Looked at.** The workflow says that a spirit review with no finding does not ask the person. A failed check has no such words to point at, or the workflow asks the person when the spirit review has no finding.
 
 ## Tests
 
