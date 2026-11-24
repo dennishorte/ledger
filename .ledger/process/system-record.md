@@ -65,4 +65,4 @@ A difference between a page and the system that this change does not add, remove
 
 The reason an obligation exists, the history of a choice, the alternatives, and instructions for a task are not facts on these pages.
 
-A spirit is kept in `spirit.md` beside the page of the part it belongs to.
+A spirit is kept in `spirit.md` beside the page of the part it belongs to. A sub-part has a spirit of its own when the intent of that part is not already said by the spirit of the parts above it.
