@@ -1,6 +1,6 @@
 # Failed rows and smaller suggestions
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -17,6 +17,10 @@ A smaller suggestion is a note the confirmed text does not require. The review r
 When a failed row is being repaired, the repair also makes each suggestion that names one edit. The review of that repair includes any row whose evidence that edit changed. A suggestion that names no single edit is left on the review.
 
 When no row failed, no suggestion is applied. The step advances, and the suggestions stay on the review for a later change to find. The person does not have to read them for the step to pass.
+
+**Accepted:** 2026-11-24
+
+The person accepts the finished work.
 
 ## Decisions
 
