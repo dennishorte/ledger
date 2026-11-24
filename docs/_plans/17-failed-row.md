@@ -1,6 +1,6 @@
 # Failed rows and smaller suggestions
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
@@ -170,7 +170,7 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+This piece writes no executable tests. The checks cannot be run until this piece has written its content. They are a reading of that writing. The person recorded this on 2026-11-23 and moved the plan to design.
 
 ## Design
 
