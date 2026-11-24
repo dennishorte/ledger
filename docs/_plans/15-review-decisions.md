@@ -1,6 +1,6 @@
 # Decisions previously made
 
-**Status:** test-design
+**Status:** tests
 
 ## Part
 
