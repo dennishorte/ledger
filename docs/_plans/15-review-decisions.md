@@ -97,4 +97,16 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Reviews
 
-*(not started)*
+### Test design review, 2026-11-24
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence |
+|---|------|---------|----------|
+| A1 | A person can point at a design and see that it follows each decision previously made that directly affects this part. | PASS | "The design is one this writing has produced. At least one decision previously made directly affects this part." "The agent points at the design and reads each decision previously made that directly affects this part." "Each of those decisions on the design. The design follows each one." If the check failed, one of those decisions would be missing or not followed: "A failed check has a design that leaves one of them out, or that does not follow one." |
+| A2 | A person can point at a review that decides a pass and see each decision previously made that directly affects this part. | PASS | "The review is one this writing has produced, and it decides a pass. At least one decision previously made directly affects this part." "The agent points at that review and reads each decision previously made that directly affects this part." "Each of those decisions on the review." If the check failed, a passing review would omit one: "A failed check has a review that decides a pass and does not show one of them." |
+| A3 | A person can point at a design, and at a review that decides a pass, and see that a decision that does not directly affect this part is left out. | PASS | "This piece has written how a design and a review that decides a pass treat a decision previously made. The design and the review are ones this writing has produced. A decision previously made does not directly affect this part." "The agent points at the design and at the review and looks for that decision." "That decision is left out of the design and left out of the review." If the check failed, the decision would be present in one of them: "A failed check has that decision in the design or in the review." |
+| A4 | A person can point at a review that leaves out a decision that does directly affect this part and see that the review does not pass. | PASS | "The review is one this writing has produced, and it leaves out such a decision." "The agent points at that review and reads whether it passes." "The review does not pass." If the check failed, that same review would pass: "A failed check has that review passing." |
+| A5 | A person can point at a review that passes and see that the work follows each included decision. | PASS | "The review is one this writing has produced, and it passes. It includes each decision previously made that directly affects this part." "The agent points at that review and reads whether the work follows each included decision." "The work follows each included decision." If the check failed, the passing review would not show that following for one of them: "A failed check has a passing review that does not show the work following one of them." |
+
+Findings: none.
