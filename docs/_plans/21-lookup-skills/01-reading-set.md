@@ -1,6 +1,6 @@
 # Reading set
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -22,7 +22,7 @@ One skill returns the reading set for a part: the pages to read in full, the nei
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-25
 
 **Acceptance.**
 
