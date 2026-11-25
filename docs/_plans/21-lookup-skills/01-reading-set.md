@@ -1,6 +1,6 @@
 # Reading set
 
-**Status:** design
+**Status:** implementation
 
 ## Part
 
@@ -18,7 +18,12 @@ One skill returns the reading set for a part: the pages to read in full, the nei
 
 ## Decisions
 
-*(not started)*
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | The skill's name is `reading-set`. Its file is `scripts/skills/reading-set/SKILL.md`. Its front matter sets `disable-model-invocation: true`. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named." The skill loads when it is named, and it stays unloaded until then. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because a project that does not name the skill leaves it unloaded. The parent's D2 is met because the skill is a personal skill and it loads only when it is named. The parent's D4 is met because this piece adds only this skill, in the place the setup copies from. |
+| D2 | One sentence is added at the end of "What a reader reads" in `.ledger/process/system-record.md`: "The reading set is gathered by the skill `reading-set`." Every other line in that file stays as it is. This piece does not edit a child project. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named," because the instruction that states the gathering names the skill. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because that project has no such instruction. The parent's D2 is met because the process file that states the lookup names the skill, and a child project is left as it is. The child keeps its own docs and its own copy of the process files, and it receives the sentence with the process files it already keeps. |
+| D3 | The skill returns no packet until it has checked that the open project has the process files. When that check fails, it returns no packet. | This serves "A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check." The parent's D2 is met because a named skill checks for the process files and then returns its packet. |
+| D4 | The packet is what "What a reader reads" in the open project's `.ledger/process/system-record.md` yields for the named part. It states the pages to read in full, the neighbors whose Offers to read, and where to stop. Each of those quotes the line it rests on and points at that place in the process files. | This serves "A person can point at the packet for a part and see the pages to read in full, the neighbors whose Offers to read, and where to stop." It serves "A person can point at the packet and see the quoted lines and the places they were taken from." The parent's D1 is met because the packet is taken from the open project's process files, and it quotes those files and points at them. The parent's D3 is met because this skill is the one that says how the reading set is gathered. |
 
 ## Requirements
 
@@ -97,7 +102,33 @@ This piece writes no executable tests. The checks in the test design are a readi
 
 ## Design
 
-*(not started)*
+The writing is the file `scripts/skills/reading-set/SKILL.md` and one new sentence in `.ledger/process/system-record.md`. The checks are a reading of that writing. This piece writes no executable test. A child project is left as it is.
+
+### A person can point at the packet for a part and see the pages to read in full, the neighbors whose Offers to read, and where to stop.
+
+D4 says the packet is what "What a reader reads" in the open project's `.ledger/process/system-record.md` yields for the named part. The packet states the pages to read in full, the neighbors whose Offers to read, and where to stop. Those three are taken from that project's process files. A person points at those three in the packet.
+
+### A person can point at the packet and see the quoted lines and the places they were taken from.
+
+D4 says each of those three quotes the line it rests on and points at that place in the process files. The place is in the open project's process files. The line in the packet is the line at that place. A person points at the quoted line and at the place.
+
+### A person can name the skill and see that it loads, and can see that it stays unloaded until it is named.
+
+D1 names the skill `reading-set` and sets `disable-model-invocation: true` in `scripts/skills/reading-set/SKILL.md`. The skill stays unloaded until it is named, and it loads when it is named. D2 adds the sentence "The reading set is gathered by the skill `reading-set`." at the end of "What a reader reads" in `.ledger/process/system-record.md`. That sentence is the instruction that names the skill. Every other line in that file stays as it is.
+
+### A person can point at a project that is not running Ledger and see that the skill stays unloaded.
+
+D1 leaves the skill unloaded when it is not named. D2 puts the naming sentence only in this project's process file. A project that is not running Ledger has no such sentence, so nothing there names the skill, and the skill stays unloaded.
+
+### A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check.
+
+D3 says the skill returns no packet until it has checked that the open project has the process files. When the check fails, it returns no packet. When the check passes, D4 returns the packet.
+
+### What this piece adds
+
+D1 adds only `scripts/skills/reading-set/SKILL.md`. D2 adds only the one sentence in `.ledger/process/system-record.md`. This piece does not edit a child project. The child keeps its own docs and its own copy of the process files. The child receives the sentence with the process files it already keeps.
+
+The checks are a reading of this writing. This piece writes no executable test.
 
 ## Implementation notes
 
@@ -153,5 +184,42 @@ D1. The test design follows the open project, and it follows quoting a line and 
 | D4 | This piece adds its own skill in the place the setup copies from. | PASS | "This piece adds only its own skill, in the place the setup copies from." | |
 | P1 | A child project is edited only when asked. | PASS | "A child project is left as it is." The naming line is added in this project, and the child receives it with the process files it already keeps. | |
 | P2 | A child project keeps its own docs and its own copy of the process files. | PASS | "The child keeps its own docs and its own copy of the process files." | |
+
+Findings: none.
+
+### Spirit review, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the design above. The skill is `reading-set`, in `scripts/skills/reading-set/SKILL.md`, and it loads only when it is named. One sentence at the end of "What a reader reads" in `.ledger/process/system-record.md` names that skill. The skill returns no packet until it has checked that the open project has the process files. The packet is what "What a reader reads" in the open project's process file yields for the named part, with the quoted lines and the places they were taken from. This piece adds only that skill and that sentence. A child project is left as it is.
+
+The part this change changes is the part named in the Part line. This review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit.
+
+The intent this review read is that spirit. The change fits it. A packet a person can point at, taken from the open project's process files, raises the quality of the agent's work and leaves the person with less hunting to do. The spirit file stays as it is. Findings: none.
+
+### Design review, 2026-11-25
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| A1 | A person can point at the packet for a part and see the pages to read in full, the neighbors whose Offers to read, and where to stop. | PASS | D4 and the design for that check: the packet is what "What a reader reads" in the open project's `.ledger/process/system-record.md` yields for the named part, and it states those three, taken from that project's process files. | |
+| A2 | A person can point at the packet and see the quoted lines and the places they were taken from. | PASS | D4: each of those three quotes the line it rests on and points at that place in the open project's process files. The line in the packet is the line at that place. | |
+| A3 | A person can name the skill and see that it loads, and can see that it stays unloaded until it is named. | PASS | D1 names the skill `reading-set` and sets `disable-model-invocation: true`. The skill stays unloaded until it is named, and it loads when it is named. D2's sentence is the instruction that names the skill. | |
+| A4 | A person can point at a project that is not running Ledger and see that the skill stays unloaded. | PASS | D1 leaves the skill unloaded when it is not named. D2 puts the naming sentence only in this project's process file. A project that is not running Ledger has no such sentence. | |
+| A5 | A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check. | PASS | D3 returns no packet until the skill has checked that the open project has the process files, and returns no packet when that check fails. When the check passes, D4 returns the packet. | |
+| C1 | The skill is named `reading-set`, its file is `scripts/skills/reading-set/SKILL.md`, and its front matter sets `disable-model-invocation: true`. | PASS | The choice serves the load checks. The front matter is what leaves the skill unloaded until it is named, and what leaves it unloaded when a project does not name it. | |
+| C2 | One sentence is added at the end of "What a reader reads": "The reading set is gathered by the skill `reading-set`." Every other line stays. This piece does not edit a child project. | PASS | The choice serves the load checks. That sentence is the instruction that names the skill. A project that is not running Ledger has no such sentence. | |
+| C3 | The skill returns no packet until it has checked that the open project has the process files. When that check fails, it returns no packet. | PASS | The choice serves the process-files check. | |
+| C4 | The packet is what "What a reader reads" in the open project's process file yields for the named part. It states the three items. Each quotes the line it rests on and points at that place. | PASS | The choice serves the packet check and the quote check. | |
+| T1 | The tests are unchanged since their review. | PASS | There is no tests-review matrix and no test branch. The Tests section is the person's record that this piece writes no executable tests. The design does not change that section. | |
+| PD1 | The reading-set packet is taken from the open project's process files. The packet quotes those files and points at them. | PASS | D4: the packet is what "What a reader reads" in the open project's process file yields, and each item quotes the line it rests on and points at that place. | |
+| PD2 | This skill is a personal skill, it loads only when it is named, it is named from `.ledger/process/system-record.md`, a named skill checks that the open project has the process files and then returns its packet, and a child project is left as it is. | PASS | D1 puts the skill in `scripts/skills/` and loads it only when it is named. D2 names it from `.ledger/process/system-record.md` and does not edit a child project. D3 returns no packet until the process-files check. | |
+| PD3 | The reading-set skill is the one that says how the reading set is gathered. | PASS | D4 says this skill is the one that says how the reading set is gathered. D2's sentence is "The reading set is gathered by the skill `reading-set`." | |
+| PD4 | This piece adds its own skill in `scripts/skills/`, the place the setup copies from. | PASS | D1's file is `scripts/skills/reading-set/SKILL.md`. The design adds only that file and the one naming sentence. | |
+| P1 | A child project is edited only when asked. | PASS | "This piece does not edit a child project." | |
+| P2 | A child project keeps its own docs and its own copy of the process files. | PASS | "The child keeps its own docs and its own copy of the process files. The child receives the sentence with the process files it already keeps." | |
 
 Findings: none.
