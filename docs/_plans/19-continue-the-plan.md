@@ -1,6 +1,6 @@
 # Continue the plan
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,8 @@ After a draft that requires a review, the review and the revision loop run befor
 The plan is completed when the finished work is ready to be accepted. The work needs their input in the cases the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. A step ending is not one of those cases.
 
 The plan part keeps its own spirit, in `spirit.md` beside its page. The spirits above it do not already say this intent. The spirit is: The plan workflow only asks for user input when needed.
+
+**Accepted:** 2026-11-24
 
 ## Decisions
 
