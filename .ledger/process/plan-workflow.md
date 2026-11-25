@@ -6,6 +6,8 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 
 `verification-signoff.md` is the review matrix and the only definition of `pass`. A step advances only when its disposition is `pass`. The row lists in this file are what that matrix covers for each step.
 
+Where a plan sits is gathered by the skill `plan-position`.
+
 ## The steps
 
 1. **Outcome.** What is true when the work is done. A high-level outcome may name the pieces that make it true. The person confirms it.
