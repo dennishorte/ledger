@@ -205,3 +205,23 @@ None.
 
 - A4. Blocking. Mechanical. The fourth check points at the writing that states the use, and calls that writing a spirit review. A spirit review that left the plan's spirit unused would leave that observation the same.
 - D1. Blocking. Mechanical. The test design has no part that follows the decision that a spirit review is an account of whether the work fits the intent of its part. It defines a spirit review as the writing this piece produced.
+
+### Test design review, 2026-11-25
+
+This review covers the rows the repair can change: A4, D1, and D2. A1, A2, and A3 were not edited.
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| A4 | A person can point at a spirit review and see that the spirit of the plan was used in it. | PASS | Setup at `docs/_plans/20-spirit-in-the-outcome.md:85`: "A spirit review is an account of whether the work fits the intent of its part. The account is of a plan whose outcome states the spirit of that plan. The spirit review is that account." Action at `:87`: the agent points at the spirit review, reads the account, and sees whether it used the spirit of the plan. Looked at at `:89`: "The account shows that the spirit of the plan was used in it." A failed check is an account that does not use the spirit of the plan. That account would be the same if the plan's spirit were absent. The design names no file, function, library, or mechanism. | |
+| D1 | Spirit review. An account of whether the work fits the intent of its part. | PASS | The decision is `docs/01-processes/01-plan/00-plan.md:23`. The test design follows it at `docs/_plans/20-spirit-in-the-outcome.md:85`: "A spirit review is an account of whether the work fits the intent of its part." The action at `:87` points at that account. | |
+| D2 | Letter. The facts that decide the pass. | PASS | The decision is `docs/01-processes/01-plan/00-plan.md:27`. The test design follows it at `docs/_plans/20-spirit-in-the-outcome.md:89`: "The use is not the pass. The pass stays with the letter." | |
+
+**Smaller suggestions**
+
+None.
+
+**Findings**
+
+None.
