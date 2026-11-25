@@ -224,3 +224,15 @@ D2. The tests follow the personal skill, the load only when it is named, the ins
 | P2 | A child project keeps its own docs and its own copy of the process files. | PASS | The Tests section (`03-spirit-chain.md:98`): "The child keeps its own docs and its own copy of the process files. The child receives the naming line with the process files it already receives." | |
 
 Findings: none.
+
+### Spirit review, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the design above. The skill is `spirit-chain`, in `scripts/skills/spirit-chain/SKILL.md`, and it loads only when it is named. One sentence after the walk in `.ledger/process/review.md` names that skill. The skill returns no packet until it has checked that the open project has the process files. The packet is the spirit files on the walk from the named part up through the parts above it, quoting those files and showing where a file is absent. This piece adds only that skill and that sentence. A child project is left as it is.
+
+The part this change changes is the part named in the Part line. This review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit. This review used the plan's spirit: "Doing lookups to follow the process is handled efficiently."
+
+The intent this review read is that spirit. The change fits it. A packet a person can point at, taken from the spirit files on the walk, raises the quality of the agent's work and leaves the person with less hunting to do. The plan's spirit is that lookup handled in one named skill. The spirit file stays as it is. Findings: none.
