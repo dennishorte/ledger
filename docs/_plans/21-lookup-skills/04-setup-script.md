@@ -1,6 +1,6 @@
 # Setup script
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -22,7 +22,7 @@ A script does the skills setup on a new machine.
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-25
 
 **Acceptance.**
 
