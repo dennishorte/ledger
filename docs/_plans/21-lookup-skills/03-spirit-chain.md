@@ -18,7 +18,12 @@ One skill returns the spirit chain for a part: each spirit file from that part u
 
 ## Decisions
 
-*(not started)*
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | The skill's name is `spirit-chain`. Its file is `scripts/skills/spirit-chain/SKILL.md`. Its front matter sets `disable-model-invocation: true`. Its description says to use it when the process file that states this lookup names this skill. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named." The skill loads when it is named, and it stays unloaded until then. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because a project that does not name the skill leaves it unloaded. The parent's D2 is met because the skill is a personal skill and it loads only when it is named. The parent's D4 is met because this piece adds only this skill, in the place the setup copies from. |
+| D2 | One sentence is added after the walk in the Spirit review section of `.ledger/process/review.md`, after "It does not read the record page.": "The spirit chain is gathered by the skill `spirit-chain`." Every other line in that file stays as it is. This piece does not edit a child project. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named," because the instruction that states the lookup names the skill. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because that project has no such instruction. The parent's D2 is met because the process file that states the lookup names the skill, and a child project is left as it is. The child keeps its own docs and its own copy of the process files, and it receives the sentence with the process files it already keeps. |
+| D3 | The skill returns no packet until it has checked that the open project has the process files under `.ledger/process/`. When that check fails, it returns no packet. | This serves "A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check." The parent's D2 is met because a named skill checks for the process files and then returns its packet. |
+| D4 | The packet is what the walk in that Spirit review section yields for the named part, in the project that is open. The walk goes from that part up through the parts above it. This skill gathers that walk itself. For each part on the walk, the packet includes the spirit file beside that part's page, or shows that the file is absent. Each present spirit file is quoted, and the packet points at the place those lines were taken from. The place is a spirit file on that walk in the open project. The line in the packet is the line at that place. | This serves "A person can point at the packet for a part and see each spirit file from that part up through the parts above it, and where a file is absent." It serves "A person can point at the packet and see the quoted lines and the places they were taken from." The parent's D1 is met because the packet is taken from the spirit files on the walk in the project that is open, and it quotes those files and points at them. The parent's D3 is met because this skill gathers the spirit files on its own walk. |
 
 ## Requirements
 
@@ -109,7 +114,33 @@ The fifth check was run. This project is open and has the process files. Another
 
 ## Design
 
-*(not started)*
+The writing is the file `scripts/skills/spirit-chain/SKILL.md` and one new sentence in `.ledger/process/review.md`. The checks are a reading of that writing. This piece writes no executable test. A child project is left as it is.
+
+### A person can point at the packet for a part and see each spirit file from that part up through the parts above it, and where a file is absent.
+
+D4 says the packet is what the walk in the Spirit review section yields for the named part, in the project that is open. The walk goes from that part up through the parts above it. This skill gathers that walk itself. For each part on the walk, the packet includes the spirit file beside that part's page, or shows that the file is absent. Those are taken from the spirit files on the walk in the open project. A person points at those in the packet.
+
+### A person can point at the packet and see the quoted lines and the places they were taken from.
+
+D4 says each present spirit file is quoted, and the packet points at the place those lines were taken from. The place is a spirit file on the walk in the open project. The line in the packet is the line at that place. A person points at the quoted line and at the place.
+
+### A person can name the skill and see that it loads, and can see that it stays unloaded until it is named.
+
+D1 names the skill `spirit-chain` and sets `disable-model-invocation: true` in `scripts/skills/spirit-chain/SKILL.md`. The skill stays unloaded until it is named, and it loads when it is named. D2 adds the sentence "The spirit chain is gathered by the skill `spirit-chain`." after the walk in the Spirit review section of `.ledger/process/review.md`. That sentence is the instruction that names the skill. Every other line in that file stays as it is.
+
+### A person can point at a project that is not running Ledger and see that the skill stays unloaded.
+
+D1 leaves the skill unloaded when it is not named. D2 puts the naming sentence only in this project's process file. A project that is not running Ledger has no such sentence, so nothing there names the skill, and the skill stays unloaded.
+
+### A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check.
+
+D3 says the skill returns no packet until it has checked that the open project has the process files under `.ledger/process/`. When the check fails, it returns no packet. When the check passes, D4 returns the packet.
+
+### What this piece adds
+
+D1 adds only `scripts/skills/spirit-chain/SKILL.md`. D2 adds only the one sentence in `.ledger/process/review.md`. This piece does not edit a child project. The child keeps its own docs and its own copy of the process files. The child receives the sentence with the process files it already keeps.
+
+The checks are a reading of this writing. This piece writes no executable test.
 
 ## Implementation notes
 
