@@ -1,6 +1,6 @@
 # Spirit in the outcome
 
-**Status:** test-design
+**Status:** tests
 
 ## Part
 
