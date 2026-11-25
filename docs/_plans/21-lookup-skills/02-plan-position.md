@@ -1,6 +1,6 @@
 # Plan position
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -22,7 +22,7 @@ One skill returns where a plan sits: its status, what is already confirmed, the 
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-25
 
 **Acceptance.**
 
