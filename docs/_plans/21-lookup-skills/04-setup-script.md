@@ -64,7 +64,13 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+The test design says the checks run on the writing this piece has produced, and that they do not run on the project from before that writing. This piece writes no executable tests. The writing is not produced yet. The runs below look for that writing and find it absent. Each check fails because the behavior is not implemented yet. These runs are not a reading of the project from before that writing treated as the finished script.
+
+The script these runs looked for copies the directory the repository holds the skills in into the person's personal skills on the machine where the script is run. This piece would add only the install script. A child project was left as it is. The child keeps its own docs and its own copy of the process files. This run does not create a child project, and it does not copy the process files into a child project. This run adds no script.
+
+The first check was run. The repository holds the skills. The agent looked for the install script this piece writes and read what it copies, and where. That script is not written. No script copies the directory the repository holds the skills in into the person's personal skills on the machine where the script is run. The check fails because there is no such copy.
+
+The second check was run. The agent looked for the script to run it on the machine. That script is not written, so it was not run. The skills the repository holds are not set up in the person's personal skills by this run. The check fails because those skills are absent from that setup. The behavior is not implemented yet.
 
 ## Design
 
@@ -72,7 +78,11 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Implementation notes
 
-*(not started)*
+The first check was run. It fails because the install script is not written, so nothing copies the directory the repository holds the skills in into the person's personal skills.
+
+The second check was run. It fails because that script is not written, so it was not run, and the skills are not set up by this run.
+
+A child project was left as it is. The child keeps its own docs and its own copy of the process files. This run adds no script.
 
 ## Reviews
 
