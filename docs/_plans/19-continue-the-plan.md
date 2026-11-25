@@ -18,7 +18,14 @@ The plan part keeps its own spirit, in `spirit.md` beside its page. The spirits 
 
 ## Decisions
 
-*(not started)*
+| # | Choice | Reason |
+|---|--------|--------|
+| D1 | The **A fresh session** rule in `.ledger/process/plan-workflow.md` says: After a draft that requires a review, the review and the revision loop run before the person is asked. A review is a fresh session. The sentence that puts the confirmed text of the earlier steps at the top of the prompt and again at the end stays, and it names the review's prompt. | A person can point at the workflow and see that, after a draft that requires a review, the review and the revision loop run before the person is asked. The revision loop is the repair already written under **A failed review stays here**. |
+| D2 | That rule says: When that loop finds nothing the person has to resolve, the work continues through the plan without pausing. The work starts the next step after a pass when nothing remains that the person has to resolve. The session that wrote the step starts that next step. | A person can point at the workflow and see that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing. |
+| D3 | The **Acceptance** paragraph in step 6 says: The person is asked when the finished work is ready to be accepted. | A person can point at the workflow and see that the person is asked when the finished work is ready to be accepted. The person accepts the result, and the acceptance sentence stays after the implementation review. |
+| D4 | A **When the person is asked** rule says: The person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. | A person can point at the workflow and see that the person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. |
+| D5 | That **A fresh session** rule says: The person is not asked because a step ended. | A person can point at the workflow and see that the person is not asked because a step ended. The rule that a writing step starts in a new session, and that the session that wrote the previous step is not continued, is the instruction this choice rewrites. |
+| D6 | `docs/01-processes/01-plan/spirit.md` is left as it is. | A person can point at the spirit beside the plan page and read: The plan workflow only asks for user input when needed. That sentence is already the whole of that file. |
 
 ## Requirements
 
@@ -111,7 +118,65 @@ Five checks are readings of the workflow. That workflow writing does not exist y
 
 ## Design
 
-*(not started)*
+The five checks that read the workflow are readings of `.ledger/process/plan-workflow.md`. The tests, the test design, the requirements, and the outcome stay as they are. There is no test branch.
+
+### A person can point at the workflow and see that, after a draft that requires a review, the review and the revision loop run before the person is asked.
+
+D1 writes that sentence in the **A fresh session** rule under Rules for every step. A person points at that rule.
+
+The rule reads:
+
+> A review is a fresh session. Put the confirmed text of the earlier steps at the top of the review's prompt and again at the end. After a draft that requires a review, the review and the revision loop run before the person is asked. When that loop finds nothing the person has to resolve, the work continues through the plan without pausing. The work starts the next step after a pass when nothing remains that the person has to resolve. The session that wrote the step starts that next step. The person is not asked because a step ended.
+
+**The author does not review.** stays: "The reviewer has not written the artifact under review." The author still does not review. The opening sentence that a different agent reviews in a fresh session stays.
+
+**A failed review stays here.** stays in full. That rule is the revision loop. "A failed row is repaired without asking the person" stays. "A new session reviews the repaired artifact" stays, because a review is still a fresh session. The suggestion sentence stays: "When a failed row is being repaired, the repair also makes each suggestion that names one edit." The paragraphs that decide a pass stay.
+
+The **Spirit review** section stays in full, including when a spirit review is performed. A spirit review is not added or moved. This follows the facts that a failed row is repaired without asking the person, that the suggestion sentences stay, and that the paragraphs that decide a pass stay.
+
+### A person can point at the workflow and see that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing.
+
+D2 writes that sentence in the same **A fresh session** rule. A person points at that rule. The same rule says the work starts the next step after a pass when nothing remains that the person has to resolve, and that the session that wrote the step starts that next step.
+
+**The next step waits.** stays: "Do not start it while this step is still in review, or before its gate commit has landed." The next step still waits while a review is open and until the gate commit has landed.
+
+In step 5, "On `pass`, one commit records the matrix and sets Status to `implementation`." stays. The design review's pass still sets the step to implementation. The work does not start implementation while the design is still in review. A design is accepted before implementation starts.
+
+Confirming the outcome, the requirements, or the shared decisions, answering a spirit finding, amending the outcome or the requirements, either of the two cases where a failed row asks the person, and accepting the finished work are what can remain for the person. The work starts the next step when none of those remains. The confirmation sentences stay, so the person confirms the goal. **The person's word finishes in a commit.** stays, and the next step waits for that commit. "A spirit review with no finding does not ask the person" stays, so a clean spirit review leaves no finding for the person to resolve.
+
+### A person can point at the workflow and see that the person is asked when the finished work is ready to be accepted.
+
+D3 writes that sentence in the **Acceptance** paragraph of step 6, after the implementation review. A person points at that paragraph.
+
+The paragraph reads: "The review has already run the tests and recorded the evidence. The person is asked when the finished work is ready to be accepted. The person accepts the finished work. They can run the tests themselves before accepting. When the person says the work is accepted, the agent sets `**Accepted:** YYYY-MM-DD`, sets Status to `accepted`, and commits."
+
+"The person accepts the finished work." stays after the implementation review. The person is asked then. The opening sentence that the person accepts the finished work stays. "Status stays `implementation` until the person accepts." stays. This follows the fact that the person accepts the result.
+
+### A person can point at the workflow and see that the person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person.
+
+D4 writes that sentence as a **When the person is asked** rule, after **The next step waits** and before **A failed review stays here**. A person points at that rule.
+
+The rule reads: "The person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person."
+
+The sentence names the asks the process already has. The sentences that carry them stay.
+
+The person confirms the goal. An agent does not confirm. "The person confirms it." and "When the person says the outcome is confirmed" stay in step 1. "The person confirms them." and "When the person says the requirements are confirmed" stay in step 2. "the person confirms them, before any sub-plan" and "When the person says the decisions are confirmed" stay for the shared decisions. The opening sentence that the person confirms the outcome and confirms the requirements stays.
+
+"A finding waits for the person's answer before the step advances." stays. "When the person amends the outcome or the requirements, the work returns to that step. The person amends. An agent does not." stays in **Spirit review**. "The person amends the outcome and the requirements. An agent does not." stays in **An earlier step is not rewritten from a later one.** The person amends. An agent does not.
+
+"The person is asked in two cases. One case is that the failed row does not determine one edit. The other case is that the repair would change the outcome or the requirements." stays in **A failed review stays here.** "A failed row is repaired without asking the person." stays for every other repair.
+
+### A person can point at the workflow and see that the person is not asked because a step ended.
+
+D5 writes that sentence in the **A fresh session** rule. A person points at that rule.
+
+D1, D2, and D5 rewrite the rule that now says a writing step starts in a new session, and says not to continue the session that wrote the previous step. That rule is why the work stops and the person is asked when a step ends. The rewritten rule says the person is not asked because a step ended, and the session that wrote the step starts the next step after a pass when nothing remains that the person has to resolve. A review is still a fresh session, and the author still does not review.
+
+### A person can point at the spirit beside the plan page and read: The plan workflow only asks for user input when needed.
+
+D6 leaves `docs/01-processes/01-plan/spirit.md` as it is. A person points at that file and reads: The plan workflow only asks for user input when needed.
+
+The root spirit and the processes spirit stay as they are. Those facts say they stay.
 
 ## Implementation notes
 
