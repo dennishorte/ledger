@@ -47,7 +47,7 @@ A process file that matches the copy on the child project is left as it is.
 
 A process file that differs is replaced with the file from this project.
 
-A file in the child project's `.ledger/process/` that is not a process file is left in place.
+A file in the child project's `.ledger/process/` that is not a process file is removed.
 
 A project path with no directory is skipped, and `scripts/sync-process` fails.
 
@@ -139,7 +139,7 @@ Result: a process file that differs is replaced with the file from this project.
 Case: a file only on the child.
 Setup: the child's `.ledger/process/` holds a file that is not a process file.
 Action: `scripts/sync-process` is run for that project.
-Result: a file in the child project's `.ledger/process/` that is not a process file is left in place.
+Result: a file in the child project's `.ledger/process/` that is not a process file is removed.
 
 Case: a missing directory.
 Setup: a project path names no directory.

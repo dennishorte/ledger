@@ -4,6 +4,7 @@
 #
 # With no arguments, syncs all projects listed in .ledger/child-projects.
 # With path arguments, syncs only those projects.
+# A file in the child process directory that is not a process file here is removed.
 set -euo pipefail
 
 LEDGER_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -53,6 +54,14 @@ for project in "${targets[@]}"; do
       echo "  sync  $filename"
     fi
   done
+  while IFS= read -r -d '' dest_file; do
+    filename="$(basename "$dest_file")"
+    if [[ "$filename" == *.md && -f "$SRC/$filename" ]]; then
+      continue
+    fi
+    rm "$dest_file"
+    echo "  drop  $filename"
+  done < <(find "$dest" -maxdepth 1 -type f -print0)
 done
 
 exit $any_error
