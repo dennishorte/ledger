@@ -1,6 +1,6 @@
 # Setup script
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,10 @@
 **Outcome confirmed:** 2026-11-25
 
 A script does the skills setup on a new machine.
+
+**Accepted:** 2026-11-25
+
+The person accepts the finished work.
 
 ## Decisions
 
