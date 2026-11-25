@@ -1,6 +1,6 @@
 # Setup script
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
