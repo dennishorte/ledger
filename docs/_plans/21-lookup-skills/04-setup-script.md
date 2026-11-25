@@ -93,11 +93,13 @@ D2 adds only `scripts/setup-skills`. It does not edit a child project. It does n
 
 ## Implementation notes
 
-The first check was run. It fails because the install script is not written, so nothing copies the directory the repository holds the skills in into the person's personal skills.
+The writing is `scripts/setup-skills`. It copies each skill in `scripts/skills/` into `~/.cursor/skills/` on the machine where it is run. The checks are a reading of that script, and a run of it.
 
-The second check was run. It fails because that script is not written, so it was not run, and the skills are not set up by this run.
+The first check was read against that script. It copies each skill in `scripts/skills/` into `~/.cursor/skills/`, which is the person's personal skills, on the machine where it is run.
 
-A child project was left as it is. The child keeps its own docs and its own copy of the process files. This run adds no script.
+The second check was run. `scripts/setup-skills` was run on this machine. `reading-set`, `plan-position`, and `spirit-chain` are set up in `~/.cursor/skills/`, and each matches the skill in `scripts/skills/`.
+
+A child project was left as it is. The child keeps its own docs and its own copy of the process files. This writing adds only `scripts/setup-skills`.
 
 ## Reviews
 

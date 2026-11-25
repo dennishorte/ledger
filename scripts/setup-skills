@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Copy the skills this repository holds into the person's personal skills.
+# Usage: setup-skills
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SOURCE="$ROOT/scripts/skills"
+DEST="${HOME}/.cursor/skills"
+
+mkdir -p "$DEST"
+cp -R "$SOURCE"/. "$DEST"/
