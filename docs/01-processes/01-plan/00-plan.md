@@ -40,6 +40,10 @@ When the person says the change fits, the answer stays on the review and the let
 When the person amends the outcome or the requirements, the work returns to that step.
 A spirit review with no finding does not ask the person.
 
+The outcome states the spirit of the plan up front.
+A spirit review uses the spirit of the plan.
+The spirit of the plan can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated.
+
 After a draft that requires a review, the review and the revision loop run before the person is asked.
 When that loop finds nothing the person has to resolve, the work continues through the plan without pausing.
 The person is asked when the finished work is ready to be accepted.
@@ -130,6 +134,21 @@ Case: a step has ended.
 Setup: the step has ended. Nothing remains that the person has to resolve.
 Action: the work continues.
 Result: the person is not asked because a step ended.
+
+Case: the outcome of a plan.
+Setup: the outcome is written.
+Action: the outcome is read.
+Result: the outcome states the spirit of the plan up front.
+
+Case: a spirit review.
+Setup: the outcome states the spirit of the plan. The review is written.
+Action: the review is read.
+Result: a spirit review uses the spirit of the plan.
+
+Case: a spirit review that uses the spirit of the plan.
+Setup: the review uses the spirit of the plan.
+Action: the review is read.
+Result: the spirit of the plan can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated.
 
 ## Rules
 
