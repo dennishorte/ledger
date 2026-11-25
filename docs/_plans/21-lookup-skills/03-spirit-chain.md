@@ -1,6 +1,6 @@
 # Spirit chain
 
-**Status:** requirements
+**Status:** test-design
 
 ## Part
 
@@ -22,7 +22,7 @@ One skill returns the spirit chain for a part: each spirit file from that part u
 
 ## Requirements
 
-**Requirements confirmed:** unconfirmed
+**Requirements confirmed:** 2026-11-25
 
 **Acceptance.**
 
