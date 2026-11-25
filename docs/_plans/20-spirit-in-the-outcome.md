@@ -237,3 +237,57 @@ None.
 **Findings**
 
 None.
+
+### Tests review, 2026-11-25
+
+**Disposition:** changes-required
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| A1 | A person can point at a plan's outcome and see the spirit of that plan stated up front. | PASS | The run is `docs/_plans/20-spirit-in-the-outcome.md:95`: the check points at this plan's outcome, that outcome states the spirit of the plan before the rest of the outcome, and the check passes. Implementation notes at `:109` explain the behavior this piece already wrote. The outcome at `:13` is "**Spirit.** Plans have a spirit of their own to guide their execution." The rest of the outcome follows at `:15`. A run that left the spirit out, or placed it after that rest, would not pass. The test design names no file. | |
+| A2 | A person can point at the process and see that the plan's spirit can be used to help make sure the plan matches the spirit of the project. | FAIL | The tests section at `:97` says the second check cannot be run because that writing is not produced yet. The test design at `:73` says a failed check lacks that use, or makes the match without the plan's spirit. The tests section has no run with that result. Implementation notes at `:113` say the check fails, and that sentence does not show the run. `.ledger/process/plan-workflow.md` and `.ledger/process/review.md` do not say that the plan's spirit can be used to help make sure the plan matches the spirit of the project. That lack is a result the check can reach. | |
+| A3 | A person can point at the process and see that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. | FAIL | The tests section at `:99` says the third check cannot be run because that writing is not produced yet. The test design at `:81` says a failed check lacks that determination, or makes the determination without the plan's spirit. The tests section has no run with that result. Implementation notes at `:113` say the check fails, and that sentence does not show the run. `.ledger/process/plan-workflow.md` and `.ledger/process/review.md` do not say that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. That lack is a result the check can reach. | |
+| A4 | A person can point at a spirit review and see that the spirit of the plan was used in it. | PASS | The run is `:101`: the check points at the spirit review of the requirements, "an account of whether the work fits the intent of its part," and that account used the spirit of the plan. The check passes. "The use is not the pass. The pass stays with the letter." Implementation notes at `:111` explain the behavior this piece already wrote. The account at `:155` reads the plan's spirit, "Plans have a spirit of their own to guide their execution," and at `:165` the intent it read is that spirit. A run whose account did not use the plan's spirit would not pass. The test design names no file. | |
+| D1 | Spirit review. An account of whether the work fits the intent of its part. | PASS | The decision is `docs/01-processes/01-plan/00-plan.md:23`. The tests note follows it at `docs/_plans/20-spirit-in-the-outcome.md:101`: "an account of whether the work fits the intent of its part." The fourth check points at that account. | |
+| D2 | Letter. The facts that decide the pass. | PASS | The decision is `docs/01-processes/01-plan/00-plan.md:27`. The tests note follows it at `docs/_plans/20-spirit-in-the-outcome.md:101`: "The use is not the pass. The pass stays with the letter." | |
+
+**Decisions**
+
+Included.
+
+- Spirit review is an account of whether the work fits the intent of its part (`docs/01-processes/01-plan/00-plan.md:23`). The fourth check points at a spirit review. The tests note would be pointing at the wrong kind of account if a spirit review were some other kind of writing.
+- Letter. The facts that decide the pass (`docs/01-processes/01-plan/00-plan.md:27`). The fourth check records a pass because the account used the plan's spirit. The tests note would be treating that use as the pass if the letter were not what decides the pass.
+
+Left out. This plan has no parent, so there is no confirmed decision on a parent. Behavior cases on the plan page, the processes page, and the project page restate the facts below. Review's Offers and System record's Offers are empty.
+
+- Carries one piece of work from a confirmed goal through an accepted result. The tests note records the four checks.
+- Does not state what is true of the project now. The tests note reads the writing this piece produced. It makes no claim that the plan states what is true of the project now.
+- Person. The person running the project. Goal. What the person says will be true when a piece of work is done. Result. The finished work. Plan. One piece of work, kept as a file in `docs/_plans/`. Finding. A miss in a spirit review. Outcome. The step in which the person confirms the goal. Requirements. The step in which the checks on the goal are written. The tests note uses "a plan's outcome" and "a spirit review" in the sense the test design already uses. These definitions are not claims the tests note would get wrong.
+- The person confirms the goal. The person accepts the result. The tests note does not confirm the goal or accept the result.
+- A spirit review is performed on the shared decisions of a plan that is split into pieces. This plan is one piece. The tests note makes no claim about that review.
+- A spirit review at the outcome and at the requirements is performed before the person confirms. A spirit review is performed at the outcome, at the requirements, and at the design. A spirit review is performed before that step advances. The tests note makes no claim about when a spirit review is performed.
+- A finding waits for the person's answer before the step advances. When the person says the change fits, the answer stays on the review and the letter decides the pass. When the person amends the outcome or the requirements, the work returns to that step. A spirit review with no finding does not ask the person. The tests note makes no claim about findings, amendments, or when the person is asked. The letter's role in the pass is the included decision. Where an answer is written is a different fact.
+- After a draft that requires a review, the review and the revision loop run before the person is asked. When that loop finds nothing the person has to resolve, the work continues through the plan without pausing. The person is asked when the finished work is ready to be accepted. The person is not asked because a step ended. These govern when the person is asked as the plan moves. The tests note makes no claim about that.
+- The plan's file is removed once the record states what the goal said would be true. The tests note does not remove the plan.
+- A design is accepted before implementation starts. The tests note does not start implementation.
+- Describes the processes that keep a project on track. Describes how to integrate those processes into a project. The tests note makes no claim about that responsibility.
+- Plan, Review, and System record are parts of Processes. That containment is not a claim the tests note makes.
+- Plan depends on Review. Plan depends on System record. Review depends on System record. The tests note makes no claim about dependencies.
+- A failed row is repaired without asking the person. An agent who did not write the review makes the edit the row determines. The next review covers the rows that repair can change. The person is asked in two cases. One case is that the failed row does not determine one edit. The other case is that the repair would change the outcome or the requirements. These govern repair of a review. The tests note makes no claim about repair.
+- A smaller suggestion is a note the confirmed text does not require. The review records the suggestion, and the suggestion has no verdict. The suggestion does not hold the step, and does not by itself call for another review. When a failed row is being repaired, the repair also makes each suggestion that names one edit. The review of that repair includes any row whose evidence that edit changed. A suggestion that names no single edit is left on the review. When no row failed, no suggestion is applied. When no row failed, the step advances, and the suggestions stay on the review for a later change to find. When no row failed, the person does not have to read the suggestions for the step to pass. These govern suggestions on a review. The tests note makes no claim about suggestions.
+- A design follows each decision previously made that directly affects this part. This artifact is the tests note.
+- A review that decides a pass includes each decision previously made that directly affects this part. A decision that does not directly affect this part is left out. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows that the work follows each included decision. These govern this review. The tests note makes no claim about them.
+- Record. The pages that state what is true of the project now. The tests note makes no claim about what the record is.
+- Keeps a project on course when an LLM does the design and the implementation. The tests note makes no claim about that responsibility.
+- Does not carry out a child project's work. A child project is edited only when asked. Child project. A project listed in `.ledger/child-projects`. The tests note does not edit a child project.
+- Processes and Scripts are parts of the root. That containment is not a claim the tests note makes.
+- Design. The written account of how a piece of work will be done. Implementation. The carrying out of a design. This step is the tests note. The tests note makes no claim about the design or the implementation.
+
+**Smaller suggestions**
+
+None.
+
+**Findings**
+
+- A2. Blocking. Mechanical. The tests section says the second check cannot be run because the process writing is not produced yet. A failed check lacks the use, or makes the match without the plan's spirit. The tests section has no run with that result. The implementation notes say the check fails, and that sentence does not show the run.
+- A3. Blocking. Mechanical. The tests section says the third check cannot be run because the process writing is not produced yet. A failed check lacks the determination, or makes the determination without the plan's spirit. The tests section has no run with that result. The implementation notes say the check fails, and that sentence does not show the run.
