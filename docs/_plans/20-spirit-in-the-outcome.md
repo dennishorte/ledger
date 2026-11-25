@@ -16,7 +16,12 @@ A plan states the spirit of the plan up front in the outcome section. That state
 
 ## Decisions
 
-*(not started)*
+| # | Choice | Reason |
+|---|--------|--------|
+| D1 | A plan's outcome states the spirit of the plan before the rest of the outcome. This plan's outcome already does that, and it stays. The outcome step says the same thing. | The first check points at a plan's outcome and reads the spirit before the rest. |
+| D2 | The spirit review says that the plan's spirit can be used to help make sure the plan matches the spirit of the project. | The second check points at the process and fails while that writing is absent. |
+| D3 | The spirit review says that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. | The third check points at the process and fails while that writing is absent. |
+| D4 | A spirit review uses the spirit of the plan. That use is not the pass. The letter decides the pass. | The fourth check points at a spirit review and reads that use. The letter still decides the pass. |
 
 ## Requirements
 
@@ -102,7 +107,33 @@ The fourth check points at a spirit review, an account of whether the work fits 
 
 ## Design
 
-*(not started)*
+The four checks stay as they are. The tests, the test design, the requirements, and the outcome stay as they are. There is no test branch. The first and fourth checks already pass. The second and third fail because the process lacks the writing they look for.
+
+### A person can point at a plan's outcome and see the spirit of that plan stated up front.
+
+D1 leaves this plan's outcome as it is. The spirit is the first line of the outcome, and the rest of the outcome follows it. That is the writing the first check already reads, and it passes.
+
+D1 also writes the same rule in the outcome step of `.ledger/process/plan-workflow.md`. The outcome states the spirit of the plan up front, before the rest of the outcome. The plan-file list says the same thing of the Outcome section: the spirit of the plan, then the high-level sentence. A person who points at a plan's outcome can see the spirit before the rest.
+
+The sentences that say when a spirit review is performed stay. The sentences that say when the person is asked stay. The person still confirms the outcome.
+
+### A person can point at the process and see that the plan's spirit can be used to help make sure the plan matches the spirit of the project.
+
+D2 writes that sentence in the Spirit review section of `.ledger/process/plan-workflow.md` and in the Spirit review section of `.ledger/process/review.md`. A person points at either section and reads that the plan's spirit can be used to help make sure the plan matches the spirit of the project.
+
+The review still reads the spirit of the part and the spirits of the parts above it. The root spirit and the processes spirit stay as they are. The review still does not decide the pass.
+
+### A person can point at the process and see that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated.
+
+D3 writes that sentence in those same two Spirit review sections. A person points at either section and reads that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated.
+
+This choice does not itself create or update a spirit file. The checks look for the sentence. They do not look for a particular file to be created or updated.
+
+### A person can point at a spirit review and see that the spirit of the plan was used in it.
+
+D4 leaves the spirit review of the requirements as it is. That account used the spirit of the plan, and the fourth check already passes on it.
+
+D4 also writes, in those same two Spirit review sections, that a spirit review uses the spirit of the plan. The use is not the pass. The letter decides the pass. When a review is performed stays as it is. A finding still waits for the person's answer. A spirit review with no finding still does not ask the person.
 
 ## Implementation notes
 
