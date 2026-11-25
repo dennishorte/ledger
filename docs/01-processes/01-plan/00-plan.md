@@ -20,8 +20,25 @@ None
 
 **Plan.** One piece of work, kept as a file in `docs/_plans/`.
 
+**Spirit review.** An account of whether the work fits the intent of its part.
+
+**Finding.** A miss in a spirit review.
+
+**Letter.** The facts that decide the pass.
+
+**Outcome.** The step in which the person confirms the goal.
+
+**Requirements.** The step in which the checks on the goal are written.
+
 The person confirms the goal.
 The person accepts the result.
+
+A spirit review is performed on the shared decisions of a plan that is split into pieces.
+A spirit review at the outcome and at the requirements is performed before the person confirms.
+A finding waits for the person's answer before the step advances.
+When the person says the change fits, the answer stays on the review and the letter decides the pass.
+When the person amends the outcome or the requirements, the work returns to that step.
+A spirit review with no finding does not ask the person.
 
 ## Dependencies
 
@@ -49,10 +66,53 @@ Setup: the design is accepted. Implementation has not started.
 Action: implementation starts.
 Result: a design is accepted before implementation starts.
 
+Case: a plan that is split into pieces.
+Setup: the pieces share decisions.
+Action: a spirit review is performed.
+Result: a spirit review is performed on the shared decisions of a plan that is split into pieces.
+
+Case: the outcome or the requirements, before the person confirms.
+Setup: the person has not confirmed.
+Action: a spirit review is performed.
+Result: a spirit review at the outcome and at the requirements is performed before the person confirms.
+
+Case: a spirit review with a finding.
+Setup: the finding has no answer from the person.
+Action: the step is read.
+Result: a finding waits for the person's answer before the step advances.
+
+Case: the person says the change fits.
+Setup: a spirit review has a finding. The person says the change fits.
+Action: the answer is written on the review.
+Result: when the person says the change fits, the answer stays on the review and the letter decides the pass.
+
+Case: the person amends the outcome or the requirements.
+Setup: the person amends the outcome or the requirements.
+Action: the work returns to that step.
+Result: when the person amends the outcome or the requirements, the work returns to that step.
+
+Case: a spirit review with no finding.
+Setup: the spirit review has no finding.
+Action: the review is read.
+Result: a spirit review with no finding does not ask the person.
+
+Case: the outcome, the requirements, or the design.
+Setup: the plan is at that step.
+Action: a spirit review is performed.
+Result: a spirit review is performed at the outcome, at the requirements, and at the design.
+
+Case: a step at which a spirit review is performed.
+Setup: the step has not advanced.
+Action: a spirit review is performed.
+Result: a spirit review is performed before that step advances.
+
 ## Rules
 
 The plan's file is removed once the record states what the goal said would be true.
 A design is accepted before implementation starts.
+
+A spirit review is performed at the outcome, at the requirements, and at the design.
+A spirit review is performed before that step advances.
 
 ## Words
 
