@@ -1,6 +1,6 @@
 # Plan position
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
