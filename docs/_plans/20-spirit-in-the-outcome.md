@@ -90,7 +90,15 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+The test design says the checks run on the writing this piece has produced, and that they do not run on the project from before that writing. This piece writes no executable tests.
+
+The first check points at a plan's outcome. This plan's outcome already states the spirit of the plan before the rest of the outcome. That writing is already present, so that check can be run, and it passes.
+
+The second check points at the process and looks for the writing that the plan's spirit can be used to help make sure the plan matches the spirit of the project. That writing is not produced yet, so the check cannot be run.
+
+The third check points at the process and looks for the writing that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. That writing is not produced yet, so the check cannot be run.
+
+The fourth check points at a spirit review, an account of whether the work fits the intent of its part. The spirit review of the requirements in this plan is that account, and it used the spirit of the plan. That account is already present, so that check can be run, and it passes. The use is not the pass. The pass stays with the letter.
 
 ## Design
 
@@ -98,7 +106,11 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Implementation notes
 
-*(not started)*
+The first check passes because this plan's outcome already states the spirit of the plan before the rest of the outcome. That is behavior this piece already wrote.
+
+The fourth check passes because the spirit review of the requirements already used the spirit of the plan. That is behavior this piece already wrote.
+
+The second and third checks fail because that process writing is not produced yet.
 
 ## Reviews
 
