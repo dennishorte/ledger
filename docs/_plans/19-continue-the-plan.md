@@ -1,6 +1,6 @@
 # Continue the plan
 
-**Status:** test-design
+**Status:** tests
 
 ## Part
 
