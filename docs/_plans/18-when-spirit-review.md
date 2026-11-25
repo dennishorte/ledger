@@ -1,6 +1,6 @@
 # When a spirit review is performed
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,8 @@ The workflow says when a spirit review is performed.
 A spirit review is performed at the outcome, at the requirements, and at the design. It is performed on the shared decisions of a plan that is split into pieces. It is performed before that step advances. At the outcome and at the requirements, that is before the person confirms.
 
 A finding waits for the person's answer before the step advances. When the person says the change fits, the answer stays on the review and the letter decides the pass. When the person amends the outcome or the requirements, the work returns to that step. A spirit review with no finding does not ask the person.
+
+**Accepted:** 2026-11-24
 
 ## Decisions
 
