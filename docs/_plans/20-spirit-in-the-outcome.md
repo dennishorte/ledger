@@ -1,6 +1,6 @@
 # Spirit in the outcome
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -13,6 +13,8 @@
 **Spirit.** Plans have a spirit of their own to guide their execution.
 
 A plan states the spirit of the plan up front in the outcome section. That statement can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated. The spirit of the plan is also used in the spirit review.
+
+**Accepted:** 2026-11-25
 
 ## Decisions
 
