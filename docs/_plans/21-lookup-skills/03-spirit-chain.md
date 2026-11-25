@@ -144,17 +144,19 @@ The checks are a reading of this writing. This piece writes no executable test.
 
 ## Implementation notes
 
-The first check was run. It fails because no skill gathers the spirit files on its own walk, and no packet came back for Scripts.
+The writing is `scripts/skills/spirit-chain/SKILL.md` and one sentence after the walk in the Spirit review section of `.ledger/process/review.md`: "The spirit chain is gathered by the skill `spirit-chain`." The checks are a reading of that writing.
 
-The second check was run. It fails because that packet is absent, so there is no quoted line and no place.
+The first check was read against that writing. The skill gathers the walk itself, from the named part up through the parts above it, and the packet includes each spirit file beside that part's page, or shows that the file is absent.
 
-The third check was run. It fails because the skill stays unloaded after it is named. No instruction names it.
+The second check was read against that writing. Each present spirit file is quoted, and the packet points at the place those lines were taken from. The line in the packet is the line at that place.
 
-The fourth check was run. It fails because the skill this piece writes is absent. The unloaded result is the project from before that writing, and the test design does not count that as a pass.
+The third check was read against that writing. The skill is named `spirit-chain`. `disable-model-invocation: true` leaves it unloaded until it is named. The process file names it.
 
-The fifth check was run. It fails because the project that has the process files returned no packet. The project that lacks them also returned no packet.
+The fourth check was read against that writing. The skill stays unloaded when it is not named. The naming sentence is only in this project's process file.
 
-A child project was left as it is. The child receives the naming line with the process files it already receives. This run adds no skill and no naming line.
+The fifth check was read against that writing. The skill returns no packet when the open project has no process files under `.ledger/process/`. The packet instructions come after that check.
+
+A child project was left as it is. The child receives the naming line with the process files it already receives. This writing adds only this skill and that one sentence.
 
 ## Reviews
 

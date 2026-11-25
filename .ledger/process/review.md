@@ -50,6 +50,8 @@ A spirit review is a written account. It reads the change, the spirit of the par
 
 The review walks from the part the change changes up through the parts above it. It reads `spirit.md` beside the page of each part on that walk, when that file is beside the page. It does not read the record page.
 
+The spirit chain is gathered by the skill `spirit-chain`.
+
 A spirit review uses the spirit of the plan. The plan's spirit can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated. That use is not the pass. The letter decides the pass.
 
 The review shows the change it read. It shows the spirit of the part that change changes, when it read that spirit. It shows the spirits of the parts above that part, when it read those spirits. What it shows it read is the change and the spirits it read. The record pages are not among what it shows it read.
