@@ -18,7 +18,10 @@ A script does the skills setup on a new machine.
 
 ## Decisions
 
-*(not started)*
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | The script is `scripts/setup-skills`. It copies each skill in `scripts/skills/` into `~/.cursor/skills/` on the machine where it is run. `~/.cursor/skills/` is the person's personal skills. The skills there are the copy of the skills the repository holds in `scripts/skills/`. | This serves "A person can point at the script and see that it copies the skills the repository holds into the person's personal skills on the machine where the script is run." It serves "A person can run the script and see those skills set up in the person's personal skills." The parent's D4 is met because the repository holds the skills in `scripts/skills/`, and the script copies them into the person's personal skills. They are set up in that folder, which is where a personal skill loads. |
+| D2 | This piece adds only `scripts/setup-skills`. It does not edit a child project. It does not create a child project. It does not copy the process files. Every other script stays as it is. | This serves both checks by keeping the copy to the install script. The parent's D4 is met because the script piece owns the install script. A child project is left as it is. The child keeps its own docs and its own copy of the process files. |
 
 ## Requirements
 
@@ -74,7 +77,19 @@ The second check was run. The agent looked for the script to run it on the machi
 
 ## Design
 
-*(not started)*
+The writing is the script `scripts/setup-skills`. The checks are a reading of that script, and a run of it. This piece writes no other script. A child project is left as it is.
+
+### A person can point at the script and see that it copies the skills the repository holds into the person's personal skills on the machine where the script is run.
+
+D1 says `scripts/setup-skills` copies each skill in `scripts/skills/` into `~/.cursor/skills/` on the machine where it is run. `~/.cursor/skills/` is the person's personal skills. A person points at that copy in the script.
+
+### A person can run the script and see those skills set up in the person's personal skills.
+
+D1 says the run copies those skills into `~/.cursor/skills/`. The skills there are the copy of the skills the repository holds in `scripts/skills/`. A person runs the script and points at those skills.
+
+### What this piece adds
+
+D2 adds only `scripts/setup-skills`. It does not edit a child project. It does not create a child project. It does not copy the process files. Every other script stays as it is. The child keeps its own docs and its own copy of the process files.
 
 ## Implementation notes
 
