@@ -23,6 +23,8 @@ A few skills quickly and correctly grab specific types of information when the p
 
 ## Decisions
 
+**Decisions confirmed:** 2026-11-25
+
 D1. Each skill's packet is taken from the project that is open. The reading-set skill and the plan-position skill take theirs from that project's process files. The spirit-chain skill takes its from the spirit files on the walk. The packet quotes those files and points at them.
 Binds: the reading set, the plan position, the spirit chain
 Reason: The outcome says the skills quickly and correctly grab the information. The spirit says the lookup is handled efficiently. The packet matches the files in the project where the work is happening, and quoting them is one read.
@@ -35,7 +37,11 @@ D3. The reading-set skill is the one that says how the reading set is gathered. 
 Binds: the reading set, the plan position, the spirit chain
 Reason: The plan-position packet needs the reading set, and the reading-set skill is the one that gathers it, so the walk is stated once. The spirit chain is a different walk. Each skill owns its own packet.
 
-The reading-set skill finishes first. The plan-position skill starts after that piece is accepted, because it uses the reading-set gathering. The spirit-chain skill has nothing to wait for, and it can proceed with the reading-set skill. Each piece owns its own skill and its own naming line, so the three do not share a file.
+D4. The repository holds the skills in `scripts/skills/`. Each skill piece adds its own skill there. The script copies that directory into the person's personal skills on the machine where the script is run.
+Binds: the reading set, the plan position, the spirit chain, the script
+Reason: A personal skill stays on the machine where it was installed. The repository is what arrives on a new machine. The script does the setup by copying the skills into the personal skills folder. `scripts/skills/` is not a place the editor loads by itself, so the skills load from the personal skills folder after the script has run. Each skill piece adds only its own skill. The script piece owns the install script. A child project is edited only when asked.
+
+The reading-set skill and the spirit-chain skill have nothing to wait for, and they can proceed together. The plan-position skill starts after the reading-set skill is accepted, because it uses the reading-set gathering. The script starts after the reading-set skill, the plan-position skill, and the spirit-chain skill are accepted, because it installs those skills. Each skill piece owns its own skill and its own naming line. The script piece owns the install script. The pieces do not share a file.
 
 ## Requirements
 
@@ -140,3 +146,15 @@ The part this change changes is the part named in the Part line. This review rea
 What this review read is this change and that spirit.
 
 The intent this review read is that spirit. The change fits it. The skills raise the quality of the agent's work when a lookup is needed. The script sets those skills up on a new machine, so that quality is there after the environment changes. The spirit file stays as it is. Findings: none.
+
+### Spirit review, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the decisions above. Each skill's packet is taken from the project that is open, quoted and pointed at. The skills are personal skills and load only when named, from the process file for that lookup. The reading-set skill gathers the reading set. The plan-position skill uses that gathering. The spirit-chain skill gathers its own walk. The repository holds the skills in `scripts/skills/`. The script copies that directory into the person's personal skills after the three skills are accepted. A child project is left as it is.
+
+The part this change changes is the part named in the Part line. This review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit.
+
+The intent this review read is that spirit. The change fits it. The skills make the lookup efficient, and the script puts those skills on a new machine, so the quality of the agent's work survives a change of environment. A child project is edited only when asked, and the script installs the skills for the person. The spirit file stays as it is. This change adds no part. Findings: none.
