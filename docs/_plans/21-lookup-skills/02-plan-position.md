@@ -1,6 +1,6 @@
 # Plan position
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,10 @@
 **Outcome confirmed:** 2026-11-25
 
 One skill returns where a plan sits: its status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made.
+
+**Accepted:** 2026-11-25
+
+The person accepts the finished work.
 
 ## Decisions
 
