@@ -19,9 +19,10 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 ## Rules for every step
 
 - **Shared decisions come before the pieces.** A high-level outcome may name several sub-outcomes. The plan records the decisions those pieces share, and the person confirms them, before any sub-plan goes into its own requirements, tests, or design.
-- **A fresh session.** A writing step starts in a new session. Put the confirmed text of the earlier steps at the top of the prompt and again at the end. Do not continue the session that wrote the previous step.
+- **A fresh session.** A review is a fresh session. Put the confirmed text of the earlier steps at the top of the review's prompt and again at the end. After a draft that requires a review, the review and the revision loop run before the person is asked. When that loop finds nothing the person has to resolve, the work continues through the plan without pausing. The work starts the next step after a pass when nothing remains that the person has to resolve. The session that wrote the step starts that next step. The person is not asked because a step ended.
 - **The author does not review.** The reviewer has not written the artifact under review.
 - **The next step waits.** Do not start it while this step is still in review, or before its gate commit has landed.
+- **When the person is asked.** The person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person.
 - **A failed review stays here.** Keep the recorded matrix. A failed row is repaired without asking the person. An agent who did not write the review makes the edit the row determines. The person is asked in two cases. One case is that the failed row does not determine one edit. The other case is that the repair would change the outcome or the requirements. When a failed row is being repaired, the repair also makes each suggestion that names one edit. The next review covers the rows that repair can change. A new session reviews the repaired artifact. The person amends the outcome and the requirements. An agent does not.
 - **An earlier step is not rewritten from a later one.** If the outcome, the requirements, the test design, the tests, or the design is wrong, return to that step. The person amends the outcome and the requirements. An agent does not.
 - **Each gate is its own commit** on the plan. The message names the step.
@@ -165,7 +166,7 @@ Do not change the tests or the design. If the design cannot satisfy a test, stop
 
 **Review.** One row per accepted test, with evidence it passes. One row that the tests are unchanged since their review. One row that the design is unchanged since its review. The review includes each decision previously made that directly affects this part, and leaves out a decision that does not. A review that leaves out a decision previously made that directly affects this part does not pass. A review that passes shows, for each included decision, that the work follows it. On `pass`, one commit records the matrix. Status stays `implementation` until the person accepts.
 
-**Acceptance.** The review has already run the tests and recorded the evidence. The person accepts the finished work. They can run the tests themselves before accepting. When the person says the work is accepted, the agent sets `**Accepted:** YYYY-MM-DD`, sets Status to `accepted`, and commits.
+**Acceptance.** The review has already run the tests and recorded the evidence. The person is asked when the finished work is ready to be accepted. The person accepts the finished work. They can run the tests themselves before accepting. When the person says the work is accepted, the agent sets `**Accepted:** YYYY-MM-DD`, sets Status to `accepted`, and commits.
 
 Merge the branch to `main` after that commit. The merge does not change a system-record page and does not delete the plan.
 

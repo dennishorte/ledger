@@ -180,7 +180,7 @@ The root spirit and the processes spirit stay as they are. Those facts say they 
 
 ## Implementation notes
 
-*(not started)*
+The writing is in `.ledger/process/plan-workflow.md`. The five workflow checks are a reading of that writing. The spirit beside the plan page is unchanged. There is no test branch. The tests, the test design, the requirements, the outcome, and the design are unchanged. The confirmation sentences, the acceptance sentence after the new ask, the failed-row sentences, the spirit-review section, and the paragraphs that decide a pass are unchanged except for the sentences the design names.
 
 ## Reviews
 
