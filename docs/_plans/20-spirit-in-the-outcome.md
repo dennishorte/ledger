@@ -344,3 +344,21 @@ None.
 
 None.
 
+### Spirit review of the design, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the design. A plan's outcome states the spirit of the plan before the rest of the outcome. The spirit review says that the plan's spirit can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated. A spirit review uses the spirit of the plan. That use is not the pass. The letter decides the pass. When a spirit review is performed stays as it is. The person is still asked only for the input the process already names.
+
+This review read the spirit of this plan, from the outcome: "Plans have a spirit of their own to guide their execution."
+
+The part this change changes is the part named in the Part line. This review read `docs/01-processes/01-plan/spirit.md`: "The plan workflow only asks for user input when needed."
+
+Above that part, this review read `docs/01-processes/spirit.md`: "Designs and reviews respect the decisions previously made that directly affect this part."
+
+Above that part, this review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change, the spirit of this plan, and those spirits.
+
+The intent this review read is the spirit of this plan and those spirits. The change fits them. The design is guided by the plan's spirit: the spirit is stated up front, and the spirit review uses it. The design does not add an ask. The letter still decides the pass. A decision previously made stays in force. Findings: none.
+
