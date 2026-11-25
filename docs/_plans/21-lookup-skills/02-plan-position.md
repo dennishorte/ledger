@@ -18,7 +18,12 @@ One skill returns where a plan sits: its status, what is already confirmed, the 
 
 ## Decisions
 
-*(not started)*
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | The skill's name is `plan-position`. Its file is `scripts/skills/plan-position/SKILL.md`. Its front matter sets `disable-model-invocation: true`. Its description says to use it when the process file that states this lookup names this skill. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named." The skill loads when it is named, and it stays unloaded until then. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because a project that does not name the skill leaves it unloaded. The parent's D2 is met because the skill is a personal skill and it loads only when it is named. The parent's D4 is met because this piece adds only this skill, in the place the setup copies from. |
+| D2 | One sentence is added at the end of the opening of `.ledger/process/plan-workflow.md`, after "The row lists in this file are what that matrix covers for each step.": "Where a plan sits is gathered by the skill `plan-position`." Every other line in that file stays as it is. This piece does not edit a child project. | This serves "A person can name the skill and see that it loads, and can see that it stays unloaded until it is named," because the instruction that states the lookup names the skill. It serves "A person can point at a project that is not running Ledger and see that the skill stays unloaded," because that project has no such instruction. The parent's D2 is met because the process file that states the lookup names the skill, and a child project is left as it is. The child keeps its own docs and its own copy of the process files, and it receives the sentence with the process files it already keeps. |
+| D3 | The skill returns no packet until it has checked that the open project has the process files under `.ledger/process/`. When that check fails, it returns no packet. | This serves "A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check." The parent's D2 is met because a named skill checks for the process files and then returns its packet. |
+| D4 | The packet is what this procedure in the open project's `.ledger/process/plan-workflow.md` yields for the named plan. It states the plan's status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made. The candidate decisions that come from the record are the facts the reading-set gathering returns for the part the plan names. The packet adds the confirmed decisions on the parent plan. This skill does not say how the reading set is gathered, and it does not judge whether a decision directly affects the part. Each of those six quotes the line it rests on and points at that place in the process files. The place is in the open project's process files. The line in the packet is the line at that place. | This serves "A person can point at the packet for a plan and see its status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made." It serves "A person can point at the packet and see the quoted lines and the places they were taken from." The parent's D1 is met because the packet is taken from the process files in the project that is open, and it quotes those files and points at them. The parent's D3 is met because the record candidates use the reading-set gathering, and the packet adds the confirmed decisions on the parent plan. |
 
 ## Requirements
 
@@ -109,7 +114,33 @@ The fifth check was run. This project is open and has the process files. Another
 
 ## Design
 
-*(not started)*
+The writing is the file `scripts/skills/plan-position/SKILL.md` and one new sentence in `.ledger/process/plan-workflow.md`. The checks are a reading of that writing. This piece writes no executable test. A child project is left as it is.
+
+### A person can point at the packet for a plan and see its status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made.
+
+D4 says the packet is what this procedure in the open project's `.ledger/process/plan-workflow.md` yields for the named plan. It states the status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made. The candidate decisions that come from the record are the facts the reading-set gathering returns for the part the plan names. The packet adds the confirmed decisions on the parent plan. This skill does not say how the reading set is gathered, and it does not judge whether a decision directly affects the part. Those are taken from the process files in the open project. A person points at those six in the packet.
+
+### A person can point at the packet and see the quoted lines and the places they were taken from.
+
+D4 says each of those six quotes the line it rests on and points at that place in the process files. The place is in the open project's process files. The line in the packet is the line at that place. A person points at the quoted line and at the place.
+
+### A person can name the skill and see that it loads, and can see that it stays unloaded until it is named.
+
+D1 names the skill `plan-position` and sets `disable-model-invocation: true` in `scripts/skills/plan-position/SKILL.md`. The skill stays unloaded until it is named, and it loads when it is named. D2 adds the sentence "Where a plan sits is gathered by the skill `plan-position`." at the end of the opening of `.ledger/process/plan-workflow.md`. That sentence is the instruction that names the skill. Every other line in that file stays as it is.
+
+### A person can point at a project that is not running Ledger and see that the skill stays unloaded.
+
+D1 leaves the skill unloaded when it is not named. D2 puts the naming sentence only in this project's process file. A project that is not running Ledger has no such sentence, so nothing there names the skill, and the skill stays unloaded.
+
+### A person can point at the skill's check that the open project has the process files, and see that the packet comes back only after that check.
+
+D3 says the skill returns no packet until it has checked that the open project has the process files under `.ledger/process/`. When the check fails, it returns no packet. When the check passes, D4 returns the packet.
+
+### What this piece adds
+
+D1 adds only `scripts/skills/plan-position/SKILL.md`. D2 adds only the one sentence in `.ledger/process/plan-workflow.md`. This piece does not edit a child project. The child keeps its own docs and its own copy of the process files. The child receives the sentence with the process files it already keeps.
+
+The checks are a reading of this writing. This piece writes no executable test.
 
 ## Implementation notes
 
