@@ -316,3 +316,19 @@ Left out from the root page. A child project is edited only when asked. The root
 Smaller suggestions: none
 
 Findings: none
+
+### Spirit review, 2026-11-24
+
+This review does not decide the pass.
+
+The change this review read is the design, and the decisions it carries out. The design writes into the **A fresh session** rule: after a draft that requires a review, the review and the revision loop run before the person is asked; a review is a fresh session; the confirmed text of the earlier steps stays at the top of the review's prompt and again at the end; when that loop finds nothing the person has to resolve, the work continues through the plan without pausing; the session that wrote the step starts the next step after a pass when nothing remains that the person has to resolve; the person is not asked because a step ended. It writes into the **Acceptance** paragraph that the person is asked when the finished work is ready to be accepted. It writes a **When the person is asked** rule: the person is asked for confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. The author still does not review. A failed review stays where it is. The next step still waits while a review is open and until the gate commit has landed. A design is still accepted before implementation starts. `docs/01-processes/01-plan/spirit.md` is left as it is. The root spirit and the processes spirit stay as they are.
+
+The part this change changes is the part named in the Part line. This review read `docs/01-processes/01-plan/spirit.md`: "The plan workflow only asks for user input when needed."
+
+Above that part, this review read `docs/01-processes/spirit.md`: "Designs and reviews respect the decisions previously made that directly affect this part."
+
+Above that part, this review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and those spirits.
+
+The intent this review read is those spirits. The change fits. The workflow asks the person when the finished work is ready to be accepted, and for the input the decisions name. A step ending is outside those asks. The review is a fresh session, the author does not review, and the revision loop runs before the person is asked, so the check on the work stays while the session that wrote the step starts the next step once nothing remains for the person. The design writes the sentences the decisions name and leaves the rules those decisions leave in place. The spirit beside the plan page stays the sentence already there. Findings: none.
