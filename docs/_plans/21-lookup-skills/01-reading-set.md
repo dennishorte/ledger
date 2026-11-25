@@ -1,6 +1,6 @@
 # Reading set
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
@@ -93,7 +93,7 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+This piece writes no executable tests. The checks in the test design are a reading of the writing this piece produces. The person recorded this on 2026-11-25 and moved the plan to design.
 
 ## Design
 
