@@ -1,6 +1,6 @@
 # Spirit chain
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,10 @@
 **Outcome confirmed:** 2026-11-25
 
 One skill returns the spirit chain for a part: each spirit file from that part up through the parts above it, and where a file is absent.
+
+**Accepted:** 2026-11-25
+
+The person accepts the finished work.
 
 ## Decisions
 
