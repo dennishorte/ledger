@@ -53,6 +53,8 @@ A reader changing one part reads that part's page in full and every page above i
 
 Those pages are the reading set. The reader does not read any other page. When the change is inside a child, that child is the part being changed, and the reading set is that child's.
 
+The reading set is gathered by the skill `reading-set`.
+
 ## Authority
 
 A reader treats each fact as true on its home page, whether or not Checked has a date.
