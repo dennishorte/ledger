@@ -180,3 +180,16 @@ Findings: none.
 Findings:
 
 D2. The tests follow the personal skill, the load only when it is named, the instruction that names it, the process-files check before the packet, and leaving the child as it is. They have no part that follows the clause that the child receives the naming line with the process files it already receives. Evidence: `03-spirit-chain.md:98` and `:126` say the child was left as it is, keeps its own docs and its own copy of the process files, and that this run adds no skill and no naming line.
+
+### Tests review, 2026-11-25
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| D2 | This skill is a personal skill, it loads only when it is named, the instruction that states this lookup names it, a named skill checks that the open project has the process files and then returns its packet, a child project is left as it is, and the child receives the naming line with the process files it already receives. | PASS | The Tests section (`03-spirit-chain.md:98`) says "The instruction that states this lookup would name this skill. The skill would be a personal skill, and it would load only when it is named. A named skill would check that the open project has the process files, and then return its packet." It says "A child project was left as it is" and "The child receives the naming line with the process files it already receives." The third check (`:104`) stays unloaded before the skill is named and after it is named, because no instruction names it. The fifth check (`:108`) names the skill and gets no packet for the project that has the process files. The note (`:126`) says "A child project was left as it is. The child receives the naming line with the process files it already receives." | |
+| D4 | This piece adds its own skill in the place the setup copies from, and only its own skill. | PASS | The Tests section (`03-spirit-chain.md:98`): "This piece would add only its own skill, in the place the setup copies from, and only its own naming line." The same paragraph says "This run adds no skill and no naming line." The sentence added in that paragraph says the child receives the naming line with the process files it already receives. | |
+| P1 | A child project is edited only when asked. | PASS | The Tests section (`03-spirit-chain.md:98`) and the note (`:126`) say "A child project was left as it is" and "This run adds no skill and no naming line." Both say the child receives the naming line with the process files it already receives. | |
+| P2 | A child project keeps its own docs and its own copy of the process files. | PASS | The Tests section (`03-spirit-chain.md:98`): "The child keeps its own docs and its own copy of the process files. The child receives the naming line with the process files it already receives." | |
+
+Findings: none.
