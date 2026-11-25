@@ -32,6 +32,8 @@ A plan with one outcome walks seven steps. A plan whose outcome is made of sever
 
 A spirit review is performed at the outcome, at the requirements, and at the design. It is performed on the shared decisions of a plan that is split into pieces. It is performed before that step advances. At the outcome and at the requirements, that is before the person confirms.
 
+A spirit review uses the spirit of the plan. The plan's spirit can be used to help make sure the plan matches the spirit of the project, and to help determine whether a spirit.md file needs to be created or updated. That use is not the pass. The letter decides the pass.
+
 A finding waits for the person's answer before the step advances. The step does not advance while the finding has no answer from the person. When the person says the change fits, the answer stays on the review and the letter decides the pass. When the person amends the outcome or the requirements, the work returns to that step. The person amends. An agent does not. A spirit review with no finding does not ask the person.
 
 ## The plan file
@@ -43,7 +45,7 @@ A plan is `docs/_plans/NN-name.md`. `NN` is a zero-padded two-digit sequence num
 Sections, in order. A section that has not been reached says `*(not started)*`.
 
 - **Part** — the system-record page for the part of the project this work changes
-- **Outcome** — the high-level sentence, then any sub-outcomes
+- **Outcome** — the spirit of the plan, then the high-level sentence, then any sub-outcomes
 - **Decisions** — on a coordinating plan, the choices its pieces share; on a single piece, the choices made in its implementation design
 - **Requirements** — Acceptance, Constraints, Out of scope
 - **Test design**
@@ -56,7 +58,7 @@ Sections, in order. A section that has not been reached says `*(not started)*`.
 
 Status is `outcome`.
 
-Write the outcome in the person's words: what is true when the work is done. If that outcome is made of distinct pieces, name each piece under it, one sentence each, in the person's words. If the person has already said it, copy that wording. If they have not, ask. Do not invent it.
+Write the outcome in the person's words: what is true when the work is done. The outcome states the spirit of the plan up front, before the rest of the outcome. If that outcome is made of distinct pieces, name each piece under it, one sentence each, in the person's words. If the person has already said it, copy that wording. If they have not, ask. Do not invent it.
 
 Name the part of the project this work changes. **Part** is the path of the system-record page that describes that part. Work on the whole project names `docs/00-project.md`.
 
