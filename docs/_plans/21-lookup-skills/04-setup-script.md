@@ -140,3 +140,15 @@ Findings: none.
 | P2 | A child project keeps its own docs and its own copy of the files in `.ledger/process/`. | PASS | The Tests section (`04-setup-script.md:69`) and the note (`:85`): "The child keeps its own docs and its own copy of the process files." | |
 
 Findings: none.
+
+### Spirit review, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the design above, and the Decisions table. The script is `scripts/setup-skills`. It copies each skill in `scripts/skills/` into `~/.cursor/skills/` on the machine where it is run. `~/.cursor/skills/` is the person's personal skills. The skills there are the copy of the skills the repository holds in `scripts/skills/`. This piece adds only `scripts/setup-skills`. It does not edit a child project. It does not create a child project. It does not copy the process files. Every other script stays as it is. The child keeps its own docs and its own copy of the process files.
+
+The part this change changes is the part named in the Part line. There is no spirit file beside that page. Above that part, this review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit. This review used the plan's spirit: "Doing lookups to follow the process is handled efficiently."
+
+The intent this review read is that spirit. The change fits it. The script copies the skills into the person's personal skills on the machine where it is run, so the person sets them up by running the script and the quality of the agent's work is there after a change of machine. The plan's spirit is that those lookups are handled efficiently. This piece is the copy that puts the skills in the place a personal skill loads. It adds only that script, and a child project is left as it is. No spirit file needs to be created or updated. The spirit file this review read stays as it is. Findings: none.
