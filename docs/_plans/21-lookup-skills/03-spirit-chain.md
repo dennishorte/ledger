@@ -1,6 +1,6 @@
 # Spirit chain
 
-**Status:** tests
+**Status:** design
 
 ## Part
 
