@@ -54,7 +54,39 @@ A plan states the spirit of the plan up front in the outcome section. That state
 
 ## Test design
 
-*(not started)*
+The checks are run on the writing this piece has produced. They are not run on the project from before that writing. The agent is the one who runs the check. A person can point at the same writing and see the same words.
+
+### A person can point at a plan's outcome and see the spirit of that plan stated up front.
+
+**Setup.** This piece has written that a plan's outcome states the spirit of that plan up front. The plan's outcome is that writing.
+
+**Action.** The agent points at the plan's outcome. The agent reads the spirit of that plan, and reads it before the rest of the outcome. A person can point at the same writing and see the same words.
+
+**Looked at.** The outcome states the spirit of the plan, and that statement comes before the rest of the outcome. A failed check would leave the spirit out of the outcome, or would place it after the rest of the outcome.
+
+### A person can point at the process and see that the plan's spirit can be used to help make sure the plan matches the spirit of the project.
+
+**Setup.** This piece has written that the plan's spirit can be used to help make sure the plan matches the spirit of the project. The process is that writing.
+
+**Action.** The agent points at the process. The agent reads that the plan's spirit can be used to help make sure the plan matches the spirit of the project. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that the plan's spirit can be used to help make sure the plan matches the spirit of the project. A failed check would lack that use, or would make the match without the plan's spirit.
+
+### A person can point at the process and see that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated.
+
+**Setup.** This piece has written that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. The process is that writing.
+
+**Action.** The agent points at the process. The agent reads that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. A failed check would lack that determination, or would make the determination without the plan's spirit.
+
+### A person can point at a spirit review and see that the spirit of the plan was used in it.
+
+**Setup.** This piece has written that a spirit review uses the spirit of the plan. A spirit review is that writing.
+
+**Action.** The agent points at a spirit review. The agent reads that the review used the spirit of the plan. A person can point at the same writing and see the same words.
+
+**Looked at.** The review shows that the spirit of the plan was used in it. A failed check would be a spirit review that does not use the spirit of the plan. The use is not the pass. The pass stays with the letter.
 
 ## Tests
 
