@@ -55,6 +55,8 @@ A blank line, and a line that begins with `#`, is not a child project.
 
 `scripts/sync-process` with no project path fails when `.ledger/child-projects` is missing or lists no child project.
 
+`scripts/setup-skills` copies each skill in `scripts/skills/` into `~/.cursor/skills/`.
+
 ## Dependencies
 
 Scripts depends on the process files.
@@ -155,6 +157,11 @@ Case: no child project to sync.
 Setup: `.ledger/child-projects` is missing, or it lists no child project, and no project path is given.
 Action: `scripts/sync-process` is run.
 Result: `scripts/sync-process` with no project path fails when `.ledger/child-projects` is missing or lists no child project.
+
+Case: skills setup.
+Setup: `scripts/skills/` holds the skills.
+Action: `scripts/setup-skills` is run.
+Result: `scripts/setup-skills` copies each skill in `scripts/skills/` into `~/.cursor/skills/`.
 
 ## Rules
 
