@@ -209,3 +209,15 @@ Findings: none.
 | P2 | A child project keeps its own docs and its own copy of the files in `.ledger/process/`. | PASS | The Tests section (`02-plan-position.md:98`): "The child keeps its own docs and its own copy of the process files." | |
 
 Findings: none.
+
+### Spirit review, 2026-11-25
+
+This review does not decide the pass.
+
+The change this review read is the design above. One skill, `plan-position`, in `scripts/skills/plan-position/SKILL.md`, loads only when it is named. Its front matter sets `disable-model-invocation: true`. One sentence at the end of the opening of `.ledger/process/plan-workflow.md` names that skill: "Where a plan sits is gathered by the skill `plan-position`." Every other line in that file stays as it is. The skill returns no packet until it has checked that the open project has the process files under `.ledger/process/`. When that check fails, it returns no packet. The packet is what that procedure in the open project's `.ledger/process/plan-workflow.md` yields for the named plan. It states the plan's status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made. The candidate decisions that come from the record are the facts the reading-set gathering returns for the part the plan names. The packet adds the confirmed decisions on the parent plan. This skill does not say how the reading set is gathered, and it does not judge whether a decision directly affects the part. Each of those six quotes the line it rests on and points at that place in the open project's process files. The line in the packet is the line at that place. This piece adds only that skill and that sentence. A child project is left as it is. The child keeps its own docs and its own copy of the process files. The child receives the sentence with the process files it already keeps.
+
+The part this change changes is the part named in the Part line. This review read `docs/spirit.md`: "The Ledger system reduces the burden on a human managing a project by increasing the quality of the work performed by LLM agents."
+
+What this review read is this change and that spirit. This review used the plan's spirit: "Doing lookups to follow the process is handled efficiently."
+
+The intent this review read is that spirit. The change fits it. The skill returns where the named plan sits, taken from the open project's own procedure, and each item quotes the line it rests on. That raises the quality of the agent's work and leaves the person with less hunting through the process. The skill stays unloaded until it is named, and it returns no packet for a project that lacks the process files, so a lookup that does not apply is not carried. The plan's spirit is that lookup handled in one named skill and one naming sentence. The spirit file stays as it is. Findings: none.
