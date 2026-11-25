@@ -44,7 +44,23 @@ A script does the skills setup on a new machine.
 
 ## Test design
 
-*(not started)*
+The checks are run on the writing this piece has produced. They are not run on the project from before that writing. The script copies the directory the repository holds the skills in into the person's personal skills on the machine where the script is run. This piece adds only the install script. A child project is left as it is. The child keeps its own docs and its own copy of the process files. This piece does not create a child project, and it does not copy the process files into a child project.
+
+### A person can point at the script and see that it copies the skills the repository holds into the person's personal skills on the machine where the script is run.
+
+**Setup.** This piece has written the script. The repository holds the skills.
+
+**Action.** The agent points at the script and reads what it copies, and where it copies them. A person can point at the same script.
+
+**Looked at.** The script copies the directory the repository holds the skills in into the person's personal skills on the machine where the script is run. A failed check copies from somewhere else, copies to somewhere other than the person's personal skills on that machine, or has no such copy.
+
+### A person can run the script and see those skills set up in the person's personal skills.
+
+**Setup.** This piece has written the script. The repository holds the skills. Those skills are not yet set up in the person's personal skills from this run.
+
+**Action.** The agent runs the script on the machine. A person can run the same script.
+
+**Looked at.** The skills the repository holds are set up in the person's personal skills on that machine. They are the copy of the directory the repository holds them in. A failed check leaves them absent, or sets up skills that are not the ones the repository holds.
 
 ## Tests
 
