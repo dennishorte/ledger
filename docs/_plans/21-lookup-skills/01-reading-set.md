@@ -1,6 +1,6 @@
 # Reading set
 
-**Status:** implementation
+**Status:** accepted
 
 ## Part
 
@@ -15,6 +15,10 @@
 **Outcome confirmed:** 2026-11-25
 
 One skill returns the reading set for a part: the pages to read in full, the neighbors whose Offers to read, and where to stop.
+
+**Accepted:** 2026-11-25
+
+The person accepts the finished work.
 
 ## Decisions
 
