@@ -55,7 +55,55 @@ The plan part keeps its own spirit, in `spirit.md` beside its page. The spirits 
 
 ## Test design
 
-*(not started)*
+The checks are run on the writing this piece has produced. They are not run on the project from before that writing. The agent is the one who runs the check. A person can point at the same writing and see the same words.
+
+### A person can point at the workflow and see that, after a draft that requires a review, the review and the revision loop run before the person is asked.
+
+**Setup.** This piece has written that, after a draft that requires a review, the review and the revision loop run before the person is asked. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that, after a draft that requires a review, the review and the revision loop run before the person is asked. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that, after a draft that requires a review, the review and the revision loop run before the person is asked. A failed check would ask the person when the draft is done and leave the review or the revision loop still ahead, or it would lack those words.
+
+### A person can point at the workflow and see that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing.
+
+**Setup.** This piece has written that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that, when that loop finds nothing the person has to resolve, the work continues through the plan without pausing. A failed check would pause the work there, or would ask the person there, when that loop finds nothing the person has to resolve.
+
+### A person can point at the workflow and see that the person is asked when the finished work is ready to be accepted.
+
+**Setup.** This piece has written that the person is asked when the finished work is ready to be accepted. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that the person is asked when the finished work is ready to be accepted. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that the person is asked when the finished work is ready to be accepted. A failed check would lack that ask.
+
+### A person can point at the workflow and see that the person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person.
+
+**Setup.** This piece has written that the person is asked for the input the process already names: confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that the person is asked for confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says the person is asked for confirming the outcome, the requirements, and the shared decisions; answering a spirit finding; amending the outcome or the requirements; and the two cases where a failed row asks the person. The observation fails if any one of those named cases is missing.
+
+### A person can point at the workflow and see that the person is not asked because a step ended.
+
+**Setup.** This piece has written that the person is not asked because a step ended. The workflow is that writing.
+
+**Action.** The agent points at the workflow. The agent reads that the person is not asked because a step ended. A person can point at the same writing and see the same words.
+
+**Looked at.** The writing says that the person is not asked because a step ended. A failed check would ask the person because a step ended, or would lack those words.
+
+### A person can point at the spirit beside the plan page and read: The plan workflow only asks for user input when needed.
+
+**Setup.** This piece has written that sentence on the spirit beside the plan page. The spirit beside the plan page is that writing.
+
+**Action.** The agent points at the spirit beside the plan page. The agent reads: The plan workflow only asks for user input when needed. A person can point at the same writing and see the same words.
+
+**Looked at.** The plan workflow only asks for user input when needed. A failed check would lack that sentence, or would say different words.
 
 ## Tests
 
