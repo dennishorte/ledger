@@ -93,7 +93,19 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+The test design says the checks run on the writing this piece has produced, and that they do not run on the project from before that writing. This piece writes no executable tests. The writing is not produced yet. The runs below look for that writing and find it absent. Each check fails because the behavior is not implemented yet. These runs are not a reading of the project from before that writing treated as the finished skill.
+
+The packet these runs looked for is the one taken from the process files in the project that is open. The packet would quote those files and point at them. The candidate decisions that come from the record would use the reading-set gathering, and the packet would add the confirmed decisions on the parent plan. The instruction that states this lookup would name this skill. The skill would be a personal skill, and it would load only when it is named. A named skill would check that the open project has the process files, and then return its packet. This piece would add only its own skill, in the place the setup copies from, and only its own naming line. A child project was left as it is. The child keeps its own docs and its own copy of the process files. The child receives the naming line with the process files it already receives. This run adds no skill and no naming line.
+
+The first check was run. A project running Ledger is open. The plan named is this plan, Plan position. It has a status, the outcome and the requirements are already confirmed, the next action is this tests step, the person is not asked because this step ended, and the review rows for this step are the tests rows. The part this plan changes has a candidate decision in the record. The parent plan has a confirmed decision. The agent looked for the skill and asked where that plan sits. That skill is not written, and no packet came back. The check fails because the status, what is already confirmed, the next action, whether the person is asked, the review rows for this step, and the candidate decisions previously made are not in a packet. The packet was not taken from the process files in the open project. The record candidates were not the reading-set gathering, and the parent plan's confirmed decisions were not in a packet.
+
+The second check was run. No packet came back from the check above, so the agent had no quoted line to point at and no place a line was taken from. The check fails because the quoted line and its place are absent.
+
+The third check was run. The skill is not written, and no instruction that states this lookup names it. A project running Ledger is open. The agent worked without naming the skill, and it stayed unloaded. The agent then named the skill, and it stayed unloaded. The check fails because the skill is still unloaded after it is named.
+
+The fourth check was run. The skill is not written. A project that is not running Ledger was open, and nothing in that project names the skill. The agent worked in that project. Nothing loaded, because the skill this piece writes is absent. The test design says the check is not a reading of the project from before that writing. This result is not a pass. The check fails because the written skill the setup requires is absent, so the run cannot show that written skill staying unloaded.
+
+The fifth check was run. This project is open and has the process files. Another project was open and does not have them. The agent named the skill in each project and asked where Plan position sits. No packet came back for the project that has the process files, and no packet came back for the project that lacks them. The check fails because the project that has the process files returned no packet after the check. The behavior is not implemented yet.
 
 ## Design
 
@@ -101,7 +113,17 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Implementation notes
 
-*(not started)*
+The first check was run. It fails because no skill returns where the plan sits, and no packet came back for Plan position.
+
+The second check was run. It fails because that packet is absent, so there is no quoted line and no place.
+
+The third check was run. It fails because the skill stays unloaded after it is named. No instruction names it.
+
+The fourth check was run. It fails because the skill this piece writes is absent. The unloaded result is the project from before that writing, and the test design does not count that as a pass.
+
+The fifth check was run. It fails because the project that has the process files returned no packet. The project that lacks them also returned no packet.
+
+A child project was left as it is. The child receives the naming line with the process files it already receives. This run adds no skill and no naming line.
 
 ## Reviews
 
