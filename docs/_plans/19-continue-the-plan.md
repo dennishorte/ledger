@@ -107,7 +107,7 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+The test design says the checks run on the writing this piece has produced, and that they do not run on the project from before that writing. That writing does not exist yet, so this piece writes no executable tests. The checks look at the updates this piece writes, and they cannot be run until that writing exists.
 
 ## Design
 
