@@ -93,7 +93,19 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Tests
 
-*(not started)*
+The test design says the checks run on the writing this piece has produced, and that they do not run on the project from before that writing. This piece writes no executable tests. The writing is not produced yet. The runs below look for that writing and find it absent. Each check fails because the behavior is not implemented yet. These runs are not a reading of the project from before that writing treated as the finished skill.
+
+The packet these runs looked for is the one taken from the spirit files on the walk in the project that is open. This skill would gather that walk itself, and the packet would quote those files and point at them. The instruction that states this lookup would name this skill. The skill would be a personal skill, and it would load only when it is named. A named skill would check that the open project has the process files, and then return its packet. This piece would add only its own skill, in the place the setup copies from, and only its own naming line. A child project was left as it is. The child keeps its own docs and its own copy of the process files. This run adds no skill and no naming line.
+
+The first check was run. A project running Ledger is open. The part named is Scripts. On the walk from that part up through the parts above it, a spirit file is absent at that part and present at the part above it. The agent looked for the skill that gathers the spirit files on its own walk and asked for the spirit chain of that part. That skill is not written, and no packet came back. The check fails because the spirit files on that walk, and the place where a spirit file is absent, are not in a packet. The chain was not taken from the spirit files on the walk in the open project, and this skill did not gather the walk.
+
+The second check was run. No packet came back from the check above, so the agent had no quoted line to point at and no place a line was taken from. The check fails because the quoted line and its place are absent.
+
+The third check was run. The skill is not written, and no instruction that states this lookup names it. A project running Ledger is open. The agent worked without naming the skill, and it stayed unloaded. The agent then named the skill, and it stayed unloaded. The check fails because the skill is still unloaded after it is named.
+
+The fourth check was run. The skill is not written. A project that is not running Ledger was open, and nothing in that project names the skill. The agent worked in that project. Nothing loaded, because the skill this piece writes is absent. The test design says the check is not a reading of the project from before that writing. This result is not a pass. The check fails because the written skill the setup requires is absent, so the run cannot show that written skill staying unloaded.
+
+The fifth check was run. This project is open and has the process files. Another project was open and does not have them. The agent named the skill in each project and asked for the spirit chain of Scripts. No packet came back for the project that has the process files, and no packet came back for the project that lacks them. The check fails because the project that has the process files returned no packet after the check. The behavior is not implemented yet.
 
 ## Design
 
@@ -101,7 +113,17 @@ The checks are run on the writing this piece has produced. They are not run on t
 
 ## Implementation notes
 
-*(not started)*
+The first check was run. It fails because no skill gathers the spirit files on its own walk, and no packet came back for Scripts.
+
+The second check was run. It fails because that packet is absent, so there is no quoted line and no place.
+
+The third check was run. It fails because the skill stays unloaded after it is named. No instruction names it.
+
+The fourth check was run. It fails because the skill this piece writes is absent. The unloaded result is the project from before that writing, and the test design does not count that as a pass.
+
+The fifth check was run. It fails because the project that has the process files returned no packet. The project that lacks them also returned no packet.
+
+A child project was left as it is. This run adds no skill and no naming line.
 
 ## Reviews
 
