@@ -40,6 +40,11 @@ When the person says the change fits, the answer stays on the review and the let
 When the person amends the outcome or the requirements, the work returns to that step.
 A spirit review with no finding does not ask the person.
 
+After a draft that requires a review, the review and the revision loop run before the person is asked.
+When that loop finds nothing the person has to resolve, the work continues through the plan without pausing.
+The person is asked when the finished work is ready to be accepted.
+The person is not asked because a step ended.
+
 ## Dependencies
 
 None
@@ -105,6 +110,26 @@ Case: a step at which a spirit review is performed.
 Setup: the step has not advanced.
 Action: a spirit review is performed.
 Result: a spirit review is performed before that step advances.
+
+Case: a draft that requires a review.
+Setup: the draft is written. The person has not been asked about it.
+Action: the review and the revision loop run.
+Result: after a draft that requires a review, the review and the revision loop run before the person is asked.
+
+Case: a review and revision loop with nothing the person has to resolve.
+Setup: the loop has run. It found nothing the person has to resolve.
+Action: the work continues.
+Result: when that loop finds nothing the person has to resolve, the work continues through the plan without pausing.
+
+Case: finished work that is ready to be accepted.
+Setup: the result has been checked against the record. The person has not been asked to accept it.
+Action: the person is asked.
+Result: the person is asked when the finished work is ready to be accepted.
+
+Case: a step has ended.
+Setup: the step has ended. Nothing remains that the person has to resolve.
+Action: the work continues.
+Result: the person is not asked because a step ended.
 
 ## Rules
 
