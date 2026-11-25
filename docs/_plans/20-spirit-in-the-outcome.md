@@ -293,3 +293,23 @@ None.
 
 - A2. Blocking. Mechanical. The tests section says the second check cannot be run because the process writing is not produced yet. A failed check lacks the use, or makes the match without the plan's spirit. The tests section has no run with that result. The implementation notes say the check fails, and that sentence does not show the run.
 - A3. Blocking. Mechanical. The tests section says the third check cannot be run because the process writing is not produced yet. A failed check lacks the determination, or makes the determination without the plan's spirit. The tests section has no run with that result. The implementation notes say the check fails, and that sentence does not show the run.
+
+### Tests review, 2026-11-25
+
+This review covers the rows the repair can change: A2 and A3. A1, A4, D1, and D2 were not edited.
+
+**Disposition:** pass
+
+| # | Item | Verdict | Evidence | Resolution |
+|---|------|---------|----------|------------|
+| A2 | A person can point at the process and see that the plan's spirit can be used to help make sure the plan matches the spirit of the project. | PASS | The run is `docs/_plans/20-spirit-in-the-outcome.md:97`. The agent pointed at the process and looked for the writing that the plan's spirit can be used to help make sure the plan matches the spirit of the project. That writing is absent. The check fails because that use is lacking. Implementation notes at `:113` record the same run and the same lack. The test design at `:73` names that lack as a failed check. `.ledger/process/plan-workflow.md` and `.ledger/process/review.md` do not contain that writing: `plan-workflow.md:33` states when a spirit review is performed, and `review.md:51` states that a review reads `spirit.md` beside the page. The check fails for that lack, behavior not implemented yet. The test names the process and names no file. A run that found the use would not fail. A match made without the plan's spirit would still lack this writing, so the check would fail. | |
+| A3 | A person can point at the process and see that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. | PASS | The run is `docs/_plans/20-spirit-in-the-outcome.md:99`. The agent pointed at the process and looked for the writing that the plan's spirit can be used to help determine whether a spirit.md file needs to be created or updated. That writing is absent. The check fails because that determination is lacking. Implementation notes at `:115` record the same run and the same lack. The test design at `:81` names that lack as a failed check. `.ledger/process/plan-workflow.md:33` and `.ledger/process/review.md:51` do not state that determination. The check fails for that lack, behavior not implemented yet. The test names the process and names no file. A run that found the determination would not fail. A determination made without the plan's spirit would still lack this writing, so the check would fail. | |
+
+**Smaller suggestions**
+
+None.
+
+**Findings**
+
+None.
+
